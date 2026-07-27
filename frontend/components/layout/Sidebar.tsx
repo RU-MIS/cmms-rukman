@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Wrench, Users, Building2, ClipboardCheck, Calendar, BarChart3, Bell, LogOut, X, Shield, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Wrench, Users, Building2, ClipboardCheck, Calendar, BarChart3, Bell, LogOut, X, Shield, ChevronRight, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
 const NAV = [
@@ -13,6 +13,7 @@ const NAV = [
   { label: 'Checklists',   href: '/checklists',     icon: ClipboardCheck },
   { label: 'My Tasks',     href: '/tasks',          icon: Calendar },
   { label: 'Reports',      href: '/reports',        icon: BarChart3, roles: ['Admin','Supervisor'] },
+  { label: 'Verify tasks',  href: '/verify',         icon: ShieldCheck, roles: ['Admin','Supervisor'] },
   { divider: true },
   { label: 'Notifications',href: '/notifications',  icon: Bell },
 ] as const;

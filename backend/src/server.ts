@@ -27,7 +27,9 @@ import departmentRoutes from './modules/departments/department.routes';
 import machineRoutes    from './modules/machines/machine.routes';
 import checklistRoutes  from './modules/checklists/checklist.routes';
 import taskRoutes       from './modules/tasks/task.routes';
-import dashboardRoutes  from './modules/dashboard/dashboard.routes';
+import dashboardRoutes      from './modules/dashboard/dashboard.routes';
+import reportRoutes        from './modules/reports/report.routes';
+import notificationRoutes  from './modules/notifications/notification.routes';
 
 const app = express();
 
@@ -84,7 +86,9 @@ app.use('/api/v1/departments', departmentRoutes);
 app.use('/api/v1/machines',    machineRoutes);
 app.use('/api/v1/checklists',  checklistRoutes);
 app.use('/api/v1/tasks',       taskRoutes);
-app.use('/api/v1/dashboard',   dashboardRoutes);
+app.use('/api/v1/dashboard',      dashboardRoutes);
+app.use('/api/v1/reports',        reportRoutes);
+app.use('/api/v1/notifications',  notificationRoutes);
 
 // ── 404 handler ──────────────────────────────────────────────────
 app.use('*', (req, res) => {
