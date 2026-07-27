@@ -1,0 +1,81 @@
+# ============================================================
+# docker-compose.yml
+# Local development environment
+# PlanetScale ke liye SSL chahiye — local dev ke liye
+# local MySQL use kar sakte ho, prod me PlanetScale
+# ============================================================
+
+version: '3.9'
+
+services:
+
+  # ── Local MySQL (dev only — prod mein PlanetScale use karo) ──
+  mysql:
+    image: mysql:8.0
+    container_name: cmms_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: cmms_rukman
+      MYSQL_USER: cmms_user
+      MYSQL_PASSWORD: cmms_password
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend API ──────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cmms_backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: mysql://cmms_user:cmms_password@mysql:3306/cmms_rukman
+      DB_HOST: mysql
+      DB_USER: cmms_user
+      DB_PASSWORD: cmms_password
+      DB_NAME: cmms_rukman
+      DB_PORT: 3306
+      DB_SSL: 'false'
+    env_file:
+      - .env
+    ports:
+      - '4000:4000'
+    volumes:
+      - ./backend/src:/app/src   # Hot reload in dev
+    command: npm run dev
+
+  # ── Frontend Next.js PWA ─────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cmms_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+
+volumes:
+  mysql_data:
+    driver: local
