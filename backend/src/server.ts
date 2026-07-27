@@ -12,16 +12,17 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 
 import { env } from './config/environment';
 import { createPool, db } from './config/database';
 import { logger, httpLogStream } from './utils/logger';
 import { errorMiddleware } from './middleware/error.middleware';
 
-// ── Route imports (will be added in Phase 4+) ───────────────────
-// import authRoutes from './modules/auth/auth.routes';
-// import userRoutes from './modules/users/user.routes';
-// import machineRoutes from './modules/machines/machine.routes';
+// ── Route imports ────────────────────────────────────────────────
+import authRoutes from './modules/auth/auth.routes';
+// import userRoutes from './modules/users/user.routes';      // Phase 5
+// import machineRoutes from './modules/machines/machine.routes'; // Phase 5
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.use(compression());
 // ── Body parsers ─────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
 
 // ── HTTP request logging ─────────────────────────────────────────
 app.use(morgan(env.IS_PRODUCTION ? 'combined' : 'dev', { stream: httpLogStream }));
@@ -71,10 +73,9 @@ app.get('/health', (_req, res) => {
 });
 
 // ── API Routes ───────────────────────────────────────────────────
-// app.use('/api/v1/auth',          authRoutes);
-// app.use('/api/v1/users',         userRoutes);
-// app.use('/api/v1/machines',      machineRoutes);
-// (more routes added per phase)
+app.use('/api/v1/auth',     authRoutes);
+// app.use('/api/v1/users',    userRoutes);    // Phase 5
+// app.use('/api/v1/machines', machineRoutes); // Phase 5
 
 // ── 404 handler ──────────────────────────────────────────────────
 app.use('*', (req, res) => {
