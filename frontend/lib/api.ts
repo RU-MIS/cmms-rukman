@@ -1,11 +1,11 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import toast from 'react-hot-toast';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cmms-rukman.onrender.com';
 
 const api = axios.create({
   baseURL: `${API_URL}/api/v1`,
-  timeout: 15000,
+  timeout: 30000,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -15,7 +15,30 @@ export const getAccessToken   = () => accessToken;
 export const setAccessToken   = (t: string) => { accessToken = t; };
 export const clearAccessToken = () => { accessToken = null; };
 
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+// Try to restore session on page load
+let sessionRestored = false;
+async function restoreSession(): Promise<boolean> {
+  if (sessionRestored) return !!accessToken;
+  sessionRestored = true;
+  try {
+    const { data } = await axios.post(
+      `${API_URL}/api/v1/auth/refresh`,
+      {},
+      { withCredentials: true, timeout: 15000 }
+    );
+    if (data?.data?.accessToken) {
+      setAccessToken(data.data.accessToken);
+      return true;
+    }
+  } catch { /* no refresh token */ }
+  return false;
+}
+
+api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+  // On first request, try to restore session if no token
+  if (!accessToken && !sessionRestored) {
+    await restoreSession();
+  }
   if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
   return config;
 });
@@ -38,7 +61,11 @@ api.interceptors.response.use(
       }
       orig._retry = true; isRefreshing = true;
       try {
-        const { data } = await api.post('/auth/refresh');
+        const { data } = await axios.post(
+          `${API_URL}/api/v1/auth/refresh`,
+          {},
+          { withCredentials: true }
+        );
         const t = data.data.accessToken;
         setAccessToken(t); processQueue(null, t);
         orig.headers.Authorization = `Bearer ${t}`;
