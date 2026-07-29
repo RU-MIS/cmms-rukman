@@ -32,7 +32,7 @@ import reportRoutes        from './modules/reports/report.routes';
 import notificationRoutes  from './modules/notifications/notification.routes';
 import rolesRoutes         from './modules/roles/roles.routes';
 import holidayRoutes       from './modules/holidays/holiday.routes';
-import holidaysRoutes      from './modules/holidays/holidays.routes';
+import holidaysRoutes      from './modules/holidays/holiday.routes';
 import shiftsRoutes        from './modules/shifts/shifts.routes';
 
 const app = express();
