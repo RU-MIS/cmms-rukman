@@ -1,142 +1,85 @@
 /**
- * database.ts
- * ───────────
- * PlanetScale MySQL connection pool.
- * Uses mysql2 with promise support.
- * Pool is reused across all requests — never create new connections per query.
- *
- * PlanetScale requires SSL — this is configured automatically.
- * Uses the DATABASE_URL from env for primary config.
- *
- * Usage:
- *   import { db } from '@config/database'
- *   const [rows] = await db.execute('SELECT * FROM users WHERE id = ?', [id])
+ * database.ts — PostgreSQL version for Render deployment
  */
 
-import mysql from 'mysql2/promise';
+import { Pool, PoolClient, QueryResult } from 'pg';
 import { env } from './environment';
 import { logger } from '../utils/logger';
 
-// ── Connection pool singleton ────────────────────────────────────
-let pool: mysql.Pool | null = null;
+let pool: Pool | null = null;
 
-/**
- * Creates and returns the MySQL connection pool.
- * Singleton — only one pool is created for the entire app lifetime.
- */
-export function createPool(): mysql.Pool {
+export function createPool(): Pool {
   if (pool) return pool;
 
-  pool = mysql.createPool({
-    host:               env.DB_HOST,
-    user:               env.DB_USER,
-    password:           env.DB_PASSWORD,
-    database:           env.DB_NAME,
-    port:               env.DB_PORT,
-    ssl:                env.DB_SSL ? { rejectUnauthorized: true } : undefined,
-    waitForConnections: true,
-    connectionLimit:    10,       // Max 10 simultaneous connections
-    queueLimit:         0,        // Unlimited queue (0 = no limit)
-    connectTimeout:     10000,    // 10 seconds connection timeout
-    idleTimeout:        60000,    // Close idle connections after 60s
-    maxIdle:            5,        // Keep max 5 idle connections
-    timezone:           '+05:30', // IST — India Standard Time
-    decimalNumbers:     true,     // Return decimals as numbers not strings
-    dateStrings:        false,    // Return dates as Date objects
+  pool = new Pool({
+    connectionString: env.DATABASE_URL,
+    ssl: env.DB_SSL ? { rejectUnauthorized: false } : undefined,
+    max: 10,
+    idleTimeoutMillis: 60000,
+    connectionTimeoutMillis: 10000,
   });
 
-  logger.info('✅ MySQL connection pool created', {
-    host: env.DB_HOST,
-    database: env.DB_NAME,
-    ssl: env.DB_SSL,
+  pool.on('error', (err) => {
+    logger.error('PostgreSQL pool error', { err });
   });
 
+  logger.info('✅ PostgreSQL connection pool created');
   return pool;
 }
 
-/**
- * Returns the active pool.
- * Throws if pool hasn't been initialized yet.
- * Always call createPool() in server.ts before using this.
- */
-export function getPool(): mysql.Pool {
-  if (!pool) {
-    throw new Error('Database pool not initialized. Call createPool() first.');
-  }
+export function getPool(): Pool {
+  if (!pool) throw new Error('Database pool not initialized.');
   return pool;
 }
 
-/**
- * Shorthand getter — use this everywhere in services.
- * import { db } from '@config/database'
- * const [rows] = await db.execute(sql, params)
- */
 export const db = {
-  /**
-   * Execute a parameterized query — use for SELECT.
-   * Returns [rows, fields]
-   */
-  execute: async <T = mysql.RowDataPacket[]>(
-    sql: string,
-    params?: unknown[]
-  ): Promise<[T, mysql.FieldPacket[]]> => {
-    const pool = getPool();
-    return pool.execute<T & mysql.RowDataPacket[]>(sql, params);
+  execute: async <T = any>(sql: string, params?: any[]): Promise<[T[], any]> => {
+    const p = getPool();
+    // Convert MySQL ? placeholders to PostgreSQL $1, $2...
+    let pgSql = sql;
+    let i = 0;
+    pgSql = pgSql.replace(/\?/g, () => `$${++i}`);
+    const result = await p.query(pgSql, params);
+    return [result.rows as T[], result.fields];
   },
 
-  /**
-   * Execute a query — use for INSERT/UPDATE/DELETE.
-   * Returns [ResultSetHeader, fields]
-   */
-  query: async (
-    sql: string,
-    params?: unknown[]
-  ): Promise<[mysql.ResultSetHeader, mysql.FieldPacket[]]> => {
-    const pool = getPool();
-    return pool.query<mysql.ResultSetHeader>(sql, params);
+  query: async (sql: string, params?: any[]): Promise<[any, any]> => {
+    const p = getPool();
+    let pgSql = sql;
+    let i = 0;
+    pgSql = pgSql.replace(/\?/g, () => `$${++i}`);
+    const result = await p.query(pgSql, params);
+    return [{ affectedRows: result.rowCount, insertId: 0 }, result.fields];
   },
 
-  /**
-   * Get a connection from the pool for transactions.
-   * ALWAYS release the connection in a finally block.
-   *
-   * Example:
-   *   const conn = await db.getConnection()
-   *   try {
-   *     await conn.beginTransaction()
-   *     await conn.execute(...)
-   *     await conn.commit()
-   *   } catch(e) {
-   *     await conn.rollback()
-   *     throw e
-   *   } finally {
-   *     conn.release()
-   *   }
-   */
-  getConnection: async (): Promise<mysql.PoolConnection> => {
-    const pool = getPool();
-    return pool.getConnection();
+  getConnection: async (): Promise<PoolClient & { beginTransaction: () => Promise<void>; commit: () => Promise<void>; rollback: () => Promise<void>; release: () => void; ping: () => Promise<void> }> => {
+    const p = getPool();
+    const client = await p.connect() as any;
+    client.beginTransaction = () => client.query('BEGIN');
+    client.commit = () => client.query('COMMIT');
+    client.rollback = () => client.query('ROLLBACK');
+    client.ping = () => client.query('SELECT 1');
+    client.execute = async (sql: string, params?: any[]) => {
+      let pgSql = sql;
+      let i = 0;
+      pgSql = pgSql.replace(/\?/g, () => `$${++i}`);
+      const result = await client.query(pgSql, params);
+      return [result.rows, result.fields];
+    };
+    return client;
   },
 
-  /**
-   * Test database connectivity.
-   * Called on app startup to fail fast if DB is unreachable.
-   */
   testConnection: async (): Promise<void> => {
-    const pool = getPool();
-    const connection = await pool.getConnection();
+    const p = getPool();
+    const client = await p.connect();
     try {
-      await connection.ping();
+      await client.query('SELECT 1');
       logger.info('✅ Database connection test passed');
     } finally {
-      connection.release();
+      client.release();
     }
   },
 
-  /**
-   * Close all connections in the pool.
-   * Called on graceful shutdown.
-   */
   close: async (): Promise<void> => {
     if (pool) {
       await pool.end();
@@ -146,6 +89,4 @@ export const db = {
   },
 };
 
-export type DbConnection = mysql.PoolConnection;
-export type QueryResult = mysql.RowDataPacket;
-export type ResultSetHeader = mysql.ResultSetHeader;
+export type DbConnection = PoolClient;
