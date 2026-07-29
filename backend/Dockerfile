@@ -3,7 +3,5 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-RUN npm run build
-ENV NODE_ENV=production
 EXPOSE 4000
-CMD ["node", "dist/server.js"]
+CMD ["npx", "ts-node", "--transpile-only", "src/server.ts"]
