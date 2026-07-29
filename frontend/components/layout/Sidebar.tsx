@@ -1,21 +1,23 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Wrench, Users, Building2, ClipboardCheck, Calendar, BarChart3, Bell, LogOut, X, Shield, ChevronRight, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Wrench, Users, Building2, ClipboardCheck, Calendar, BarChart3, Bell, LogOut, X, Shield, ChevronRight, ShieldCheck, Settings } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
+const ADMIN_ROLES = ['Admin', 'MD', 'CEO', 'HR', 'MIS Executive'];
+
 const NAV = [
-  { label: 'Dashboard',    href: '/dashboard',     icon: LayoutDashboard },
-  { label: 'Machines',     href: '/machines',       icon: Wrench },
-  { label: 'Employees',    href: '/employees',      icon: Users },
-  { label: 'Departments',  href: '/departments',    icon: Building2, roles: ['Admin'] },
+  { label: 'Dashboard',     href: '/dashboard',     icon: LayoutDashboard },
+  { label: 'Machines',      href: '/machines',       icon: Wrench },
+  { label: 'Employees',     href: '/employees',      icon: Users },
   { divider: true },
-  { label: 'Checklists',   href: '/checklists',     icon: ClipboardCheck },
-  { label: 'My Tasks',     href: '/tasks',          icon: Calendar },
-  { label: 'Reports',      href: '/reports',        icon: BarChart3, roles: ['Admin','Supervisor'] },
-  { label: 'Verify tasks',  href: '/verify',         icon: ShieldCheck, roles: ['Admin','Supervisor'] },
+  { label: 'Checklists',    href: '/checklists',     icon: ClipboardCheck },
+  { label: 'My Tasks',      href: '/tasks',          icon: Calendar },
+  { label: 'Verify tasks',  href: '/verify',         icon: ShieldCheck, roles: ['Admin','MD','CEO','Production Head','Production Supervisor','Quality Head'] },
+  { label: 'Reports',       href: '/reports',        icon: BarChart3, roles: ['Admin','MD','CEO','HR','MIS Executive','Quality Head','Production Head'] },
   { divider: true },
-  { label: 'Notifications',href: '/notifications',  icon: Bell },
+  { label: 'Departments',   href: '/departments',    icon: Building2, roles: ADMIN_ROLES },
+  { label: 'Notifications', href: '/notifications',  icon: Bell },
 ] as const;
 
 export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -26,8 +28,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
     <>
       {isOpen && <div className="fixed inset-0 bg-black/40 z-40 lg:hidden" onClick={onClose} />}
       <aside className={`fixed top-0 left-0 h-full z-50 bg-[#0E2F76] flex flex-col w-64 transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-
-        {/* Logo */}
         <div className="flex items-center justify-between px-4 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center">
@@ -41,7 +41,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
           <button onClick={onClose} className="lg:hidden text-white/60 hover:text-white p-1"><X className="w-5 h-5" /></button>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
           {NAV.map((item: any, i) => {
             if (item.divider) return <div key={i} className="border-t border-white/10 my-3" />;
@@ -59,7 +58,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
           })}
         </nav>
 
-        {/* User + logout */}
         <div className="px-3 py-4 border-t border-white/10">
           {user && (
             <div className="flex items-center gap-3 px-3 py-2 mb-2">
