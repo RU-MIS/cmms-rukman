@@ -17,6 +17,8 @@ const NAV = [
   { label: 'Reports',       href: '/reports',        icon: BarChart3, roles: ['Admin','MD','CEO','HR','MIS Executive','Quality Head','Production Head'] },
   { divider: true },
   { label: 'Departments',   href: '/departments',    icon: Building2, roles: ADMIN_ROLES },
+  { label: 'Holidays',      href: '/holidays',       icon: Calendar,  roles: ADMIN_ROLES },
+  { label: 'Holidays',      href: '/holidays',       icon: Calendar, roles: ['Admin','MD','CEO','HR','MIS Executive','Production Head','Quality Head'] },
   { label: 'Notifications', href: '/notifications',  icon: Bell },
 ] as const;
 
