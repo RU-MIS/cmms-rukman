@@ -114,7 +114,7 @@ export async function getAllUsers(query: Record<string, unknown>) {
   );
 
   const [countRows] = await db.execute<any[]>(
-    `SELECT COUNT(*) AS total
+    `SELECT COUNT(*)
      FROM ${TABLE.USERS} u
      JOIN ${TABLE.ROLES}       r ON u.role_id  = r.role_id
      JOIN ${TABLE.DEPARTMENTS} d ON u.dept_id  = d.dept_id
@@ -125,7 +125,7 @@ export async function getAllUsers(query: Record<string, unknown>) {
 
   return {
     data: rows.map(mapUser),
-    meta: buildPaginationMeta(countRows[0].total, page, limit),
+    meta: buildPaginationMeta(Number(countRows[0]?.count || countRows[0]?.total || 0), page, limit),
   };
 }
 

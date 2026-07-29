@@ -113,13 +113,13 @@ export async function getAllTemplates(query: Record<string, unknown>) {
   );
 
   const [countRows] = await db.execute<any[]>(
-    `SELECT COUNT(*) AS total FROM ${TABLE.CHECKLIST_TEMPLATES} t ${where}`,
+    `SELECT COUNT(*) FROM ${TABLE.CHECKLIST_TEMPLATES} t ${where}`,
     params
   );
 
   return {
     data: rows.map(mapTemplate),
-    meta: buildPaginationMeta(countRows[0].total, page, limit),
+    meta: buildPaginationMeta(Number(countRows[0]?.count || countRows[0]?.total || 0), page, limit),
   };
 }
 

@@ -65,10 +65,10 @@ export async function getAllDepartments(query: Record<string, unknown>) {
   );
 
   const [countRows] = await db.execute<any[]>(
-    `SELECT COUNT(*) AS total FROM ${TABLE.DEPARTMENTS} d ${whereClause}`
+    `SELECT COUNT(*) FROM ${TABLE.DEPARTMENTS} d ${whereClause}`
   );
 
-  const total = countRows[0].total;
+  const total = Number(countRows[0]?.count || countRows[0]?.total || 0);
 
   return {
     data: rows.map(mapDepartment),
@@ -172,8 +172,8 @@ export async function toggleDepartmentActive(
 
   const newStatus = dept.isActive ? 0 : 1;
   await db.query(
-    `UPDATE ${TABLE.DEPARTMENTS} SET is_active = $, updated_at = NOW() WHERE dept_id = ?`,
-    [newStatus, deptId]
+    `UPDATE ${TABLE.DEPARTMENTS} SET is_active = $1, updated_at = NOW() WHERE dept_id = $2`,
+    [Boolean(newStatus), deptId]
   );
 
   logger.info(`Department ${newStatus ? 'activated' : 'deactivated'}: ${deptId} by ${updatedBy}`);

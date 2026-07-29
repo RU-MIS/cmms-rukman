@@ -161,7 +161,7 @@ async function getTasksQuery(
   );
 
   const [countRows] = await db.execute<any[]>(
-    `SELECT COUNT(*) AS total
+    `SELECT COUNT(*)
      FROM ${TABLE.TASK_MASTER} tm
      JOIN ${TABLE.MACHINES} m ON tm.machine_id = m.machine_id
      ${where}`,
@@ -170,7 +170,7 @@ async function getTasksQuery(
 
   return {
     data: rows.map(mapTaskSummary),
-    meta: buildPaginationMeta(countRows[0].total, page, limit),
+    meta: buildPaginationMeta(Number(countRows[0]?.count || countRows[0]?.total || 0), page, limit),
   };
 }
 

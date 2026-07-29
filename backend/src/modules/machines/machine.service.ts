@@ -109,13 +109,13 @@ export async function getAllMachines(query: Record<string, unknown>) {
   );
 
   const [countRows] = await db.execute<any[]>(
-    `SELECT COUNT(*) AS total FROM ${TABLE.MACHINES} m ${where}`,
+    `SELECT COUNT(*) FROM ${TABLE.MACHINES} m ${where}`,
     params
   );
 
   return {
     data: rows.map(mapMachine),
-    meta: buildPaginationMeta(countRows[0].total, page, limit),
+    meta: buildPaginationMeta(Number(countRows[0]?.count || countRows[0]?.total || 0), page, limit),
   };
 }
 

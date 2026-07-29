@@ -135,7 +135,7 @@ export async function getMachineReport(filters: ReportFilters) {
       lastDue:        r.last_due,
       lastCompleted:  r.last_completed,
     })),
-    meta: buildPaginationMeta(countRows[0].total, page, limit),
+    meta: buildPaginationMeta(Number(countRows[0]?.count || countRows[0]?.total || 0), page, limit),
     summary: await getComplianceReport(filters),
   };
 }
@@ -247,7 +247,7 @@ export async function getEmployeeReport(filters: ReportFilters) {
       complianceRate:     r.total > 0 ? Math.round((r.completed / r.total) * 100) : 0,
       avgCompletionMins:  r.avg_completion_mins ? Math.round(r.avg_completion_mins) : null,
     })),
-    meta: buildPaginationMeta(countRows[0].total, page, limit),
+    meta: buildPaginationMeta(Number(countRows[0]?.count || countRows[0]?.total || 0), page, limit),
   };
 }
 
@@ -336,7 +336,7 @@ export async function getTaskDetailReport(filters: ReportFilters) {
   );
 
   const [countRows] = await db.execute<any[]>(
-    `SELECT COUNT(*) AS total
+    `SELECT COUNT(*)
      FROM ${TABLE.TASK_MASTER} tm
      JOIN ${TABLE.MACHINES} m ON tm.machine_id = m.machine_id
      WHERE ${where}`,
@@ -362,7 +362,7 @@ export async function getTaskDetailReport(filters: ReportFilters) {
       verifierName:     r.verifier_name,
       completionMins:   r.completion_mins,
     })),
-    meta: buildPaginationMeta(countRows[0].total, page, limit),
+    meta: buildPaginationMeta(Number(countRows[0]?.count || countRows[0]?.total || 0), page, limit),
   };
 }
 
