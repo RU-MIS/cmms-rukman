@@ -81,7 +81,7 @@ export async function getAllMachines(query: Record<string, unknown>) {
     const s = `%${query.search}%`;
     params.push(s, s);
   }
-  if (query.showInactive !== 'true') { conditions.push('m.is_active = 1'); }
+  if (query.showInactive !== 'true') { conditions.push('m.is_active = true'); }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -100,7 +100,7 @@ export async function getAllMachines(query: Record<string, unknown>) {
      FROM ${TABLE.MACHINES} m
      JOIN ${TABLE.DEPARTMENTS} d  ON m.dept_id = d.dept_id
      LEFT JOIN ${TABLE.MACHINE_ASSIGNMENTS} ma
-           ON ma.machine_id = m.machine_id AND ma.is_active = 1
+           ON ma.machine_id = m.machine_id AND ma.is_active = true
      LEFT JOIN ${TABLE.USERS} u ON ma.user_id = u.user_id
      ${where}
      ORDER BY m.machine_name ASC
@@ -136,7 +136,7 @@ export async function getMachineById(machineId: string): Promise<Machine> {
      FROM ${TABLE.MACHINES} m
      JOIN ${TABLE.DEPARTMENTS} d ON m.dept_id = d.dept_id
      LEFT JOIN ${TABLE.MACHINE_ASSIGNMENTS} ma
-           ON ma.machine_id = m.machine_id AND ma.is_active = 1
+           ON ma.machine_id = m.machine_id AND ma.is_active = true
      LEFT JOIN ${TABLE.USERS} u ON ma.user_id = u.user_id
      WHERE m.machine_id = ?`,
     [machineId]
@@ -253,8 +253,8 @@ export async function assignOperator(
   // Deactivate any existing assignment
   await db.query(
     `UPDATE ${TABLE.MACHINE_ASSIGNMENTS}
-     SET is_active = 0, unassigned_date = ?
-     WHERE machine_id = ? AND is_active = 1`,
+     SET is_active = false, unassigned_date = ?
+     WHERE machine_id = ? AND is_active = true`,
     [todayIST(), machineId]
   );
 
@@ -290,7 +290,7 @@ export async function handoverOperator(
   // Get current active assignment
   const [current] = await db.execute<any[]>(
     `SELECT assign_id, user_id FROM ${TABLE.MACHINE_ASSIGNMENTS}
-     WHERE machine_id = ? AND is_active = 1`,
+     WHERE machine_id = ? AND is_active = true`,
     [machineId]
   );
 
@@ -300,7 +300,7 @@ export async function handoverOperator(
     // Close current assignment with handover notes
     await db.query(
       `UPDATE ${TABLE.MACHINE_ASSIGNMENTS}
-       SET is_active = 0, unassigned_date = ?, handover_notes = ?
+       SET is_active = false, unassigned_date = ?, handover_notes = ?
        WHERE assign_id = ?`,
       [today, dto.handoverNotes || null, current[0].assign_id]
     );
@@ -360,7 +360,7 @@ export async function toggleMachineActive(
   const newStatus = machine.isActive ? 0 : 1;
 
   await db.query(
-    `UPDATE ${TABLE.MACHINES} SET is_active = ?, updated_at = NOW() WHERE machine_id = ?`,
+    `UPDATE ${TABLE.MACHINES} SET is_active = $, updated_at = NOW() WHERE machine_id = ?`,
     [newStatus, machineId]
   );
 

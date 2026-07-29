@@ -21,7 +21,7 @@ export async function getUserNotifications(userId: string, query: Record<string,
   const conditions = ['user_id = ?'];
   const params: unknown[] = [userId];
 
-  if (onlyUnread) { conditions.push('is_read = 0'); }
+  if (onlyUnread) { conditions.push('is_read = false'); }
 
   const where = conditions.join(' AND ');
 
@@ -34,7 +34,7 @@ export async function getUserNotifications(userId: string, query: Record<string,
   );
 
   const [countRows] = await db.execute<any[]>(
-    `SELECT COUNT(*) AS total, SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread
+    `SELECT COUNT(*) AS total, SUM(CASE WHEN is_read = false THEN 1 ELSE 0 END) AS unread
      FROM ${TABLE.NOTIFICATIONS} WHERE user_id = ?`,
     [userId]
   );
@@ -49,7 +49,7 @@ export async function getUserNotifications(userId: string, query: Record<string,
 export async function markAsRead(notifId: string, userId: string): Promise<void> {
   await db.query(
     `UPDATE ${TABLE.NOTIFICATIONS}
-     SET is_read = 1, read_at = NOW()
+     SET is_read = true, read_at = NOW()
      WHERE notif_id = ? AND user_id = ?`,
     [notifId, userId]
   );
@@ -58,8 +58,8 @@ export async function markAsRead(notifId: string, userId: string): Promise<void>
 export async function markAllAsRead(userId: string): Promise<void> {
   await db.query(
     `UPDATE ${TABLE.NOTIFICATIONS}
-     SET is_read = 1, read_at = NOW()
-     WHERE user_id = ? AND is_read = 0`,
+     SET is_read = true, read_at = NOW()
+     WHERE user_id = ? AND is_read = false`,
     [userId]
   );
 }
@@ -67,7 +67,7 @@ export async function markAllAsRead(userId: string): Promise<void> {
 export async function getUnreadCount(userId: string): Promise<number> {
   const [rows] = await db.execute<any[]>(
     `SELECT COUNT(*) AS count FROM ${TABLE.NOTIFICATIONS}
-     WHERE user_id = ? AND is_read = 0`,
+     WHERE user_id = ? AND is_read = false`,
     [userId]
   );
   return Number(rows[0].count || 0);

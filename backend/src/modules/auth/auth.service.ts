@@ -253,7 +253,7 @@ export async function getUserById(userId: string): Promise<AuthUser | null> {
      JOIN ${TABLE.ROLES}       r ON u.role_id  = r.role_id
      JOIN ${TABLE.DEPARTMENTS} d ON u.dept_id  = d.dept_id
      JOIN ${TABLE.SHIFTS}      s ON u.shift_id = s.shift_id
-     WHERE u.user_id = ? AND u.is_active = 1
+     WHERE u.user_id = ? AND u.is_active = true
      LIMIT 1`,
     [userId]
   );

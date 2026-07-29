@@ -92,7 +92,7 @@ export async function getAllTemplates(query: Record<string, unknown>) {
     conditions.push('t.template_name LIKE ?');
     params.push(`%${query.search}%`);
   }
-  if (query.showInactive !== 'true') { conditions.push('t.is_active = 1'); }
+  if (query.showInactive !== 'true') { conditions.push('t.is_active = true'); }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -104,7 +104,7 @@ export async function getAllTemplates(query: Record<string, unknown>) {
        COUNT(i.item_id) AS item_count
      FROM ${TABLE.CHECKLIST_TEMPLATES} t
      JOIN ${TABLE.DEPARTMENTS} d  ON t.dept_id    = d.dept_id
-     LEFT JOIN ${TABLE.CHECKLIST_ITEMS} i ON t.template_id = i.template_id AND i.is_active = 1
+     LEFT JOIN ${TABLE.CHECKLIST_ITEMS} i ON t.template_id = i.template_id AND i.is_active = true
      ${where}
      GROUP BY t.template_id
      ORDER BY t.template_name ASC
@@ -134,7 +134,7 @@ export async function getTemplateById(templateId: string): Promise<ChecklistTemp
        COUNT(i.item_id) AS item_count
      FROM ${TABLE.CHECKLIST_TEMPLATES} t
      JOIN ${TABLE.DEPARTMENTS} d ON t.dept_id = d.dept_id
-     LEFT JOIN ${TABLE.CHECKLIST_ITEMS} i ON t.template_id = i.template_id AND i.is_active = 1
+     LEFT JOIN ${TABLE.CHECKLIST_ITEMS} i ON t.template_id = i.template_id AND i.is_active = true
      WHERE t.template_id = ?
      GROUP BY t.template_id`,
     [templateId]
@@ -147,7 +147,7 @@ export async function getTemplateById(templateId: string): Promise<ChecklistTemp
   // Fetch items
   const [itemRows] = await db.execute<any[]>(
     `SELECT * FROM ${TABLE.CHECKLIST_ITEMS}
-     WHERE template_id = ? AND is_active = 1
+     WHERE template_id = ? AND is_active = true
      ORDER BY sort_order ASC`,
     [templateId]
   );
@@ -267,7 +267,7 @@ export async function updateItem(
   dto: Partial<CreateItemDto>
 ): Promise<ChecklistItem> {
   const [existing] = await db.execute<any[]>(
-    `SELECT item_id FROM ${TABLE.CHECKLIST_ITEMS} WHERE item_id = ? AND is_active = 1`,
+    `SELECT item_id FROM ${TABLE.CHECKLIST_ITEMS} WHERE item_id = ? AND is_active = true`,
     [itemId]
   );
   if (existing.length === 0) throw AppErrors.notFound('Checklist item');
@@ -306,7 +306,7 @@ export async function updateItem(
 
 export async function deleteItem(itemId: string): Promise<void> {
   await db.query(
-    `UPDATE ${TABLE.CHECKLIST_ITEMS} SET is_active = 0 WHERE item_id = ?`,
+    `UPDATE ${TABLE.CHECKLIST_ITEMS} SET is_active = false WHERE item_id = ?`,
     [itemId]
   );
 }
@@ -353,7 +353,7 @@ export async function assignToMachine(
     // Reactivate + update schedule if already exists
     await db.query(
       `UPDATE ${TABLE.MACHINE_TEMPLATE_MAP}
-       SET is_active = 1, schedule_start_date = ?, schedule_day = ?,
+       SET is_active = true, schedule_start_date = ?, schedule_day = ?,
            assigned_by = ?, assigned_date = NOW(), last_generated_date = NULL
        WHERE machine_id = ? AND template_id = ?`,
       [dto.scheduleStartDate, dto.scheduleDay || null, assignedBy, dto.machineId, templateId]
@@ -380,7 +380,7 @@ export async function unassignFromMachine(
 ): Promise<void> {
   await db.query(
     `UPDATE ${TABLE.MACHINE_TEMPLATE_MAP}
-     SET is_active = 0 WHERE machine_id = ? AND template_id = ?`,
+     SET is_active = false WHERE machine_id = ? AND template_id = ?`,
     [machineId, templateId]
   );
 }
@@ -397,8 +397,8 @@ export async function getMachineTemplates(machineId: string) {
        COUNT(i.item_id) AS item_count
      FROM ${TABLE.MACHINE_TEMPLATE_MAP} mtm
      JOIN ${TABLE.CHECKLIST_TEMPLATES} t ON mtm.template_id = t.template_id
-     LEFT JOIN ${TABLE.CHECKLIST_ITEMS} i ON t.template_id  = i.template_id AND i.is_active = 1
-     WHERE mtm.machine_id = ? AND mtm.is_active = 1
+     LEFT JOIN ${TABLE.CHECKLIST_ITEMS} i ON t.template_id  = i.template_id AND i.is_active = true
+     WHERE mtm.machine_id = ? AND mtm.is_active = true
      GROUP BY t.template_id, mtm.map_id
      ORDER BY t.frequency, t.template_name`,
     [machineId]

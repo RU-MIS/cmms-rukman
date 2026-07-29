@@ -68,10 +68,10 @@ async function generateDailyTasks(): Promise<void> {
        FROM ${TABLE.MACHINE_TEMPLATE_MAP} mtm
        JOIN ${TABLE.CHECKLIST_TEMPLATES} t  ON mtm.template_id = t.template_id
        LEFT JOIN ${TABLE.MACHINE_ASSIGNMENTS} ma
-             ON ma.machine_id = mtm.machine_id AND ma.is_active = 1
-       WHERE mtm.is_active = 1
+             ON ma.machine_id = mtm.machine_id AND ma.is_active = true
+       WHERE mtm.is_active = true
          AND t.frequency = ?
-         AND t.is_active = 1
+         AND t.is_active = true
          AND mtm.schedule_start_date <= ?`,
       [FREQUENCY.DAILY, today]
     );
@@ -123,11 +123,11 @@ async function generateScheduledTasks(): Promise<void> {
        FROM ${TABLE.MACHINE_TEMPLATE_MAP} mtm
        JOIN ${TABLE.CHECKLIST_TEMPLATES} t  ON mtm.template_id = t.template_id
        LEFT JOIN ${TABLE.MACHINE_ASSIGNMENTS} ma
-             ON ma.machine_id = mtm.machine_id AND ma.is_active = 1
-       WHERE mtm.is_active = 1
+             ON ma.machine_id = mtm.machine_id AND ma.is_active = true
+       WHERE mtm.is_active = true
          AND t.frequency != ?
          AND t.frequency != ?
-         AND t.is_active = 1
+         AND t.is_active = true
          AND mtm.schedule_start_date <= ?`,
       [FREQUENCY.DAILY, FREQUENCY.ON_DEMAND, today]
     );

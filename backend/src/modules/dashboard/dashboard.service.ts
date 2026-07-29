@@ -64,7 +64,7 @@ export async function getDashboardKPIs(userId: string, roleName: string, deptId:
   // Active machines count
   const [machineRows] = await db.execute<any[]>(
     `SELECT COUNT(*) AS total FROM ${TABLE.MACHINES}
-     WHERE is_active = 1 ${deptFilter.replace('m.dept_id', 'dept_id')}`
+     WHERE is_active = true ${deptFilter.replace('m.dept_id', 'dept_id')}`
   );
 
   return {
@@ -160,7 +160,7 @@ export async function getTodayTasksByMachine(deptId?: string) {
      FROM ${TABLE.MACHINES} m
      JOIN ${TABLE.DEPARTMENTS} d  ON m.dept_id    = d.dept_id
      JOIN ${TABLE.TASK_MASTER} tm ON tm.machine_id = m.machine_id AND tm.due_date = ?
-     WHERE m.is_active = 1 ${deptWhere}
+     WHERE m.is_active = true ${deptWhere}
      GROUP BY m.machine_id
      ORDER BY overdue DESC, pending DESC`,
     params

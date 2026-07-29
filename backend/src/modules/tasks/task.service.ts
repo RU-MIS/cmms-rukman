@@ -212,7 +212,7 @@ export async function getTaskById(taskId: string): Promise<TaskDetail> {
      FROM ${TABLE.CHECKLIST_ITEMS} ci
      LEFT JOIN ${TABLE.TASK_RESPONSES} tr
            ON tr.item_id = ci.item_id AND tr.task_id = ?
-     WHERE ci.template_id = ? AND ci.is_active = 1
+     WHERE ci.template_id = ? AND ci.is_active = true
      ORDER BY ci.sort_order ASC`,
     [taskId, tRows[0].template_id]
   );

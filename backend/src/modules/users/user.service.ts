@@ -90,7 +90,7 @@ export async function getAllUsers(query: Record<string, unknown>) {
     params.push(s, s, s);
   }
   if (query.showInactive !== 'true') {
-    conditions.push('u.is_active = 1');
+    conditions.push('u.is_active = true');
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -257,7 +257,7 @@ export async function toggleUserActive(
   const newStatus = user.isActive ? 0 : 1;
 
   await db.query(
-    `UPDATE ${TABLE.USERS} SET is_active = ?, updated_at = NOW() WHERE user_id = ?`,
+    `UPDATE ${TABLE.USERS} SET is_active = $, updated_at = NOW() WHERE user_id = ?`,
     [newStatus, userId]
   );
 

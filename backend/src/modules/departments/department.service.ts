@@ -48,7 +48,7 @@ export async function getAllDepartments(query: Record<string, unknown>) {
   const { page, limit, offset } = parsePagination(query);
   const showInactive = query.showInactive === 'true';
 
-  const whereClause = showInactive ? '' : 'WHERE d.is_active = 1';
+  const whereClause = showInactive ? '' : 'WHERE d.is_active = true';
 
   const [rows] = await db.execute<any[]>(
     `SELECT
@@ -172,7 +172,7 @@ export async function toggleDepartmentActive(
 
   const newStatus = dept.isActive ? 0 : 1;
   await db.query(
-    `UPDATE ${TABLE.DEPARTMENTS} SET is_active = ?, updated_at = NOW() WHERE dept_id = ?`,
+    `UPDATE ${TABLE.DEPARTMENTS} SET is_active = $, updated_at = NOW() WHERE dept_id = ?`,
     [newStatus, deptId]
   );
 
