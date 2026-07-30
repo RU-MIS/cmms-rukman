@@ -122,6 +122,14 @@ async function startServer(): Promise<void> {
       logger.info(`🔗 Frontend: ${env.CORS_ORIGIN}`);
       logger.info(`❤️  Health: http://localhost:${env.PORT}/health`);
 
+    // Keep-alive ping every 10 minutes to prevent Render free tier sleep
+    setInterval(async () => {
+      try {
+        const http = require('http');
+        http.get(`http://localhost:${env.PORT}/health`, () => {});
+      } catch {}
+    }, 10 * 60 * 1000); // 10 minutes
+
     // Start task scheduler
     startScheduler();
     });
