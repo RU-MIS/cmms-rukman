@@ -102,11 +102,13 @@ export async function getAllUsers(query: Record<string, unknown>) {
        u.phone,        u.email,
        u.role_id,      r.role_name,
        u.dept_id,      d.dept_name,
-       u.shift_id,     s.shift_name
+       u.shift_id,     s.shift_name,
+       u.plant_id,     p.plant_no,       p.plant_name
      FROM ${TABLE.USERS} u
      JOIN ${TABLE.ROLES}       r ON u.role_id  = r.role_id
      JOIN ${TABLE.DEPARTMENTS} d ON u.dept_id  = d.dept_id
      JOIN ${TABLE.SHIFTS}      s ON u.shift_id = s.shift_id
+     LEFT JOIN plants          p ON u.plant_id = p.plant_id
      ${where}
      ORDER BY u.full_name ASC
      LIMIT ? OFFSET ?`,
@@ -139,11 +141,13 @@ export async function getUserById(userId: string): Promise<User> {
        u.phone,        u.email,
        u.role_id,      r.role_name,
        u.dept_id,      d.dept_name,
-       u.shift_id,     s.shift_name
+       u.shift_id,     s.shift_name,
+       u.plant_id,     p.plant_no,       p.plant_name
      FROM ${TABLE.USERS} u
      JOIN ${TABLE.ROLES}       r ON u.role_id  = r.role_id
      JOIN ${TABLE.DEPARTMENTS} d ON u.dept_id  = d.dept_id
      JOIN ${TABLE.SHIFTS}      s ON u.shift_id = s.shift_id
+     LEFT JOIN plants          p ON u.plant_id = p.plant_id
      WHERE u.user_id = ?`,
     [userId]
   );
@@ -303,6 +307,9 @@ function mapUser(row: any): User {
     deptName:     row.dept_name,
     shiftId:      row.shift_id,
     shiftName:    row.shift_name,
+    plantId:      row.plant_id,
+    plantNo:      row.plant_no,
+    plantName:    row.plant_name,
     phone:        row.phone,
     email:        row.email,
     isActive:     Boolean(row.is_active),
