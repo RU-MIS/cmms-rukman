@@ -85,6 +85,23 @@ async function seedDepartments(): Promise<void> {
   logger.info(`✅ Departments seeded (${depts.length} departments)`);
 }
 
+async function seedPlants(): Promise<void> {
+  const plants = [
+    { id: 'PLT001', no: 1, name: 'Plant No.1', address: 'Mundka Gali No. 11' },
+    { id: 'PLT002', no: 2, name: 'Plant No.2', address: 'Mundka Gali No. 6' },
+    { id: 'PLT003', no: 3, name: 'Plant No.3', address: 'Mundka Gali No. 1' },
+    { id: 'PLT004', no: 4, name: 'Plant No.4', address: 'Swarn Park' },
+    { id: 'PLT005', no: 5, name: 'Plant No.5', address: null },
+  ];
+  for (const p of plants) {
+    await db.query(
+      `INSERT INTO plants (plant_id, plant_no, plant_name, address) VALUES ($1, $2, $3, $4) ON CONFLICT (plant_id) DO NOTHING`,
+      [p.id, p.no, p.name, p.address]
+    );
+  }
+  logger.info('✅ Plants seeded (5 plants)');
+}
+
 async function seedShifts(): Promise<void> {
   const shifts = [
     { id: 'SHF001', name: 'Shift A',       start: '06:00:00', end: '14:00:00' },
@@ -119,6 +136,7 @@ export async function runSeeds(): Promise<void> {
   await seedSettings();
   await seedRoles();
   await seedDepartments();
+  await seedPlants();
   await seedShifts();
   await seedDefaultAdmin();
   await seedChecklists();

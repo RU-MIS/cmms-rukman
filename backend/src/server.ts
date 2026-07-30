@@ -32,6 +32,7 @@ import reportRoutes        from './modules/reports/report.routes';
 import notificationRoutes  from './modules/notifications/notification.routes';
 import rolesRoutes         from './modules/roles/roles.routes';
 import holidayRoutes       from './modules/holidays/holiday.routes';
+import plantsRoutes        from './modules/plants/plants.routes';
 import holidaysRoutes      from './modules/holidays/holiday.routes';
 import shiftsRoutes        from './modules/shifts/shifts.routes';
 
@@ -95,6 +96,7 @@ app.use('/api/v1/reports',        reportRoutes);
 app.use('/api/v1/notifications',  notificationRoutes);
 app.use('/api/v1/roles',          rolesRoutes);
 app.use('/api/v1/holidays',       holidayRoutes);
+app.use('/api/v1/plants',         plantsRoutes);
 app.use('/api/v1/holidays',       holidaysRoutes);
 app.use('/api/v1/shifts',         shiftsRoutes);
 

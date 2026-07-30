@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Wrench, Users, Building2, ClipboardCheck, Calendar, BarChart3, Bell, LogOut, X, Shield, ChevronRight, ShieldCheck, Clock } from 'lucide-react';
+import { LayoutDashboard, Wrench, Users, Building2, ClipboardCheck, Calendar, BarChart3, Bell, LogOut, X, Shield, ChevronRight, ShieldCheck, Clock, Factory } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
 const ADMIN_ROLES = ['Admin', 'MD', 'CEO', 'HR', 'MIS Executive'];
@@ -16,6 +16,7 @@ const NAV = [
   { label: 'Verify tasks',  href: '/verify',         icon: ShieldCheck, roles: ['Admin','MD','CEO','Production Head','Production Supervisor','Quality Head'] },
   { label: 'Reports',       href: '/reports',        icon: BarChart3, roles: ['Admin','MD','CEO','HR','MIS Executive','Quality Head','Production Head'] },
   { divider: true },
+  { label: 'Plants',        href: '/plants',         icon: Factory,   roles: ADMIN_ROLES },
   { label: 'Departments',   href: '/departments',    icon: Building2, roles: ADMIN_ROLES },
   { label: 'Job Roles',     href: '/roles',          icon: ShieldCheck, roles: ADMIN_ROLES },
   { label: 'Shifts',        href: '/shifts',         icon: Clock,     roles: ADMIN_ROLES },

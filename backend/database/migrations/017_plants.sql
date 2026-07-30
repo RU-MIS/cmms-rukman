@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS plants (
+  plant_id    VARCHAR(10)  NOT NULL,
+  plant_no    INTEGER      NOT NULL UNIQUE,
+  plant_name  VARCHAR(100) NOT NULL,
+  address     VARCHAR(200) NULL,
+  is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (plant_id)
+);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plant_id VARCHAR(10) NULL;
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS plant_id VARCHAR(10) NULL;

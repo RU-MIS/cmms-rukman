@@ -25,7 +25,7 @@ function AddEmployeeModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
     fullName: '', employeeCode: '', roleId: '', deptId: '', shiftId: '',
-    phone: '', email: '', username: '',
+    phone: '', email: '', username: '', plantId: '',
   });
   const [createdUser, setCreatedUser] = useState<{ username: string; tempPassword: string } | null>(null);
   const [showPass, setShowPass] = useState(false);
@@ -40,6 +40,12 @@ function AddEmployeeModal({ onClose }: { onClose: () => void }) {
   const { data: depts = [] } = useQuery({
     queryKey: ['depts-dropdown'],
     queryFn: () => api.get('/departments?limit=50').then(r => r.data.data || []),
+  });
+
+  // Fetch plants
+  const { data: plants = [] } = useQuery({
+    queryKey: ['plants-dropdown'],
+    queryFn: () => api.get('/plants').then(r => r.data.data || []),
   });
 
   // Fetch shifts
@@ -173,6 +179,18 @@ function AddEmployeeModal({ onClose }: { onClose: () => void }) {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Plant */}
+          <div>
+            <label className="block text-xs font-semibold text-[#3A5A8A] uppercase tracking-wide mb-1.5">Plant No.</label>
+            <select className="w-full border border-[#AAC0E1] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0E2F76]/20"
+              value={form.plantId} onChange={e => setForm(f => ({ ...f, plantId: e.target.value }))}>
+              <option value="">Select plant</option>
+              {(plants as any[]).map((p: any) => (
+                <option key={p.plant_id} value={p.plant_id}>Plant No.{p.plant_no} — {p.address || p.plant_name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Phone + Email */}
