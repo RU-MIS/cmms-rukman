@@ -52,7 +52,7 @@ export const env = {
   BCRYPT_ROUNDS: parseInt(optional('BCRYPT_ROUNDS', '12'), 10),
   CORS_ORIGIN: optional('CORS_ORIGIN', 'http://localhost:3000'),
   RATE_LIMIT_WINDOW_MS: parseInt(optional('RATE_LIMIT_WINDOW_MS', '900000'), 10),
-  RATE_LIMIT_MAX_REQUESTS: parseInt(optional('RATE_LIMIT_MAX_REQUESTS', '100'), 10),
+  RATE_LIMIT_MAX_REQUESTS: parseInt(optional('RATE_LIMIT_MAX_REQUESTS', '50000'), 10),
 
   LOG_LEVEL: optional('LOG_LEVEL', 'debug'),
 } as const;
