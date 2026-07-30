@@ -1,4 +1,5 @@
 import { db } from '../../src/config/database';
+import { seedChecklists } from './checklist.seed';
 import { hashPassword } from '../../src/utils/helpers';
 import { logger } from '../../src/utils/logger';
 
@@ -120,5 +121,6 @@ export async function runSeeds(): Promise<void> {
   await seedDepartments();
   await seedShifts();
   await seedDefaultAdmin();
+  await seedChecklists();
   logger.info('🎉 All seeds completed!');
 }
