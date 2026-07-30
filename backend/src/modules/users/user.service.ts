@@ -216,8 +216,10 @@ export async function updateUser(
   if (dto.shiftId)   { fields.push('shift_id = ?');   values.push(dto.shiftId); }
   if (dto.phone !== undefined) { fields.push('phone = ?'); values.push(dto.phone || null); }
   if (dto.email !== undefined) { fields.push('email = ?'); values.push(dto.email || null); }
+  if ((dto as any).plantId !== undefined) { fields.push('plant_id = ?'); values.push((dto as any).plantId || null); }
+  if (dto.employeeCode) { fields.push('employee_code = ?'); values.push(dto.employeeCode.trim()); }
 
-  if (fields.length === 0) throw AppErrors.badRequest('No fields to update.');
+  if (fields.length === 0) { return getUserById(userId); }
 
   fields.push('updated_at = NOW()');
   values.push(userId);
