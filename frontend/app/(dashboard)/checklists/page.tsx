@@ -83,8 +83,8 @@ function AssignModal({ template, onClose }: { template: any; onClose: () => void
                   <p className="text-sm font-semibold text-[#0A1F4E]">{selectedEmp.deptName}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-[#7A9CC0]">Plant No. (Emp Code)</p>
-                  <p className="text-sm font-semibold text-[#0E2F76] font-mono">{selectedEmp.employeeCode}</p>
+                  <p className="text-xs text-[#7A9CC0]">Plant No.</p>
+                  <p className="text-sm font-semibold text-[#0E2F76]">{selectedEmp.plantNo ? `Plant No.${selectedEmp.plantNo}` : '—'}</p>
                 </div>
               </div>
             )}
@@ -126,7 +126,7 @@ function AssignModal({ template, onClose }: { template: any; onClose: () => void
                           <Building2 className="w-3 h-3" /> {a.deptName}
                         </span>
                         <span className="flex items-center gap-1 text-xs text-[#7A9CC0]">
-                          <Hash className="w-3 h-3" /> {a.employeeCode}
+                          <Hash className="w-3 h-3" /> {a.plantNo ? `Plant No.${a.plantNo}` : a.employeeCode}
                         </span>
                       </div>
                     </div>
