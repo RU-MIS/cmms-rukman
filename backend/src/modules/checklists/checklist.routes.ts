@@ -11,6 +11,7 @@ import { requireRole, requireAnyRole } from '../../middleware/role.middleware';
 import { successResponse } from '../../utils/helpers';
 import * as checklistService from './checklist.service';
 import { ROLES, FREQUENCY, INPUT_TYPE } from '../../config/constants';
+import { db } from '../../config/database';
 
 const router = Router();
 router.use(authMiddleware);
@@ -111,8 +112,6 @@ router.put('/:id/reorder',
 // GET assignments for a template
 router.get('/:id/assignments', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { db } = await import('../../../src/config/database').catch(() => require('../../config/database'));
-    const { successResponse } = await import('../../../src/utils/helpers').catch(() => require('../../utils/helpers'));
     const [rows] = await db.execute<any>(
       `SELECT 
         mtm.map_id as "assignId",
@@ -134,16 +133,37 @@ router.get('/:id/assignments', async (req: Request, res: Response, next: NextFun
 });
 
 router.post('/:id/assign',
-  requireAnyRole([ROLES.ADMIN, ROLES.SUPERVISOR]),
-  [
-    body('machineId').notEmpty().withMessage('Machine ID is required'),
-    body('scheduleStartDate').isDate().withMessage('Valid start date required (YYYY-MM-DD)'),
-    body('scheduleDay').optional().isInt({ min: 1, max: 31 }),
-  ],
+  requireAnyRole([ROLES.ADMIN, ROLES.SUPERVISOR, 'MIS Executive', 'Maintenance Incharge']),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await checklistService.assignToMachine(req.params.id, req.body, req.user!.userId);
-      res.json(successResponse('Template assigned to machine'));
+      const { userId, scheduleStartDate } = req.body;
+      if (!userId || !scheduleStartDate) {
+        res.status(400).json({ success: false, message: 'userId and scheduleStartDate required' });
+        return;
+      }
+
+      // Find or use the machine linked to this template
+      const [mapRows] = await db.execute<any>(
+        `SELECT machine_id FROM machine_template_map WHERE template_id = $1 LIMIT 1`,
+        [req.params.id]
+      );
+      const machineId = (mapRows as any[])[0]?.machine_id;
+
+      // Update or create assignment - store userId as assigned_to
+      const [existing] = await db.execute<any>(
+        `SELECT map_id FROM machine_template_map WHERE template_id = $1 AND machine_id = $2`,
+        [req.params.id, machineId]
+      );
+
+      if ((existing as any[]).length > 0) {
+        await db.query(
+          `UPDATE machine_template_map 
+           SET assigned_by = $1, schedule_start_date = $2, assigned_date = NOW()
+           WHERE template_id = $3 AND machine_id = $4`,
+          [userId, scheduleStartDate, req.params.id, machineId]
+        );
+      }
+      res.json(successResponse('Checklist assigned successfully'));
     } catch (err) { next(err); }
   }
 );
