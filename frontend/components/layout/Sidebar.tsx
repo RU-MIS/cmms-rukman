@@ -20,7 +20,6 @@ const NAV = [
   { label: 'Job Roles',     href: '/roles',          icon: ShieldCheck, roles: ADMIN_ROLES },
   { label: 'Shifts',        href: '/shifts',         icon: Clock,     roles: ADMIN_ROLES },
   { label: 'Holidays',      href: '/holidays',       icon: Calendar,  roles: ADMIN_ROLES },
-  { label: 'Holidays',      href: '/holidays',       icon: Calendar, roles: ['Admin','MD','CEO','HR','MIS Executive','Production Head','Quality Head'] },
   { label: 'Notifications', href: '/notifications',  icon: Bell },
 ] as const;
 
