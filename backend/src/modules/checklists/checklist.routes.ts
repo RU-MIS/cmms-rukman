@@ -108,6 +108,31 @@ router.put('/:id/reorder',
 );
 
 // ── POST /:id/assign — assign template to machine ─────────────────
+// GET assignments for a template
+router.get('/:id/assignments', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { db } = await import('../../../src/config/database').catch(() => require('../../config/database'));
+    const { successResponse } = await import('../../../src/utils/helpers').catch(() => require('../../utils/helpers'));
+    const [rows] = await db.execute<any>(
+      `SELECT 
+        mtm.map_id as "assignId",
+        u.user_id as "userId",
+        u.full_name as "fullName",
+        u.employee_code as "employeeCode",
+        d.dept_name as "deptName",
+        mtm.schedule_start_date as "startDate",
+        mtm.is_active as "isActive"
+       FROM machine_template_map mtm
+       JOIN users u ON u.user_id = mtm.assigned_by
+       JOIN departments d ON d.dept_id = u.dept_id
+       WHERE mtm.template_id = $1 AND mtm.is_active = true
+       ORDER BY mtm.assigned_date DESC`,
+      [req.params.id]
+    );
+    res.json(successResponse('Assignments fetched', rows));
+  } catch (err) { next(err); }
+});
+
 router.post('/:id/assign',
   requireAnyRole([ROLES.ADMIN, ROLES.SUPERVISOR]),
   [
