@@ -106,7 +106,8 @@ export async function getAllTemplates(query: Record<string, unknown>) {
      JOIN ${TABLE.DEPARTMENTS} d  ON t.dept_id    = d.dept_id
      LEFT JOIN ${TABLE.CHECKLIST_ITEMS} i ON t.template_id = i.template_id AND i.is_active = true
      ${where}
-     GROUP BY t.template_id
+     GROUP BY t.template_id, t.template_name, t.frequency, t.has_photo,
+              t.description, t.is_active, t.created_at, t.dept_id, d.dept_name
      ORDER BY t.template_name ASC
      LIMIT ? OFFSET ?`,
     [...params, limit, offset]
@@ -136,7 +137,8 @@ export async function getTemplateById(templateId: string): Promise<ChecklistTemp
      JOIN ${TABLE.DEPARTMENTS} d ON t.dept_id = d.dept_id
      LEFT JOIN ${TABLE.CHECKLIST_ITEMS} i ON t.template_id = i.template_id AND i.is_active = true
      WHERE t.template_id = ?
-     GROUP BY t.template_id`,
+     GROUP BY t.template_id, t.template_name, t.frequency, t.has_photo,
+              t.description, t.is_active, t.created_at, t.dept_id, d.dept_name`,
     [templateId]
   );
 
@@ -399,7 +401,9 @@ export async function getMachineTemplates(machineId: string) {
      JOIN ${TABLE.CHECKLIST_TEMPLATES} t ON mtm.template_id = t.template_id
      LEFT JOIN ${TABLE.CHECKLIST_ITEMS} i ON t.template_id  = i.template_id AND i.is_active = true
      WHERE mtm.machine_id = ? AND mtm.is_active = true
-     GROUP BY t.template_id, mtm.map_id
+     GROUP BY t.template_id, t.template_name, t.frequency, t.has_photo,
+              t.description, t.is_active, t.created_at, t.dept_id,
+              d.dept_name, mtm.map_id, mtm.schedule_start_date, mtm.is_active
      ORDER BY t.frequency, t.template_name`,
     [machineId]
   );
