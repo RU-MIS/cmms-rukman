@@ -1,85 +1,30 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import toast from 'react-hot-toast';
+import axios from 'axios';
+import { useAuthStore } from '@/store/authStore';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cmms-rukman.onrender.com';
-
-const api = axios.create({
-  baseURL: `${API_URL}/api/v1`,
-  timeout: 30000,
-  withCredentials: true,
-  headers: { 'Content-Type': 'application/json' },
+export const api = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api',
 });
 
-let accessToken: string | null = null;
-export const getAccessToken   = () => accessToken;
-export const setAccessToken   = (t: string) => { accessToken = t; };
-export const clearAccessToken = () => { accessToken = null; };
-
-// Try to restore session on page load
-let sessionRestored = false;
-async function restoreSession(): Promise<boolean> {
-  if (sessionRestored) return !!accessToken;
-  sessionRestored = true;
-  try {
-    const { data } = await axios.post(
-      `${API_URL}/api/v1/auth/refresh`,
-      {},
-      { withCredentials: true, timeout: 15000 }
-    );
-    if (data?.data?.accessToken) {
-      setAccessToken(data.data.accessToken);
-      return true;
-    }
-  } catch { /* no refresh token */ }
-  return false;
-}
-
-api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
-  // On first request, try to restore session if no token
-  if (!accessToken && !sessionRestored) {
-    await restoreSession();
-  }
-  if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
+api.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-let isRefreshing = false;
-let queue: Array<{ resolve: (t: string) => void; reject: (e: unknown) => void }> = [];
-const processQueue = (err: unknown, token: string | null = null) => {
-  queue.forEach(p => err ? p.reject(err) : p.resolve(token!));
-  queue = [];
-};
-
 api.interceptors.response.use(
-  r => r,
-  async (error: AxiosError<{ message: string }>) => {
-    const orig = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-    if (error.response?.status === 401 && !orig._retry) {
-      if (isRefreshing) {
-        return new Promise((res, rej) => queue.push({ resolve: res, reject: rej }))
-          .then(t => { orig.headers.Authorization = `Bearer ${t}`; return api(orig); });
+  (res) => res,
+  (error) => {
+    if (error?.response?.status === 401) {
+      useAuthStore.getState().logout();
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login';
       }
-      orig._retry = true; isRefreshing = true;
-      try {
-        const { data } = await axios.post(
-          `${API_URL}/api/v1/auth/refresh`,
-          {},
-          { withCredentials: true }
-        );
-        const t = data.data.accessToken;
-        setAccessToken(t); processQueue(null, t);
-        orig.headers.Authorization = `Bearer ${t}`;
-        return api(orig);
-      } catch (e) {
-        processQueue(e, null); clearAccessToken();
-        if (typeof window !== 'undefined') window.location.href = '/login';
-        return Promise.reject(e);
-      } finally { isRefreshing = false; }
     }
-    const msg = error.response?.data?.message || 'Something went wrong';
-    if (error.response?.status !== 401) toast.error(msg);
     return Promise.reject(error);
   }
 );
 
-export default api;
+export function apiErrorMessage(err: unknown): string {
+  const anyErr = err as any;
+  return anyErr?.response?.data?.message || anyErr?.message || 'Something went wrong';
+}

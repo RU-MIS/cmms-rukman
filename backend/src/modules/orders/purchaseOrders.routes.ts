@@ -1,0 +1,126 @@
+import { Router } from 'express';
+import { body } from 'express-validator';
+import { prisma } from '../../config/prisma';
+import { asyncHandler } from '../../utils/asyncHandler';
+import { ok, created, ApiError } from '../../utils/response';
+import { getPageParams, pageMeta } from '../../utils/pagination';
+import { requireAuth } from '../../middleware/auth';
+import { requirePermission } from '../../middleware/rbac';
+import { validate } from '../../middleware/validate';
+import { writeAudit } from '../../middleware/audit';
+import { nextDocNumber } from '../../utils/docNumber';
+
+const router = Router();
+router.use(requireAuth);
+
+router.get(
+  '/',
+  requirePermission('orders', 'view'),
+  asyncHandler(async (req, res) => {
+    const params = getPageParams(req);
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const vendorId = req.query.vendorId ? Number(req.query.vendorId) : undefined;
+    const where: any = { ...(status ? { status } : {}), ...(vendorId ? { vendorId } : {}) };
+    const [items, total] = await Promise.all([
+      prisma.purchaseOrder.findMany({
+        where,
+        include: { vendor: { select: { id: true, name: true } }, items: true },
+        orderBy: { date: 'desc' },
+        skip: params.skip,
+        take: params.take,
+      }),
+      prisma.purchaseOrder.count({ where }),
+    ]);
+    ok(res, items, pageMeta(total, params));
+  })
+);
+
+router.get(
+  '/pending/tracking',
+  requirePermission('orders', 'view'),
+  asyncHandler(async (req, res) => {
+    const orders = await prisma.purchaseOrder.findMany({
+      where: { status: { in: ['PENDING', 'PARTIAL'] } },
+      include: { vendor: { select: { id: true, name: true } }, items: { include: { product: { select: { id: true, name: true } } } } },
+      orderBy: { dueDate: 'asc' },
+    });
+    const now = new Date();
+    const rows = orders.flatMap((order) =>
+      order.items
+        .filter((item) => Number(item.receivedQty) < Number(item.orderedQty))
+        .map((item) => ({
+          orderId: order.id,
+          orderNo: order.orderNo,
+          orderDate: order.date,
+          vendor: order.vendor.name,
+          product: item.product.name,
+          orderedQty: item.orderedQty,
+          receivedQty: item.receivedQty,
+          pendingQty: Number(item.orderedQty) - Number(item.receivedQty),
+          dueDate: order.dueDate,
+          overdue: order.dueDate ? order.dueDate < now : false,
+          status: order.status,
+        }))
+    );
+    ok(res, rows, {
+      totalPending: rows.length,
+      overdue: rows.filter((r) => r.overdue).length,
+      partiallyReceived: rows.filter((r) => Number(r.receivedQty) > 0).length,
+    });
+  })
+);
+
+router.get(
+  '/:id',
+  requirePermission('orders', 'view'),
+  asyncHandler(async (req, res) => {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: Number(req.params.id) },
+      include: { vendor: true, items: { include: { product: { include: { unit: true } } } }, purchases: { select: { id: true, billNo: true, date: true } } },
+    });
+    if (!order) throw new ApiError(404, 'Purchase order not found');
+    ok(res, order);
+  })
+);
+
+router.post(
+  '/',
+  requirePermission('orders', 'create'),
+  [body('vendorId').isInt(), body('items').isArray({ min: 1 })],
+  validate,
+  asyncHandler(async (req, res) => {
+    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    const items: { productId: number; qty: number; rate: number }[] = req.body.items;
+
+    const order = await prisma.$transaction(async (tx) => {
+      const orderNo = await nextDocNumber(tx, settings?.poPrefix || 'PO');
+      return tx.purchaseOrder.create({
+        data: {
+          orderNo,
+          date: req.body.date ? new Date(req.body.date) : new Date(),
+          dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+          vendorId: req.body.vendorId,
+          remarks: req.body.remarks,
+          items: { create: items.map((i) => ({ productId: i.productId, orderedQty: i.qty, rate: i.rate })) },
+        },
+        include: { items: true },
+      });
+    });
+
+    await writeAudit(req, 'CREATE', 'purchase_orders', order.id, undefined, order);
+    created(res, order);
+  })
+);
+
+router.post(
+  '/:id/cancel',
+  requirePermission('orders', 'edit'),
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const order = await prisma.purchaseOrder.update({ where: { id }, data: { status: 'CANCELLED' } });
+    await writeAudit(req, 'UPDATE', 'purchase_orders.status', id, undefined, order);
+    ok(res, order);
+  })
+);
+
+export default router;

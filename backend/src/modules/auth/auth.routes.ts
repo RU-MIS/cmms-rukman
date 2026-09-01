@@ -1,75 +1,79 @@
-/**
- * auth.routes.ts
- * ──────────────
- * All authentication API routes.
- * Input validation happens here using express-validator.
- *
- * Public routes (no auth required):
- *   POST /api/v1/auth/login
- *   POST /api/v1/auth/refresh
- *
- * Protected routes (JWT required):
- *   POST /api/v1/auth/logout
- *   POST /api/v1/auth/change-password
- *   GET  /api/v1/auth/me
- */
-
 import { Router } from 'express';
 import { body } from 'express-validator';
-import { authMiddleware } from '../../middleware/auth.middleware';
-import {
-  loginController,
-  logoutController,
-  refreshTokenController,
-  changePasswordController,
-  getMeController,
-} from './auth.controller';
+import { prisma } from '../../config/prisma';
+import { asyncHandler } from '../../utils/asyncHandler';
+import { ok, ApiError } from '../../utils/response';
+import { comparePassword, hashPassword } from '../../utils/password';
+import { signToken, requireAuth } from '../../middleware/auth';
+import { writeAudit } from '../../middleware/audit';
+import { validate } from '../../middleware/validate';
 
 const router = Router();
 
-// ── POST /login ───────────────────────────────────────────────────
 router.post(
   '/login',
-  [
-    body('username')
-      .trim()
-      .notEmpty().withMessage('Username is required')
-      .isLength({ min: 3, max: 50 }).withMessage('Username must be 3–50 characters'),
-    body('password')
-      .notEmpty().withMessage('Password is required')
-      .isLength({ min: 4 }).withMessage('Password must be at least 4 characters'),
-    body('rememberMe')
-      .optional()
-      .isBoolean().withMessage('rememberMe must be true or false'),
-  ],
-  loginController
+  [body('username').notEmpty(), body('password').notEmpty()],
+  validate,
+  asyncHandler(async (req, res) => {
+    const { username, password } = req.body;
+    const user = await prisma.user.findUnique({
+      where: { username },
+      include: { role: true },
+    });
+    if (!user || !user.active) throw new ApiError(401, 'Invalid username or password');
+
+    const match = await comparePassword(password, user.passwordHash);
+    if (!match) throw new ApiError(401, 'Invalid username or password');
+
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    const token = signToken(user.id);
+
+    req.user = { id: user.id, username: user.username, name: user.name, roleId: user.roleId, roleName: user.role.name };
+    await writeAudit(req, 'LOGIN', 'auth', user.id);
+
+    ok(res, {
+      token,
+      user: { id: user.id, username: user.username, name: user.name, email: user.email, role: user.role.name },
+    });
+  })
 );
 
-// ── POST /logout ──────────────────────────────────────────────────
-router.post('/logout', authMiddleware, logoutController);
+router.post(
+  '/logout',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await writeAudit(req, 'LOGOUT', 'auth', req.user!.id);
+    ok(res, { loggedOut: true });
+  })
+);
 
-// ── POST /refresh ─────────────────────────────────────────────────
-router.post('/refresh', refreshTokenController);
+router.get(
+  '/me',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { id: true, username: true, name: true, email: true, phone: true, role: { select: { name: true } } },
+    });
+    ok(res, user);
+  })
+);
 
-// ── POST /change-password ─────────────────────────────────────────
 router.post(
   '/change-password',
-  authMiddleware,
-  [
-    body('currentPassword')
-      .notEmpty().withMessage('Current password is required'),
-    body('newPassword')
-      .notEmpty().withMessage('New password is required')
-      .isLength({ min: 8 }).withMessage('New password must be at least 8 characters')
-      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-      .withMessage('Password must contain uppercase, lowercase, and a number'),
-    body('confirmPassword')
-      .notEmpty().withMessage('Confirm password is required'),
-  ],
-  changePasswordController
-);
+  requireAuth,
+  [body('currentPassword').notEmpty(), body('newPassword').isLength({ min: 6 })],
+  validate,
+  asyncHandler(async (req, res) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id } });
+    const match = await comparePassword(req.body.currentPassword, user.passwordHash);
+    if (!match) throw new ApiError(400, 'Current password is incorrect');
 
-// ── GET /me ───────────────────────────────────────────────────────
-router.get('/me', authMiddleware, getMeController);
+    const passwordHash = await hashPassword(req.body.newPassword);
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+    await writeAudit(req, 'UPDATE', 'auth.password', user.id);
+    ok(res, { changed: true });
+  })
+);
 
 export default router;

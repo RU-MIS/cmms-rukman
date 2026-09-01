@@ -1,166 +1,106 @@
-/**
- * server.ts
- * ─────────
- * Main Express application entry point.
- * Initializes middleware, routes, DB connection, and starts the server.
- * Also sets up graceful shutdown handling.
- */
-
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import cookieParser from 'cookie-parser';
+import path from 'path';
+import { env } from './config/env';
+import { notFoundHandler, errorHandler } from './middleware/errorHandler';
 
-import { env } from './config/environment';
-import { createPool, db } from './config/database';
-import { logger, httpLogStream } from './utils/logger';
-import { errorMiddleware } from './middleware/error.middleware';
-import { startScheduler } from './services/scheduler.service';
-
-// ── Route imports ────────────────────────────────────────────────
-import authRoutes       from './modules/auth/auth.routes';
-import userRoutes       from './modules/users/user.routes';
-import departmentRoutes from './modules/departments/department.routes';
-import machineRoutes    from './modules/machines/machine.routes';
-import checklistRoutes  from './modules/checklists/checklist.routes';
-import taskRoutes       from './modules/tasks/task.routes';
-import dashboardRoutes      from './modules/dashboard/dashboard.routes';
-import reportRoutes        from './modules/reports/report.routes';
-import notificationRoutes  from './modules/notifications/notification.routes';
-import rolesRoutes         from './modules/roles/roles.routes';
-import holidayRoutes       from './modules/holidays/holiday.routes';
-import plantsRoutes        from './modules/plants/plants.routes';
-import holidaysRoutes      from './modules/holidays/holiday.routes';
-import shiftsRoutes        from './modules/shifts/shifts.routes';
+import authRoutes from './modules/auth/auth.routes';
+import userRoutes from './modules/users/users.routes';
+import roleRoutes from './modules/roles/roles.routes';
+import customerRoutes from './modules/customers/customers.routes';
+import vendorRoutes from './modules/vendors/vendors.routes';
+import categoryRoutes from './modules/products/categories.routes';
+import unitRoutes from './modules/products/units.routes';
+import warehouseRoutes from './modules/products/warehouses.routes';
+import productRoutes from './modules/products/products.routes';
+import saleRoutes from './modules/sales/sales.routes';
+import saleReturnRoutes from './modules/sales/saleReturns.routes';
+import purchaseRoutes from './modules/purchases/purchases.routes';
+import purchaseReturnRoutes from './modules/purchases/purchaseReturns.routes';
+import salesOrderRoutes from './modules/orders/salesOrders.routes';
+import purchaseOrderRoutes from './modules/orders/purchaseOrders.routes';
+import paymentRoutes from './modules/payments/payments.routes';
+import outstandingRoutes from './modules/payments/outstanding.routes';
+import inventoryRoutes from './modules/inventory/inventory.routes';
+import productionRoutes from './modules/production/production.routes';
+import reportRoutes from './modules/reports/reports.routes';
+import dashboardRoutes from './modules/dashboard/dashboard.routes';
+import documentRoutes from './modules/documents/documents.routes';
+import emailRoutes from './modules/email/email.routes';
+import excelRoutes from './modules/excel/excel.routes';
+import auditLogRoutes from './modules/audit/audit.routes';
+import settingsRoutes from './modules/settings/settings.routes';
+import backupRoutes from './modules/backup/backup.routes';
 
 const app = express();
 
-// ── Security headers ─────────────────────────────────────────────
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-}));
-
-// ── CORS — allow frontend origin ─────────────────────────────────
-app.use(cors({
-  origin: env.CORS_ORIGIN,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
-
-// ── Compression ───────────────────────────────────────────────────
+app.set('trust proxy', 1);
+app.use(helmet());
+app.use(
+  cors({
+    origin: env.corsOrigin,
+    credentials: true,
+  })
+);
 app.use(compression());
-
-// ── Body parsers ─────────────────────────────────────────────────
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
-
-// ── HTTP request logging ─────────────────────────────────────────
-app.use(morgan(env.IS_PRODUCTION ? 'combined' : 'dev', { stream: httpLogStream }));
-
-// ── Global rate limiter ───────────────────────────────────────────
-const limiter = rateLimit({
-  windowMs: env.RATE_LIMIT_WINDOW_MS,
-  max:      env.RATE_LIMIT_MAX_REQUESTS,
-  message:  { success: false, message: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-});
-app.use('/api/', limiter);
-
-// ── Health check — no auth required ──────────────────────────────
-app.get('/health', (_req, res) => {
-  res.json({
-    status:   'ok',
-    app:      env.APP_NAME,
-    company:  env.COMPANY_NAME,
-    version:  '1.0.0',
-    env:      env.NODE_ENV,
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// ── API Routes ───────────────────────────────────────────────────
-app.use('/api/v1/auth',        authRoutes);
-app.use('/api/v1/users',       userRoutes);
-app.use('/api/v1/departments', departmentRoutes);
-app.use('/api/v1/machines',    machineRoutes);
-app.use('/api/v1/checklists',  checklistRoutes);
-app.use('/api/v1/tasks',       taskRoutes);
-app.use('/api/v1/dashboard',      dashboardRoutes);
-app.use('/api/v1/reports',        reportRoutes);
-app.use('/api/v1/notifications',  notificationRoutes);
-app.use('/api/v1/roles',          rolesRoutes);
-app.use('/api/v1/holidays',       holidayRoutes);
-app.use('/api/v1/plants',         plantsRoutes);
-app.use('/api/v1/holidays',       holidaysRoutes);
-app.use('/api/v1/shifts',         shiftsRoutes);
-
-// ── 404 handler ──────────────────────────────────────────────────
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: `Route ${req.method} ${req.originalUrl} not found`,
-  });
-});
-
-// ── Global error handler ─────────────────────────────────────────
-app.use(errorMiddleware);
-
-// ── Start server ─────────────────────────────────────────────────
-async function startServer(): Promise<void> {
-  try {
-    // Initialize DB pool + test connection
-    createPool();
-    await db.testConnection();
-
-    const server = app.listen(env.PORT, () => {
-      logger.info(`🚀 ${env.APP_NAME} API running on port ${env.PORT}`);
-      logger.info(`📡 Environment: ${env.NODE_ENV}`);
-      logger.info(`🔗 Frontend: ${env.CORS_ORIGIN}`);
-      logger.info(`❤️  Health: http://localhost:${env.PORT}/health`);
-
-    // Keep-alive ping every 10 minutes to prevent Render free tier sleep
-    setInterval(async () => {
-      try {
-        const http = require('http');
-        http.get(`http://localhost:${env.PORT}/health`, () => {});
-      } catch {}
-    }, 10 * 60 * 1000); // 10 minutes
-
-    // Start task scheduler
-    startScheduler();
-    });
-
-    // ── Graceful shutdown ────────────────────────────────────────
-    const shutdown = async (signal: string) => {
-      logger.info(`\n${signal} received — shutting down gracefully...`);
-      server.close(async () => {
-        await db.close();
-        logger.info('✅ Server closed cleanly');
-        process.exit(0);
-      });
-
-      // Force exit after 10 seconds if graceful shutdown fails
-      setTimeout(() => {
-        logger.error('⚠️ Forced shutdown after timeout');
-        process.exit(1);
-      }, 10000);
-    };
-
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT',  () => shutdown('SIGINT'));
-
-  } catch (error) {
-    logger.error('❌ Failed to start server', { error });
-    process.exit(1);
-  }
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true }));
+if (env.nodeEnv !== 'test') {
+  app.use(morgan(env.nodeEnv === 'development' ? 'dev' : 'combined'));
 }
 
-startServer();
+const limiter = rateLimit({
+  windowMs: env.rateLimitWindowMs,
+  max: env.rateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api', limiter);
+
+app.use('/uploads', express.static(path.join(process.cwd(), env.uploadDir)));
+
+app.get('/health', (_req, res) => res.json({ status: 'ok', app: env.appName }));
+
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/roles', roleRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/vendors', vendorRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/units', unitRoutes);
+app.use('/api/warehouses', warehouseRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/sales', saleRoutes);
+app.use('/api/sale-returns', saleReturnRoutes);
+app.use('/api/purchases', purchaseRoutes);
+app.use('/api/purchase-returns', purchaseReturnRoutes);
+app.use('/api/sales-orders', salesOrderRoutes);
+app.use('/api/purchase-orders', purchaseOrderRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/outstanding', outstandingRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/production', productionRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/documents', documentRoutes);
+app.use('/api/email', emailRoutes);
+app.use('/api/excel', excelRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/backup', backupRoutes);
+
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+app.listen(env.port, () => {
+  // eslint-disable-next-line no-console
+  console.log(`${env.appName} API listening on port ${env.port} [${env.nodeEnv}]`);
+});
 
 export default app;

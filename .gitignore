@@ -34,5 +34,9 @@ Thumbs.db
 # Test coverage
 coverage/
 
+# App runtime data
+backend/uploads/
+backend/backups/
+
 # Misc
 *.pem

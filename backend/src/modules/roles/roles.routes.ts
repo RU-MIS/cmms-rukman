@@ -1,56 +1,99 @@
-import { Router, Request, Response, NextFunction } from 'express';
-import { authMiddleware } from '../../middleware/auth.middleware';
-import { successResponse } from '../../utils/helpers';
-import { db } from '../../config/database';
-import { generateId } from '../../utils/idGenerator';
+import { Router } from 'express';
+import { body } from 'express-validator';
+import { prisma } from '../../config/prisma';
+import { asyncHandler } from '../../utils/asyncHandler';
+import { ok, created, ApiError } from '../../utils/response';
+import { requireAuth } from '../../middleware/auth';
+import { requirePermission } from '../../middleware/rbac';
+import { validate } from '../../middleware/validate';
+import { writeAudit } from '../../middleware/audit';
 
 const router = Router();
-router.use(authMiddleware);
+router.use(requireAuth);
 
-const ADMIN = ['Admin', 'MD', 'CEO', 'HR', 'MIS Executive'];
-const canManage = (role: string) => ADMIN.includes(role);
+router.get(
+  '/',
+  requirePermission('roles', 'view'),
+  asyncHandler(async (_req, res) => {
+    const roles = await prisma.role.findMany({
+      orderBy: { name: 'asc' },
+      include: { permissions: { include: { permission: true } }, _count: { select: { users: true } } },
+    });
+    ok(res, roles);
+  })
+);
 
-// GET all roles
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const [rows] = await db.execute<any>(
-      `SELECT role_id, role_name, is_active FROM roles ORDER BY role_name ASC`
-    );
-    res.json(successResponse('Roles fetched', rows));
-  } catch (err) { next(err); }
-});
+router.get(
+  '/permissions/catalog',
+  requirePermission('roles', 'view'),
+  asyncHandler(async (_req, res) => {
+    const permissions = await prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { action: 'asc' }] });
+    ok(res, permissions);
+  })
+);
 
-// POST create role
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (!canManage(req.user!.roleName)) { res.status(403).json({ success: false, message: 'Access denied' }); return; }
-    const { roleName } = req.body;
-    if (!roleName?.trim()) { res.status(400).json({ success: false, message: 'Role name required' }); return; }
-    const id = await generateId('ROL' as any);
-    await db.query(`INSERT INTO roles (role_id, role_name, permissions) VALUES ($1, $2, $3)`, [id, roleName.trim(), '{}']);
-    res.status(201).json(successResponse('Role created', { role_id: id, role_name: roleName.trim() }));
-  } catch (err) { next(err); }
-});
+router.post(
+  '/',
+  requirePermission('roles', 'create'),
+  [body('name').notEmpty()],
+  validate,
+  asyncHandler(async (req, res) => {
+    const role = await prisma.role.create({ data: { name: req.body.name, description: req.body.description } });
+    await writeAudit(req, 'CREATE', 'roles', role.id, undefined, role);
+    created(res, role);
+  })
+);
 
-// PUT update role
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (!canManage(req.user!.roleName)) { res.status(403).json({ success: false, message: 'Access denied' }); return; }
-    const { roleName } = req.body;
-    await db.query(`UPDATE roles SET role_name = $1 WHERE role_id = $2`, [roleName.trim(), req.params.id]);
-    res.json(successResponse('Role updated'));
-  } catch (err) { next(err); }
-});
+router.put(
+  '/:id',
+  requirePermission('roles', 'edit'),
+  [body('name').notEmpty()],
+  validate,
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await prisma.role.findUnique({ where: { id } });
+    if (!existing) throw new ApiError(404, 'Role not found');
+    if (existing.isSystem) throw new ApiError(400, 'System roles cannot be renamed.');
+    const role = await prisma.role.update({ where: { id }, data: { name: req.body.name, description: req.body.description } });
+    await writeAudit(req, 'UPDATE', 'roles', id, existing, role);
+    ok(res, role);
+  })
+);
 
-// PATCH toggle active
-router.patch('/:id/toggle', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (!canManage(req.user!.roleName)) { res.status(403).json({ success: false, message: 'Access denied' }); return; }
-    const [rows] = await db.execute<any>(`SELECT is_active FROM roles WHERE role_id = $1`, [req.params.id]);
-    const current = (rows as any[])[0]?.is_active;
-    await db.query(`UPDATE roles SET is_active = $1 WHERE role_id = $2`, [!current, req.params.id]);
-    res.json(successResponse('Status updated'));
-  } catch (err) { next(err); }
-});
+router.put(
+  '/:id/permissions',
+  requirePermission('roles', 'edit'),
+  [body('permissionIds').isArray()],
+  validate,
+  asyncHandler(async (req, res) => {
+    const roleId = Number(req.params.id);
+    const permissionIds: number[] = req.body.permissionIds;
+    await prisma.$transaction([
+      prisma.rolePermission.deleteMany({ where: { roleId } }),
+      prisma.rolePermission.createMany({
+        data: permissionIds.map((permissionId) => ({ roleId, permissionId })),
+        skipDuplicates: true,
+      }),
+    ]);
+    await writeAudit(req, 'UPDATE', 'roles.permissions', roleId, undefined, { permissionIds });
+    const role = await prisma.role.findUnique({ where: { id: roleId }, include: { permissions: { include: { permission: true } } } });
+    ok(res, role);
+  })
+);
+
+router.delete(
+  '/:id',
+  requirePermission('roles', 'delete'),
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const role = await prisma.role.findUnique({ where: { id }, include: { _count: { select: { users: true } } } });
+    if (!role) throw new ApiError(404, 'Role not found');
+    if (role.isSystem) throw new ApiError(400, 'System roles cannot be deleted.');
+    if (role._count.users > 0) throw new ApiError(400, 'Cannot delete a role that has users assigned.');
+    await prisma.role.delete({ where: { id } });
+    await writeAudit(req, 'DELETE', 'roles', id);
+    ok(res, { deleted: true });
+  })
+);
 
 export default router;
