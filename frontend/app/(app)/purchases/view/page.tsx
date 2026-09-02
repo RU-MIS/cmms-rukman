@@ -1,6 +1,7 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { FileText, Ban, ArrowLeft } from 'lucide-react';
@@ -10,8 +11,9 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
-export default function PurchaseDetailPage() {
-  const { id } = useParams<{ id: string }>();
+function PurchaseDetailContent() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id') ?? '';
   const router = useRouter();
   const qc = useQueryClient();
 
@@ -76,5 +78,13 @@ export default function PurchaseDetailPage() {
       </div>
       {purchase.remarks && <p className="text-sm text-ink-muted mt-3">Remarks: {purchase.remarks}</p>}
     </div>
+  );
+}
+
+export default function PurchaseDetailPage() {
+  return (
+    <Suspense fallback={null}>
+      <PurchaseDetailContent />
+    </Suspense>
   );
 }

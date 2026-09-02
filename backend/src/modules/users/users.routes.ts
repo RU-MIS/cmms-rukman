@@ -34,9 +34,9 @@ router.get(
     const where = search
       ? {
           OR: [
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { username: { contains: search, mode: 'insensitive' as const } },
-            { email: { contains: search, mode: 'insensitive' as const } },
+            { name: { contains: search } },
+            { username: { contains: search } },
+            { email: { contains: search } },
           ],
         }
       : {};

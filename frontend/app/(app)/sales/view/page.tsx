@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { FileText, Mail, Ban, ArrowLeft } from 'lucide-react';
@@ -12,8 +12,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
-export default function SaleDetailPage() {
-  const { id } = useParams<{ id: string }>();
+function SaleDetailContent() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id') ?? '';
   const router = useRouter();
   const qc = useQueryClient();
   const [emailOpen, setEmailOpen] = useState(false);
@@ -105,5 +106,13 @@ export default function SaleDetailPage() {
         </form>
       </Modal>
     </div>
+  );
+}
+
+export default function SaleDetailPage() {
+  return (
+    <Suspense fallback={null}>
+      <SaleDetailContent />
+    </Suspense>
   );
 }

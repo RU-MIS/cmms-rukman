@@ -67,7 +67,7 @@ export default function SalesListPage() {
           </>
         }
       />
-      <DataTable columns={columns} rows={data?.data ?? []} loading={isLoading} onRowClick={(s) => router.push(`/sales/${s.id}`)} />
+      <DataTable columns={columns} rows={data?.data ?? []} loading={isLoading} onRowClick={(s) => router.push(`/sales/view?id=${s.id}`)} />
       {data?.meta && <Pagination page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} pageSize={data.meta.pageSize} onPageChange={setPage} />}
     </div>
   );

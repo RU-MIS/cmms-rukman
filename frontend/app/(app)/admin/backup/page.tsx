@@ -38,7 +38,7 @@ export default function BackupPage() {
 
   return (
     <div>
-      <PageHeader title="Backup & Restore" description="Database backups via PostgreSQL's pg_dump. Restore from the command line — see the README for step-by-step instructions."
+      <PageHeader title="Backup & Restore" description="Database backups via MySQL's mysqldump. Restore from the command line — see the README for step-by-step instructions."
         actions={<button className="btn-primary" onClick={runBackup} disabled={running}><DatabaseBackup size={15} /> Run Backup Now</button>} />
       <DataTable columns={columns} rows={data ?? []} loading={isLoading} emptyMessage="No backups yet — click 'Run Backup Now'." />
     </div>

@@ -20,11 +20,20 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
+const url = new URL(databaseUrl);
+const dbName = url.pathname.replace(/^\//, '');
+
 console.log('WARNING: This will overwrite data in the target database with the backup contents.');
-const result = spawnSync('pg_restore', ['--clean', '--if-exists', '--no-owner', `--dbname=${databaseUrl}`, file], { stdio: 'inherit' });
+const inFd = fs.openSync(file, 'r');
+const result = spawnSync(
+  'mysql',
+  ['-h', url.hostname, '-P', url.port || '3306', '-u', url.username, dbName],
+  { stdio: [inFd, 'inherit', 'inherit'], env: { ...process.env, MYSQL_PWD: url.password } }
+);
+fs.closeSync(inFd);
 
 if (result.status !== 0) {
-  console.error('Restore failed. Make sure pg_restore is installed and on your PATH (it ships with PostgreSQL).');
+  console.error('Restore failed. Make sure the mysql client is installed and on your PATH (it ships with MySQL).');
   process.exit(result.status ?? 1);
 }
 

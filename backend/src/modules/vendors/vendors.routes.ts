@@ -31,11 +31,11 @@ router.get(
       ...(search
         ? {
             OR: [
-              { name: { contains: search, mode: 'insensitive' as const } },
-              { code: { contains: search, mode: 'insensitive' as const } },
-              { mobile: { contains: search, mode: 'insensitive' as const } },
-              { companyName: { contains: search, mode: 'insensitive' as const } },
-              { gstin: { contains: search, mode: 'insensitive' as const } },
+              { name: { contains: search } },
+              { code: { contains: search } },
+              { mobile: { contains: search } },
+              { companyName: { contains: search } },
+              { gstin: { contains: search } },
             ],
           }
         : {}),

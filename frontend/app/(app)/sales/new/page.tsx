@@ -75,7 +75,7 @@ export default function SaleEntryPage() {
         items: validItems.map((i) => ({ productId: Number(i.productId), qty: Number(i.qty), rate: Number(i.rate), discount: Number(i.discount), taxRate: Number(i.taxRate) })),
       });
       toast.success(`Sale ${res.data.data.invoiceNo} created`);
-      router.push(`/sales/${res.data.data.id}`);
+      router.push(`/sales/view?id=${res.data.data.id}`);
     } catch (err) {
       toast.error(apiErrorMessage(err));
     } finally {

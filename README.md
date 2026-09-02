@@ -8,45 +8,25 @@ users/roles/permissions, and an audit log.
 
 This README assumes **zero coding experience**. Follow it top to bottom.
 
-## Fastest way to try it: deploy for free in a few clicks (no local setup)
+## Deploying for real
 
-This uses [Render](https://render.com)'s free tier to create the database,
-backend and frontend from one account — no terminal needed. It reads
-`render.yaml` at the repo root.
-
-1. Sign up / log in at [render.com](https://render.com) (free).
-2. Click **New +** → **Blueprint**, connect your GitHub account, and pick
-   this repository (`RU-MIS/cmms-rukman`).
-3. When asked which branch to use, choose the branch this app is on
-   (currently `claude/small-business-erp-build-jerj3n` until it's merged
-   into `main`) — Render will find `render.yaml` and show the 3 resources
-   it's about to create: `businessflow-db` (Postgres), `businessflow-api`
-   (backend), `businessflow-web` (frontend).
-4. Click **Apply**. Wait for all three to show "Live" (first deploy takes
-   a few minutes).
-5. **One manual step Render can't do for you**: copy each service's URL
-   from its page in the Render dashboard, then:
-   - On `businessflow-api` → Environment → set `CORS_ORIGIN` to your
-     `businessflow-web` URL (e.g. `https://businessflow-web.onrender.com`).
-   - On `businessflow-web` → Environment → set `NEXT_PUBLIC_API_URL` to
-     your `businessflow-api` URL + `/api` (e.g.
-     `https://businessflow-api.onrender.com/api`).
-   - Click "Manual Deploy" → "Deploy latest commit" on both after saving.
-6. Open your `businessflow-web` URL and log in with `admin` / `Admin@1234`
-   — change the password immediately.
-
-Two things worth knowing about the free tier: Render's free web services
-fall asleep after 15 minutes of no traffic (the first request after that
-takes ~30-60 seconds to wake back up), and Render's free Postgres database
-expires after 30 days — for anything beyond a demo, either upgrade it in
-the Render dashboard or switch `DATABASE_URL` to a free-forever database
-from [Neon](https://neon.tech) or [Supabase](https://supabase.com).
+There's no more one-click free host (Render's free tier used to sleep
+after 15 minutes idle, giving every visitor a ~30-60 second cold start on
+the first request — not something you want a customer to see). The
+recommended setup instead is: **Cloudflare Pages** for the frontend (a
+static export — always-on, no cold start) + a **plain VM** for the backend
+(e.g. Oracle Cloud's Always Free tier) + **MySQL** for the database (e.g.
+Oracle MySQL HeatWave Always Free). See section 8, "Deploying to
+production", below for the full walkthrough. None of this is
+platform-specific — the backend is a standard Node/Express process that
+runs the same way on any VPS.
 
 ## Tech stack (all free/open-source)
 
-- Frontend: Next.js 14 + React + TypeScript + Tailwind CSS
+- Frontend: Next.js 14 + React + TypeScript + Tailwind CSS (built as a
+  static export — no Node server required to host it)
 - Backend: Node.js + Express + TypeScript
-- Database: PostgreSQL
+- Database: MySQL 8.0+ (e.g. Oracle MySQL HeatWave Always Free)
 - ORM: Prisma
 - PDF: PDFKit
 - Excel: ExcelJS
@@ -60,12 +40,15 @@ you go beyond its free tier.
 ## 1. Install prerequisites (one-time)
 
 1. Install **Node.js LTS** (18 or 20): https://nodejs.org
-2. Install **PostgreSQL**: https://www.postgresql.org/download/
-   - During setup, remember the password you set for the `postgres` user.
-   - Alternatively use a free hosted Postgres: https://neon.tech or
-     https://supabase.com — copy the "connection string" they give you.
-3. Create a database named `businessflow_erp` (using pgAdmin, or run
-   `createdb businessflow_erp` in a terminal).
+2. Install **MySQL** (8.0+): https://dev.mysql.com/downloads/mysql/
+   - During setup, remember the password you set for the `root` user (or
+     create a dedicated app user).
+   - Alternatively use a free hosted MySQL: Oracle MySQL HeatWave Always
+     Free — copy the connection details it gives you.
+3. Create a database named `businessflow_erp`:
+   ```bash
+   mysql -u root -p -e "CREATE DATABASE businessflow_erp CHARACTER SET utf8mb4;"
+   ```
 
 ## 2. Configure environment variables
 
@@ -75,7 +58,8 @@ cp .env.example backend/.env
 
 Open `backend/.env` in any text editor and fill in:
 
-- `DATABASE_URL` — your PostgreSQL connection string
+- `DATABASE_URL` — your MySQL connection string, e.g.
+  `mysql://root:yourpassword@localhost:3306/businessflow_erp`
 - `JWT_SECRET` — any long random string (used to secure logins)
 - `SMTP_*` — only needed if you want to email PDFs (Gmail works with an
   "App Password": https://myaccount.google.com/apppasswords)
@@ -85,7 +69,11 @@ cp frontend/.env.example frontend/.env.local
 ```
 
 The default `NEXT_PUBLIC_API_URL=http://localhost:4000/api` works for local
-development unchanged.
+development unchanged. **Note for production**: this variable is baked
+into the frontend at *build time*, not read at runtime — when deploying to
+Cloudflare Pages (a static export has no server to read env vars from at
+request time), you must set it in the Pages project's build settings, not
+just in a local `.env` file.
 
 ## 3. Install & set up the backend
 
@@ -148,42 +136,92 @@ cd backend
 npm run backup
 ```
 
-This runs PostgreSQL's own `pg_dump` and writes a timestamped `.dump` file
+This runs MySQL's own `mysqldump` and writes a timestamped `.sql` file
 into `backend/backups/`. To restore a backup:
 
 ```bash
-npm run restore -- backend/backups/<filename>.dump
+npm run restore -- backend/backups/<filename>.sql
 ```
 
-(Requires `pg_dump`/`pg_restore` to be installed — they come bundled with
-PostgreSQL.)
+(Requires the `mysqldump`/`mysql` client tools to be installed — they come
+bundled with MySQL, or can be installed standalone as the "MySQL client".)
 
 ## 7. Building for production
 
 ```bash
 cd backend && npm run build && npm run prisma:deploy
-cd ../frontend && npm run build
+cd ../frontend && npm run build   # produces a static site in frontend/out/
 ```
 
-## 8. Deploying to a real server (Ubuntu VPS)
+## 8. Deploying to production (Cloudflare Pages + a VM + MySQL)
 
-1. Install Node.js LTS, PostgreSQL, Nginx, and PM2 (`npm i -g pm2`) on the
-   server.
-2. Copy this project to the server, set `backend/.env` with production
-   values (a strong `JWT_SECRET`, your real `DATABASE_URL`, real SMTP
-   creds), then run the "production build" steps above.
-3. Start the backend with PM2: `pm2 start dist/server.js --name erp-api`
-   and `pm2 save` so it restarts on reboot.
-4. Serve the frontend with `pm2 start npm --name erp-web -- start` (from
-   `frontend/`) or `next start`.
-5. Put Nginx in front of both as a reverse proxy, and use `certbot` for a
-   free HTTPS certificate (Let's Encrypt) once you've pointed a domain's
-   DNS at the server.
+This is a two-part deployment: the frontend is a static export served
+from Cloudflare's CDN (fast everywhere, never sleeps, free), and the
+backend is a plain Node/Express process on any VM you control (these
+instructions use Oracle Cloud's Always Free tier as a concrete example,
+but the backend has no cloud-specific code — the same steps work on any
+Ubuntu VPS).
+
+### Backend: Node/Express on a VM
+
+1. Provision a VM (e.g. an Oracle Cloud "Always Free" Ampere A1 compute
+   instance running Ubuntu) and a MySQL database (e.g. an Oracle MySQL
+   HeatWave "Always Free" DB System). **Put them in the same private
+   network (VCN/subnet)** so the backend reaches the database over a
+   private IP — this avoids exposing the database to the public internet
+   at all, and sidesteps needing a public-endpoint TLS/certificate setup
+   for the DB connection. Only the VM itself needs a public IP, and only
+   for inbound HTTPS traffic.
+2. On the VM, install Node.js LTS, the MySQL client tools (`mysql`,
+   `mysqldump` — for the backup feature; you do **not** need a local
+   MySQL *server* on this VM, the database is HeatWave), Nginx, and PM2
+   (`npm i -g pm2`).
+3. Copy this project's `backend/` folder to the VM, set `backend/.env`
+   with production values (a strong `JWT_SECRET`, the `DATABASE_URL`
+   pointing at your MySQL DB System's private IP, real SMTP creds, and
+   `CORS_ORIGIN` set to your Cloudflare Pages URL — see part 2 below),
+   then run:
+   ```bash
+   npm install
+   npm run build          # prisma generate && tsc
+   npm run prisma:deploy  # applies migrations
+   npm run seed           # first deploy only
+   ```
+4. Start it with PM2 and have it survive reboots:
+   ```bash
+   pm2 start dist/src/server.js --name erp-api
+   pm2 save
+   pm2 startup   # follow the printed instructions once, so PM2 itself survives a reboot
+   ```
+5. Put Nginx in front as a reverse proxy to `localhost:4000`, and use
+   `certbot` for a free HTTPS certificate (Let's Encrypt) once you've
+   pointed a domain's DNS at the VM's public IP. Keep `UPLOAD_DIR` (logos
+   etc.) as an absolute path outside your deploy folder if you plan to
+   redeploy by replacing the whole directory, so uploads survive a
+   redeploy; a plain `git pull`-in-place setup can leave it as the default
+   relative `uploads/`.
+
+### Frontend: Cloudflare Pages
+
+1. In the Cloudflare dashboard, create a **Pages** project connected to
+   this GitHub repo.
+2. Build settings: root directory `frontend`, build command
+   `npm run build`, build output directory `frontend/out` (`out`, if the
+   root directory is already set to `frontend`).
+3. Add an environment variable in the Pages project's build settings:
+   `NEXT_PUBLIC_API_URL` = your backend's public URL + `/api` (e.g.
+   `https://api.yourdomain.com/api`) — this gets baked into the static
+   build, so it must be set here, not just in a local `.env` file.
+4. Deploy. Cloudflare gives you a `*.pages.dev` URL immediately; attach a
+   custom domain from the project settings whenever you're ready.
+5. Back on the backend VM, set `CORS_ORIGIN` in `backend/.env` to this
+   exact frontend URL and restart the backend (`pm2 restart erp-api`) —
+   the API only allows the one origin configured here.
 
 ## Troubleshooting
 
 - **"Can't reach database server"** — check `DATABASE_URL` in
-  `backend/.env` and that PostgreSQL is running.
+  `backend/.env` and that MySQL is running and reachable.
 - **Login fails after fresh install** — make sure you ran `npm run seed`.
 - **Emails don't send** — check `backend/.env` SMTP settings; failed
   attempts are recorded under Email → Email Logs with the exact error.

@@ -24,7 +24,7 @@ router.get(
       active: true,
       ...(stockType === 'raw' ? { isRawMaterial: true } : {}),
       ...(stockType === 'finished' ? { isRawMaterial: false } : {}),
-      ...(search ? { OR: [{ name: { contains: search, mode: 'insensitive' as const } }, { sku: { contains: search, mode: 'insensitive' as const } }] } : {}),
+      ...(search ? { OR: [{ name: { contains: search } }, { sku: { contains: search } }] } : {}),
     };
     const [items, total] = await Promise.all([
       prisma.product.findMany({

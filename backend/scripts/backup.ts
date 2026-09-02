@@ -15,13 +15,23 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
-const filename = `backup_${dayjs().format('YYYY-MM-DD_HHmmss')}.dump`;
-const filepath = path.join(backupDir, filename);
+const url = new URL(databaseUrl);
+const dbName = url.pathname.replace(/^\//, '');
 
-const result = spawnSync('pg_dump', ['--format=custom', `--file=${filepath}`, databaseUrl], { stdio: 'inherit' });
+const filename = `backup_${dayjs().format('YYYY-MM-DD_HHmmss')}.sql`;
+const filepath = path.join(backupDir, filename);
+const outFd = fs.openSync(filepath, 'w');
+
+const result = spawnSync(
+  'mysqldump',
+  ['-h', url.hostname, '-P', url.port || '3306', '-u', url.username, '--single-transaction', '--routines', '--triggers', dbName],
+  { stdio: ['ignore', outFd, 'inherit'], env: { ...process.env, MYSQL_PWD: url.password } }
+);
+fs.closeSync(outFd);
 
 if (result.status !== 0) {
-  console.error('Backup failed. Make sure pg_dump is installed and on your PATH (it ships with PostgreSQL).');
+  fs.unlinkSync(filepath);
+  console.error('Backup failed. Make sure mysqldump is installed and on your PATH (it ships with MySQL).');
   process.exit(result.status ?? 1);
 }
 

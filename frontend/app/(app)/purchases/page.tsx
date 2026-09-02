@@ -52,7 +52,7 @@ export default function PurchasesListPage() {
           </>
         }
       />
-      <DataTable columns={columns} rows={data?.data ?? []} loading={isLoading} onRowClick={(p) => router.push(`/purchases/${p.id}`)} />
+      <DataTable columns={columns} rows={data?.data ?? []} loading={isLoading} onRowClick={(p) => router.push(`/purchases/view?id=${p.id}`)} />
       {data?.meta && <Pagination page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} pageSize={data.meta.pageSize} onPageChange={setPage} />}
     </div>
   );

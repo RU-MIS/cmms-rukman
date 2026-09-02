@@ -77,7 +77,7 @@ export default function PurchaseEntryPage() {
         items: validItems.map((i) => ({ productId: Number(i.productId), qty: Number(i.qty), rate: Number(i.rate), discount: Number(i.discount), taxRate: Number(i.taxRate) })),
       });
       toast.success(`Purchase ${res.data.data.billNo} created`);
-      router.push(`/purchases/${res.data.data.id}`);
+      router.push(`/purchases/view?id=${res.data.data.id}`);
     } catch (err) {
       toast.error(apiErrorMessage(err));
     } finally {

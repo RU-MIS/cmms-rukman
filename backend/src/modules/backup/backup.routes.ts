@@ -25,7 +25,7 @@ router.get(
     ensureDir();
     const files = fs
       .readdirSync(backupDir)
-      .filter((f) => f.endsWith('.dump'))
+      .filter((f) => f.endsWith('.sql'))
       .map((f) => {
         const stat = fs.statSync(path.join(backupDir, f));
         return { filename: f, sizeBytes: stat.size, createdAt: stat.birthtime };
@@ -43,12 +43,21 @@ router.post(
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new ApiError(500, 'DATABASE_URL is not configured');
 
-    const filename = `backup_${dayjs().format('YYYY-MM-DD_HHmmss')}.dump`;
+    const url = new URL(databaseUrl);
+    const dbName = url.pathname.replace(/^\//, '');
+    const filename = `backup_${dayjs().format('YYYY-MM-DD_HHmmss')}.sql`;
     const filepath = path.join(backupDir, filename);
-    const result = spawnSync('pg_dump', ['--format=custom', `--file=${filepath}`, databaseUrl]);
+    const outFd = fs.openSync(filepath, 'w');
+    const result = spawnSync(
+      'mysqldump',
+      ['-h', url.hostname, '-P', url.port || '3306', '-u', url.username, '--single-transaction', '--routines', '--triggers', dbName],
+      { stdio: ['ignore', outFd, 'pipe'], env: { ...process.env, MYSQL_PWD: url.password } }
+    );
+    fs.closeSync(outFd);
 
     if (result.status !== 0) {
-      throw new ApiError(500, `Backup failed: ${result.stderr?.toString() || 'pg_dump is not installed on this server'}`);
+      fs.unlinkSync(filepath);
+      throw new ApiError(500, `Backup failed: ${result.stderr?.toString() || 'mysqldump is not installed on this server'}`);
     }
     await writeAudit(req, 'CREATE', 'backup', undefined, undefined, { filename });
     ok(res, { filename, createdAt: new Date() });

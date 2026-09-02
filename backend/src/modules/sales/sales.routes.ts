@@ -38,7 +38,7 @@ router.get(
       ...(customerId ? { customerId } : {}),
       ...(fromDate || toDate ? { date: { ...(fromDate ? { gte: fromDate } : {}), ...(toDate ? { lte: toDate } : {}) } } : {}),
       ...(search
-        ? { OR: [{ invoiceNo: { contains: search, mode: 'insensitive' as const } }, { customer: { name: { contains: search, mode: 'insensitive' as const } } }] }
+        ? { OR: [{ invoiceNo: { contains: search } }, { customer: { name: { contains: search } } }] }
         : {}),
     };
 

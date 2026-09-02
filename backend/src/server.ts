@@ -100,9 +100,22 @@ app.use('/api/backup', backupRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-app.listen(env.port, () => {
+const server = app.listen(env.port, () => {
   // eslint-disable-next-line no-console
   console.log(`${env.appName} API listening on port ${env.port} [${env.nodeEnv}]`);
 });
+
+function shutdown(signal: string) {
+  // eslint-disable-next-line no-console
+  console.log(`${signal} received, shutting down gracefully...`);
+  server.close(() => {
+    // eslint-disable-next-line no-console
+    console.log('HTTP server closed.');
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 export default app;

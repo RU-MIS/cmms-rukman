@@ -91,7 +91,7 @@ router.post(
   validate,
   asyncHandler(async (req, res) => {
     const email = String(req.body.email).toLowerCase();
-    const user = await prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, active: true } });
+    const user = await prisma.user.findFirst({ where: { email: { equals: email }, active: true } });
 
     // Always respond the same way whether or not the email exists, so this
     // endpoint can't be used to discover which emails have accounts. Respond
