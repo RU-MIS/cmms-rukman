@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 const MODULES = [
   'customers', 'vendors', 'products', 'sales', 'purchases', 'orders',
-  'payments', 'inventory', 'production', 'reports', 'documents', 'email',
+  'payments', 'accounts', 'inventory', 'production', 'reports', 'documents', 'email',
   'excel', 'users', 'roles', 'audit', 'settings', 'backup',
 ];
 const ACTIONS = ['view', 'create', 'edit', 'delete', 'export', 'print'];
@@ -21,7 +21,7 @@ const ROLE_GRANTS: Record<string, { modules: string[]; actions: string[] }[]> = 
     { modules: ['products', 'inventory', 'payments'], actions: ['view'] },
   ],
   Accounts: [
-    { modules: ['payments', 'reports', 'documents', 'email', 'excel'], actions: ['view', 'create', 'edit', 'export', 'print'] },
+    { modules: ['payments', 'accounts', 'reports', 'documents', 'email', 'excel'], actions: ['view', 'create', 'edit', 'export', 'print'] },
     { modules: ['customers', 'vendors', 'sales', 'purchases'], actions: ['view'] },
   ],
   Production: [
@@ -176,6 +176,18 @@ async function main() {
       });
     }
   }
+
+  console.log('Seeding default cash & bank accounts...');
+  await prisma.account.upsert({
+    where: { name: 'Cash' },
+    update: {},
+    create: { name: 'Cash', type: 'CASH', openingBalance: 10000 },
+  });
+  await prisma.account.upsert({
+    where: { name: 'Bank' },
+    update: {},
+    create: { name: 'Bank', type: 'BANK', bankName: 'Primary Bank', openingBalance: 50000 },
+  });
 
   console.log('Seed complete.');
   console.log('Default login → username: admin / password: Admin@1234 (change this immediately)');

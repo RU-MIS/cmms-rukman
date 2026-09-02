@@ -31,7 +31,7 @@ router.get(
     const [items, total] = await Promise.all([
       prisma.payment.findMany({
         where,
-        include: { customer: { select: { name: true } }, vendor: { select: { name: true } } },
+        include: { customer: { select: { name: true } }, vendor: { select: { name: true } }, account: { select: { name: true, type: true } } },
         orderBy: { date: 'desc' },
         skip: params.skip,
         take: params.take,
@@ -51,6 +51,7 @@ router.get(
       include: {
         customer: true,
         vendor: true,
+        account: true,
         allocations: { include: { sale: { select: { invoiceNo: true, grandTotal: true } }, purchase: { select: { billNo: true, grandTotal: true } } } },
       },
     });
@@ -62,7 +63,12 @@ router.get(
 router.post(
   '/',
   requirePermission('payments', 'create'),
-  [body('partyType').isIn(['CUSTOMER', 'VENDOR']), body('amount').isFloat({ gt: 0 }), body('mode').isIn(['CASH', 'BANK', 'UPI', 'CHEQUE', 'OTHER'])],
+  [
+    body('partyType').isIn(['CUSTOMER', 'VENDOR']),
+    body('amount').isFloat({ gt: 0 }),
+    body('mode').isIn(['CASH', 'BANK', 'UPI', 'CHEQUE', 'OTHER']),
+    body('accountId').optional({ values: 'null' }).isInt(),
+  ],
   validate,
   asyncHandler(async (req, res) => {
     const amount = D(req.body.amount);
@@ -85,6 +91,7 @@ router.post(
           direction: isCustomer ? 'RECEIVED' : 'PAID',
           amount,
           mode: req.body.mode,
+          accountId: req.body.accountId ? Number(req.body.accountId) : null,
           refNo: req.body.refNo,
           remarks: req.body.remarks,
           createdById: req.user!.id,

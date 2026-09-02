@@ -4,7 +4,7 @@ import {
   ClipboardList, PackageCheck, ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine,
   SlidersHorizontal, AlertTriangle, Factory, ListChecks, Wallet,
   Receipt, HandCoins, Scale, FileText, Mail, MailCheck, Settings2,
-  ShieldCheck, KeyRound, History, DatabaseBackup, LogOut,
+  ShieldCheck, KeyRound, History, DatabaseBackup, LogOut, Landmark,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -86,6 +86,8 @@ export const NAV: NavGroup[] = [
       { label: 'Customer Payment', href: '/payments/customer', icon: HandCoins },
       { label: 'Vendor Payment', href: '/payments/vendor', icon: Wallet },
       { label: 'Payment List', href: '/payments', icon: Receipt },
+      { label: 'Fund Transfer', href: '/payments/transfer', icon: ArrowLeftRight },
+      { label: 'Accounts (Cash/Bank)', href: '/payments/accounts', icon: Landmark },
       { label: 'Outstanding', href: '/payments/outstanding', icon: Scale },
     ],
   },

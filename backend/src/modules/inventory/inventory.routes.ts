@@ -19,8 +19,11 @@ router.get(
   asyncHandler(async (req, res) => {
     const params = getPageParams(req);
     const search = String(req.query.search ?? '').trim();
+    const stockType = String(req.query.stockType ?? '');
     const where: any = {
       active: true,
+      ...(stockType === 'raw' ? { isRawMaterial: true } : {}),
+      ...(stockType === 'finished' ? { isRawMaterial: false } : {}),
       ...(search ? { OR: [{ name: { contains: search, mode: 'insensitive' as const } }, { sku: { contains: search, mode: 'insensitive' as const } }] } : {}),
     };
     const [items, total] = await Promise.all([
@@ -50,15 +53,25 @@ router.get(
 router.get(
   '/valuation',
   requirePermission('inventory', 'view'),
-  asyncHandler(async (_req, res) => {
-    const products = await prisma.product.findMany({ where: { active: true }, include: { unit: true } });
+  asyncHandler(async (req, res) => {
+    const stockType = String(req.query.stockType ?? '');
+    const where: any = {
+      active: true,
+      ...(stockType === 'raw' ? { isRawMaterial: true } : {}),
+      ...(stockType === 'finished' ? { isRawMaterial: false } : {}),
+    };
+    const products = await prisma.product.findMany({ where, include: { unit: true } });
     let totalValue = D(0);
+    let rawMaterialValue = D(0);
+    let finishedGoodsValue = D(0);
     const rows = products.map((p) => {
       const value = D(p.currentStock).mul(p.purchaseRate);
       totalValue = totalValue.plus(value);
-      return { id: p.id, sku: p.sku, name: p.name, unit: p.unit.shortName, currentStock: p.currentStock, purchaseRate: p.purchaseRate, value };
+      if (p.isRawMaterial) rawMaterialValue = rawMaterialValue.plus(value);
+      else finishedGoodsValue = finishedGoodsValue.plus(value);
+      return { id: p.id, sku: p.sku, name: p.name, unit: p.unit.shortName, currentStock: p.currentStock, purchaseRate: p.purchaseRate, isRawMaterial: p.isRawMaterial, value };
     });
-    ok(res, rows, { totalValue });
+    ok(res, rows, { totalValue, rawMaterialValue, finishedGoodsValue });
   })
 );
 

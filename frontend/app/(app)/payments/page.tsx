@@ -10,7 +10,7 @@ import { DataTable, Column } from '@/components/ui/DataTable';
 import { Pagination } from '@/components/ui/Pagination';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
-interface Payment { id: number; paymentNo: string; date: string; partyType: string; direction: string; amount: string; mode: string; customer?: { name: string }; vendor?: { name: string } }
+interface Payment { id: number; paymentNo: string; date: string; partyType: string; direction: string; amount: string; mode: string; customer?: { name: string }; vendor?: { name: string }; account?: { name: string } }
 
 export default function PaymentListPage() {
   const [page, setPage] = useState(1);
@@ -28,6 +28,7 @@ export default function PaymentListPage() {
     { key: 'direction', header: 'Direction', render: (p) => (p.direction === 'RECEIVED' ? 'Received' : 'Paid') },
     { key: 'amount', header: 'Amount', align: 'right', render: (p) => formatCurrency(p.amount) },
     { key: 'mode', header: 'Mode' },
+    { key: 'account', header: 'Account', render: (p) => p.account?.name ?? '-' },
     { key: 'actions', header: '', align: 'right', render: (p) => <button className="btn-ghost !px-2 !py-1" onClick={() => openFile(`/documents/payment-receipt/${p.id}`)}><FileText size={14} /></button> },
   ];
 

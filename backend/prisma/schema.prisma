@@ -60,6 +60,7 @@ model User {
   purchases      Purchase[]
   payments       Payment[]
   productionPlans ProductionPlan[]
+  fundTransfers  FundTransfer[]
 }
 
 // ============================================================
@@ -447,6 +448,8 @@ model Payment {
   direction    PaymentDirection
   amount       Decimal          @db.Decimal(14, 2)
   mode         PaymentMode
+  accountId    Int?
+  account      Account?         @relation(fields: [accountId], references: [id])
   refNo        String?
   remarks      String?
   createdById  Int?
@@ -458,6 +461,7 @@ model Payment {
   @@index([date])
   @@index([customerId])
   @@index([vendorId])
+  @@index([accountId])
 }
 
 model PaymentAllocation {
@@ -469,6 +473,48 @@ model PaymentAllocation {
   purchaseId Int?
   purchase   Purchase? @relation(fields: [purchaseId], references: [id])
   amount     Decimal  @db.Decimal(14, 2)
+}
+
+// ============================================================
+// CASH & BANK ACCOUNTS / FUND TRANSFERS
+// ============================================================
+
+enum AccountType {
+  CASH
+  BANK
+}
+
+model Account {
+  id             Int         @id @default(autoincrement())
+  name           String      @unique
+  type           AccountType
+  bankName       String?
+  accountNumber  String?
+  openingBalance Decimal     @default(0) @db.Decimal(14, 2)
+  active         Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  payments       Payment[]
+  transfersOut   FundTransfer[] @relation("TransferFrom")
+  transfersIn    FundTransfer[] @relation("TransferTo")
+}
+
+model FundTransfer {
+  id            Int      @id @default(autoincrement())
+  transferNo    String   @unique
+  date          DateTime @default(now())
+  fromAccountId Int
+  fromAccount   Account  @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccountId   Int
+  toAccount     Account  @relation("TransferTo", fields: [toAccountId], references: [id])
+  amount        Decimal  @db.Decimal(14, 2)
+  remarks       String?
+  createdById   Int?
+  createdBy     User?    @relation(fields: [createdById], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([date])
 }
 
 // ============================================================
