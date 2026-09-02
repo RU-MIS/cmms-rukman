@@ -1,5 +1,5 @@
 {
-  "name": "cmms-rukman-frontend",
+  "name": "businessflow-erp-frontend",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -10,32 +10,31 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "14.2.5",
+    "@hookform/resolvers": "^3.9.0",
+    "@tanstack/react-query": "^5.56.2",
+    "axios": "^1.7.7",
+    "clsx": "^2.1.1",
+    "dayjs": "^1.11.13",
+    "lucide-react": "^0.445.0",
+    "next": "^14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "axios": "^1.7.2",
-    "zustand": "^4.5.4",
-    "react-hook-form": "^7.52.1",
-    "@hookform/resolvers": "^3.9.0",
-    "zod": "^3.23.8",
-    "recharts": "^2.12.7",
-    "dayjs": "^1.11.11",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.4.0",
-    "lucide-react": "^0.400.0",
+    "react-hook-form": "^7.53.0",
     "react-hot-toast": "^2.4.1",
-    "next-pwa": "^5.6.0",
-    "@tanstack/react-query": "^5.51.1"
+    "recharts": "^2.12.7",
+    "tailwind-merge": "^2.5.2",
+    "zod": "^3.23.8",
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
-    "@types/node": "^20.14.11",
-    "@types/react": "^18.3.3",
+    "@types/node": "^20.14.15",
+    "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
-    "typescript": "^5.5.3",
-    "tailwindcss": "^3.4.6",
-    "postcss": "^8.4.39",
-    "autoprefixer": "^10.4.19",
+    "autoprefixer": "^10.4.20",
     "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.5"
+    "eslint-config-next": "^14.2.35",
+    "postcss": "^8.4.45",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.5.4"
   }
 }

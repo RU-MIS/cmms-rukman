@@ -1,65 +1,58 @@
-import type { Config } from 'tailwindcss'
+import type { Config } from 'tailwindcss';
 
 const config: Config = {
-  content: [
-    './pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './components/**/*.{js,ts,jsx,tsx,mdx}',
-    './app/**/*.{js,ts,jsx,tsx,mdx}',
-  ],
+  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        primary: {
-          DEFAULT: '#0E2F76',
-          dark:    '#071E52',
-          mid:     '#AAC0E1',
-          tint:    '#D4E4F7',
-          light:   '#F5FEFF',
+        sidebar: {
+          DEFAULT: '#0f2c42',
+          hover: '#173d59',
+          active: '#1d4e70',
+          border: '#1c4059',
         },
-        text: {
-          primary:   '#0A1F4E',
-          secondary: '#3A5A8A',
-          muted:     '#7A9CC0',
+        app: {
+          bg: '#eef4f8',
         },
-        border: {
-          DEFAULT: '#D4E4F7',
-          strong:  '#AAC0E1',
+        card: {
+          DEFAULT: '#ffffff',
+          border: '#dfe8ef',
         },
-        success: '#16A34A',
-        warning: '#D97706',
-        danger:  '#DC2626',
-        info:    '#0369A1',
-        surface: {
-          app:  '#F5FEFF',
-          card: '#FFFFFF',
+        brand: {
+          50: '#eaf4f8',
+          100: '#cfe6ee',
+          200: '#a3cfdf',
+          300: '#71b3cb',
+          400: '#3f92ac',
+          500: '#227794',
+          600: '#155e79',
+          700: '#124a60',
+          800: '#0f2c42',
+          900: '#0a1f2f',
         },
-      },
-      fontFamily: {
-        sans:    ['Inter', 'sans-serif'],
-        display: ['Poppins', 'sans-serif'],
+        ink: {
+          DEFAULT: '#1e2b36',
+          muted: '#5b7186',
+          faint: '#8fa3b3',
+        },
+        success: { DEFAULT: '#2f9e6e', bg: '#e6f5ee' },
+        warning: { DEFAULT: '#c9862f', bg: '#fbf0e0' },
+        danger: { DEFAULT: '#c94f4f', bg: '#fbe9e9' },
+        info: { DEFAULT: '#2f7fc9', bg: '#e7f1fb' },
       },
       borderRadius: {
-        sm:   '4px',
-        md:   '8px',
-        card: '12px',
-        lg:   '16px',
-        xl:   '20px',
+        card: '16px',
+        pill: '999px',
       },
       boxShadow: {
-        card:  '0 1px 3px rgba(14, 47, 118, 0.08)',
-        modal: '0 8px 32px rgba(14, 47, 118, 0.15)',
+        card: '0 2px 6px rgba(15, 44, 66, 0.07), 0 1px 2px rgba(15, 44, 66, 0.05)',
       },
-      animation: {
-        'fade-in':  'fadeIn 0.2s ease-out',
-        'slide-up': 'slideUp 0.25s ease-out',
-      },
-      keyframes: {
-        fadeIn:  { from: { opacity: '0' }, to: { opacity: '1' } },
-        slideUp: { from: { transform: 'translateY(10px)', opacity: '0' }, to: { transform: 'translateY(0)', opacity: '1' } },
+      fontFamily: {
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
     },
   },
   plugins: [],
-}
+};
 
-export default config
+export default config;

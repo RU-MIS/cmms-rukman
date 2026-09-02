@@ -2,13 +2,23 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
+    "lib": ["ES2020"],
+    "outDir": "./dist",
+    "rootDir": "./",
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "strict": false,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "noImplicitAny": false,
-    "outDir": "./dist",
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "database"]
+  "include": ["src/**/*.ts", "prisma/seed.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }
