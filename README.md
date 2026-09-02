@@ -8,6 +8,40 @@ users/roles/permissions, and an audit log.
 
 This README assumes **zero coding experience**. Follow it top to bottom.
 
+## Fastest way to try it: deploy for free in a few clicks (no local setup)
+
+This uses [Render](https://render.com)'s free tier to create the database,
+backend and frontend from one account — no terminal needed. It reads
+`render.yaml` at the repo root.
+
+1. Sign up / log in at [render.com](https://render.com) (free).
+2. Click **New +** → **Blueprint**, connect your GitHub account, and pick
+   this repository (`RU-MIS/cmms-rukman`).
+3. When asked which branch to use, choose the branch this app is on
+   (currently `claude/small-business-erp-build-jerj3n` until it's merged
+   into `main`) — Render will find `render.yaml` and show the 3 resources
+   it's about to create: `businessflow-db` (Postgres), `businessflow-api`
+   (backend), `businessflow-web` (frontend).
+4. Click **Apply**. Wait for all three to show "Live" (first deploy takes
+   a few minutes).
+5. **One manual step Render can't do for you**: copy each service's URL
+   from its page in the Render dashboard, then:
+   - On `businessflow-api` → Environment → set `CORS_ORIGIN` to your
+     `businessflow-web` URL (e.g. `https://businessflow-web.onrender.com`).
+   - On `businessflow-web` → Environment → set `NEXT_PUBLIC_API_URL` to
+     your `businessflow-api` URL + `/api` (e.g.
+     `https://businessflow-api.onrender.com/api`).
+   - Click "Manual Deploy" → "Deploy latest commit" on both after saving.
+6. Open your `businessflow-web` URL and log in with `admin` / `Admin@1234`
+   — change the password immediately.
+
+Two things worth knowing about the free tier: Render's free web services
+fall asleep after 15 minutes of no traffic (the first request after that
+takes ~30-60 seconds to wake back up), and Render's free Postgres database
+expires after 30 days — for anything beyond a demo, either upgrade it in
+the Render dashboard or switch `DATABASE_URL` to a free-forever database
+from [Neon](https://neon.tech) or [Supabase](https://supabase.com).
+
 ## Tech stack (all free/open-source)
 
 - Frontend: Next.js 14 + React + TypeScript + Tailwind CSS
