@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Boxes, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, apiErrorMessage } from '@/lib/api';
@@ -51,8 +52,11 @@ export default function LoginPage() {
             <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus required />
           </div>
           <div>
-            <label className="label">Password</label>
-            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <div className="flex items-center justify-between">
+              <label className="label !mb-0">Password</label>
+              <Link href="/forgot-password" className="text-xs text-brand-600 hover:underline">Forgot password?</Link>
+            </div>
+            <input className="input mt-1" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           <button type="submit" disabled={loading} className="btn-primary w-full">
             {loading && <Loader2 size={15} className="animate-spin" />}
