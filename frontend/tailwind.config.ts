@@ -41,11 +41,11 @@ const config: Config = {
         info: { DEFAULT: '#2f7fc9', bg: '#e7f1fb' },
       },
       borderRadius: {
-        card: '10px',
+        card: '16px',
         pill: '999px',
       },
       boxShadow: {
-        card: '0 1px 2px rgba(15, 44, 66, 0.06), 0 1px 1px rgba(15, 44, 66, 0.04)',
+        card: '0 2px 6px rgba(15, 44, 66, 0.07), 0 1px 2px rgba(15, 44, 66, 0.05)',
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],

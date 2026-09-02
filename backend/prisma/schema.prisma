@@ -660,5 +660,8 @@ model Settings {
   currency      String  @default("INR")
   defaultTaxRate Decimal @default(0) @db.Decimal(5, 2)
   pdfFooter     String?
+  pdfFont       String  @default("Helvetica")
+  pdfScale      Int     @default(100)
+  termsConditions String?
   updatedAt     DateTime @updatedAt
 }

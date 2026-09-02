@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import {
   ShoppingCart, Wallet, HandCoins, TrendingUp, TrendingDown,
@@ -12,6 +12,8 @@ import {
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StatCard } from '@/components/ui/StatCard';
+import { CalendarWidget } from '@/components/ui/CalendarWidget';
+import { TopPerformerCard } from '@/components/ui/TopPerformerCard';
 import { formatCurrency } from '@/lib/utils';
 
 const PIE_COLORS = ['#227794', '#3f92ac', '#71b3cb', '#a3cfdf', '#c9862f', '#2f9e6e'];
@@ -92,32 +94,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card p-4">
-          <h2 className="text-sm font-semibold text-ink mb-3">Top Products (by sales value)</h2>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={topProducts} layout="vertical" margin={{ left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5eef4" horizontal={false} />
-              <XAxis type="number" fontSize={11} stroke="#8fa3b3" tickLine={false} axisLine={false} />
-              <YAxis type="category" dataKey="product" fontSize={11} width={120} stroke="#8fa3b3" tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-              <Bar dataKey="amount" fill="#227794" radius={[0, 4, 4, 0]} barSize={14} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="card p-4">
-          <h2 className="text-sm font-semibold text-ink mb-3">Top Customers (by sales value)</h2>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={topCustomers} layout="vertical" margin={{ left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5eef4" horizontal={false} />
-              <XAxis type="number" fontSize={11} stroke="#8fa3b3" tickLine={false} axisLine={false} />
-              <YAxis type="category" dataKey="customer" fontSize={11} width={120} stroke="#8fa3b3" tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-              <Bar dataKey="amount" fill="#2f9e6e" radius={[0, 4, 4, 0]} barSize={14} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <TopPerformerCard title="Top Products (by sales value)" rows={topProducts.map((p: any) => ({ name: p.product, amount: p.amount }))} />
+        <TopPerformerCard title="Top Customers (by sales value)" rows={topCustomers.map((c: any) => ({ name: c.customer, amount: c.amount }))} />
+        <CalendarWidget />
       </div>
 
       {isLoading && <p className="text-sm text-ink-muted mt-4">Loading dashboard…</p>}

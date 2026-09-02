@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, Pencil, Power } from 'lucide-react';
+import { Plus, Pencil, Power, FileDown } from 'lucide-react';
 import { api, apiErrorMessage } from '@/lib/api';
+import { openFile } from '@/lib/files';
 import { useDebouncedValue } from '@/lib/hooks';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -115,6 +116,7 @@ export default function CustomersPage() {
         actions={
           <>
             <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search customers…" />
+            <button className="btn-secondary" onClick={() => openFile('/documents/list/customers')}><FileDown size={15} /> Download PDF</button>
             <button className="btn-primary" onClick={openCreate}><Plus size={15} /> New Customer</button>
           </>
         }

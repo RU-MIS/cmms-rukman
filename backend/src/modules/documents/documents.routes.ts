@@ -5,8 +5,8 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { ApiError } from '../../utils/response';
 import { requireAuth } from '../../middleware/auth';
 import { requirePermission } from '../../middleware/rbac';
-import { getSettings } from '../settings/settings.service';
-import { buildDocumentPdf } from './pdf.service';
+import { getPdfBrand } from '../settings/settings.service';
+import { buildDocumentPdf, buildTaxInvoicePdf } from './pdf.service';
 import { D } from '../../utils/money';
 
 const router = Router();
@@ -18,6 +18,12 @@ function send(res: any, filename: string, buffer: Buffer) {
   res.send(buffer);
 }
 
+function pct(part: unknown, whole: unknown): string {
+  const w = Number(whole);
+  if (!w) return '0.00';
+  return ((Number(part) / w) * 100).toFixed(2);
+}
+
 router.get(
   '/invoice/:saleId',
   requirePermission('documents', 'view'),
@@ -27,45 +33,44 @@ router.get(
       include: { customer: true, items: { include: { product: { include: { unit: true } } } } },
     });
     if (!sale) throw new ApiError(404, 'Sale not found');
-    const settings = await getSettings();
+    const brand = await getPdfBrand();
+    const address = [sale.customer.address, sale.customer.city, sale.customer.state, sale.customer.pincode].filter(Boolean).join(', ');
+    const party = {
+      name: sale.customer.name,
+      address: address || undefined,
+      gstin: sale.customer.gstin ?? undefined,
+      phone: sale.customer.mobile ?? undefined,
+      email: sale.customer.email ?? undefined,
+    };
 
-    const buffer = await buildDocumentPdf({
-      title: 'TAX INVOICE',
-      businessName: settings.businessName,
-      businessAddress: settings.address ?? undefined,
-      businessPhone: settings.phone ?? undefined,
-      businessGstin: settings.gstin ?? undefined,
-      docMeta: [
-        { label: 'Invoice No', value: sale.invoiceNo },
-        { label: 'Date', value: dayjs(sale.date).format('DD MMM YYYY') },
-        { label: 'Customer', value: sale.customer.name },
-        { label: 'GSTIN', value: sale.customer.gstin || '-' },
-      ],
-      columns: [
-        { header: 'Product', width: 195 },
-        { header: 'Qty', width: 55, align: 'right' },
-        { header: 'Rate', width: 75, align: 'right' },
-        { header: 'Disc', width: 60, align: 'right' },
-        { header: 'Tax', width: 60, align: 'right' },
-        { header: 'Total', width: 70, align: 'right' },
-      ],
-      rows: sale.items.map((i) => [
-        `${i.product.name} (${i.product.unit.shortName})`,
-        i.qty.toString(),
-        i.rate.toFixed(2),
-        i.discount.toFixed(2),
-        i.taxAmount.toFixed(2),
-        i.total.toFixed(2),
-      ]),
-      totals: [
-        { label: 'Subtotal', value: sale.subtotal.toFixed(2) },
-        { label: 'Discount', value: sale.discount.toFixed(2) },
-        { label: 'Tax', value: sale.taxAmount.toFixed(2) },
-        { label: 'Grand Total', value: sale.grandTotal.toFixed(2) },
-        { label: 'Paid', value: sale.paidAmount.toFixed(2) },
-        { label: 'Balance', value: D(sale.grandTotal).minus(sale.paidAmount).toFixed(2) },
-      ],
-      footer: settings.pdfFooter ?? undefined,
+    const buffer = await buildTaxInvoicePdf({
+      logoPath: brand.logoPath,
+      fontFamily: brand.fontFamily,
+      scale: brand.scale,
+      businessName: brand.settings.businessName,
+      businessAddress: brand.settings.address ?? undefined,
+      businessPhone: brand.settings.phone ?? undefined,
+      businessEmail: brand.settings.email ?? undefined,
+      businessGstin: brand.settings.gstin ?? undefined,
+      invoiceNo: sale.invoiceNo,
+      date: dayjs(sale.date).format('DD-MMM-YYYY'),
+      customerId: sale.customer.code,
+      billTo: party,
+      shipTo: party,
+      items: sale.items.map((i) => ({
+        name: `${i.product.name}`,
+        qty: i.qty.toString(),
+        unit: i.product.unit.shortName,
+        rate: i.rate.toFixed(2),
+        gstPercent: i.taxRate.toFixed(2),
+        discountPercent: pct(i.discount, D(i.qty).mul(i.rate)),
+        amount: i.total.toFixed(2),
+      })),
+      totalTaxableValue: sale.subtotal.toFixed(2),
+      gstAmount: sale.taxAmount.toFixed(2),
+      discount: sale.discount.toFixed(2),
+      totalValue: sale.grandTotal.toFixed(2),
+      termsConditions: brand.settings.termsConditions ?? undefined,
     });
     send(res, `${sale.invoiceNo}.pdf`, buffer);
   })
@@ -80,14 +85,15 @@ router.get(
       include: { vendor: true, items: { include: { product: { include: { unit: true } } } } },
     });
     if (!purchase) throw new ApiError(404, 'Purchase not found');
-    const settings = await getSettings();
+    const brand = await getPdfBrand();
 
     const buffer = await buildDocumentPdf({
+      ...brand,
       title: 'PURCHASE BILL',
-      businessName: settings.businessName,
-      businessAddress: settings.address ?? undefined,
-      businessPhone: settings.phone ?? undefined,
-      businessGstin: settings.gstin ?? undefined,
+      businessName: brand.settings.businessName,
+      businessAddress: brand.settings.address ?? undefined,
+      businessPhone: brand.settings.phone ?? undefined,
+      businessGstin: brand.settings.gstin ?? undefined,
       docMeta: [
         { label: 'Bill No', value: purchase.billNo },
         { label: 'Date', value: dayjs(purchase.date).format('DD MMM YYYY') },
@@ -118,6 +124,7 @@ router.get(
         { label: 'Paid', value: purchase.paidAmount.toFixed(2) },
         { label: 'Balance', value: D(purchase.grandTotal).minus(purchase.paidAmount).toFixed(2) },
       ],
+      footer: brand.settings.pdfFooter ?? undefined,
     });
     send(res, `${purchase.billNo}.pdf`, buffer);
   })
@@ -132,11 +139,12 @@ router.get(
       include: { customer: true, items: { include: { product: { include: { unit: true } } } } },
     });
     if (!order) throw new ApiError(404, 'Sales order not found');
-    const settings = await getSettings();
+    const brand = await getPdfBrand();
     const buffer = await buildDocumentPdf({
+      ...brand,
       title: 'SALES ORDER',
-      businessName: settings.businessName,
-      businessAddress: settings.address ?? undefined,
+      businessName: brand.settings.businessName,
+      businessAddress: brand.settings.address ?? undefined,
       docMeta: [
         { label: 'Order No', value: order.orderNo },
         { label: 'Date', value: dayjs(order.date).format('DD MMM YYYY') },
@@ -150,6 +158,7 @@ router.get(
         { header: 'Rate', width: 100, align: 'right' },
       ],
       rows: order.items.map((i) => [`${i.product.name} (${i.product.unit.shortName})`, i.orderedQty.toString(), i.deliveredQty.toString(), i.rate.toFixed(2)]),
+      footer: brand.settings.pdfFooter ?? undefined,
     });
     send(res, `${order.orderNo}.pdf`, buffer);
   })
@@ -164,11 +173,12 @@ router.get(
       include: { vendor: true, items: { include: { product: { include: { unit: true } } } } },
     });
     if (!order) throw new ApiError(404, 'Purchase order not found');
-    const settings = await getSettings();
+    const brand = await getPdfBrand();
     const buffer = await buildDocumentPdf({
+      ...brand,
       title: 'PURCHASE ORDER',
-      businessName: settings.businessName,
-      businessAddress: settings.address ?? undefined,
+      businessName: brand.settings.businessName,
+      businessAddress: brand.settings.address ?? undefined,
       docMeta: [
         { label: 'Order No', value: order.orderNo },
         { label: 'Date', value: dayjs(order.date).format('DD MMM YYYY') },
@@ -182,6 +192,7 @@ router.get(
         { header: 'Rate', width: 100, align: 'right' },
       ],
       rows: order.items.map((i) => [`${i.product.name} (${i.product.unit.shortName})`, i.orderedQty.toString(), i.receivedQty.toString(), i.rate.toFixed(2)]),
+      footer: brand.settings.pdfFooter ?? undefined,
     });
     send(res, `${order.orderNo}.pdf`, buffer);
   })
@@ -196,12 +207,13 @@ router.get(
       include: { customer: true, vendor: true, allocations: { include: { sale: true, purchase: true } } },
     });
     if (!payment) throw new ApiError(404, 'Payment not found');
-    const settings = await getSettings();
+    const brand = await getPdfBrand();
     const party = payment.customer?.name || payment.vendor?.name || '-';
     const buffer = await buildDocumentPdf({
+      ...brand,
       title: 'PAYMENT RECEIPT',
-      businessName: settings.businessName,
-      businessAddress: settings.address ?? undefined,
+      businessName: brand.settings.businessName,
+      businessAddress: brand.settings.address ?? undefined,
       docMeta: [
         { label: 'Receipt No', value: payment.paymentNo },
         { label: 'Date', value: dayjs(payment.date).format('DD MMM YYYY') },
@@ -214,6 +226,7 @@ router.get(
       ],
       rows: payment.allocations.map((a) => [a.sale?.invoiceNo || a.purchase?.billNo || 'Unallocated', a.amount.toFixed(2)]),
       totals: [{ label: 'Total Received/Paid', value: payment.amount.toFixed(2) }],
+      footer: brand.settings.pdfFooter ?? undefined,
     });
     send(res, `${payment.paymentNo}.pdf`, buffer);
   })
@@ -243,10 +256,11 @@ router.get(
       rows.push([dayjs(e.date).format('DD-MMM-YY'), e.type, e.ref, e.debit.toFixed(2), e.credit.toFixed(2), balance.toFixed(2)]);
     }
 
-    const settings = await getSettings();
+    const brand = await getPdfBrand();
     const buffer = await buildDocumentPdf({
+      ...brand,
       title: 'CUSTOMER LEDGER',
-      businessName: settings.businessName,
+      businessName: brand.settings.businessName,
       docMeta: [{ label: 'Customer', value: customer.name }, { label: 'Code', value: customer.code }],
       columns: [
         { header: 'Date', width: 80 },
@@ -258,6 +272,7 @@ router.get(
       ],
       rows,
       totals: [{ label: 'Closing Balance', value: balance.toFixed(2) }],
+      footer: brand.settings.pdfFooter ?? undefined,
     });
     send(res, `Ledger-${customer.code}.pdf`, buffer);
   })
@@ -287,10 +302,11 @@ router.get(
       rows.push([dayjs(e.date).format('DD-MMM-YY'), e.type, e.ref, e.debit.toFixed(2), e.credit.toFixed(2), balance.toFixed(2)]);
     }
 
-    const settings = await getSettings();
+    const brand = await getPdfBrand();
     const buffer = await buildDocumentPdf({
+      ...brand,
       title: 'VENDOR LEDGER',
-      businessName: settings.businessName,
+      businessName: brand.settings.businessName,
       docMeta: [{ label: 'Vendor', value: vendor.name }, { label: 'Code', value: vendor.code }],
       columns: [
         { header: 'Date', width: 80 },
@@ -302,6 +318,7 @@ router.get(
       ],
       rows,
       totals: [{ label: 'Closing Balance', value: balance.toFixed(2) }],
+      footer: brand.settings.pdfFooter ?? undefined,
     });
     send(res, `Ledger-${vendor.code}.pdf`, buffer);
   })
@@ -317,10 +334,11 @@ router.get(
     if (!product) throw new ApiError(404, 'Product not found');
     const txns = await prisma.stockTransaction.findMany({ where: { productId }, orderBy: { date: 'asc' } });
 
-    const settings = await getSettings();
+    const brand = await getPdfBrand();
     const buffer = await buildDocumentPdf({
+      ...brand,
       title: 'STOCK LEDGER',
-      businessName: settings.businessName,
+      businessName: brand.settings.businessName,
       docMeta: [{ label: 'Product', value: product.name }, { label: 'SKU', value: product.sku }],
       columns: [
         { header: 'Date', width: 80 },
@@ -338,6 +356,7 @@ router.get(
         t.qtyOut.toString(),
         t.balanceAfter.toString(),
       ]),
+      footer: brand.settings.pdfFooter ?? undefined,
     });
     send(res, `StockLedger-${product.sku}.pdf`, buffer);
   })
@@ -350,10 +369,11 @@ router.get(
     const plan = await prisma.productionPlan.findUnique({ where: { id: Number(req.params.id) }, include: { product: { include: { unit: true } } } });
     if (!plan) throw new ApiError(404, 'Production plan not found');
     const bom = await prisma.bomItem.findMany({ where: { finishedProductId: plan.productId }, include: { component: { include: { unit: true } } } });
-    const settings = await getSettings();
+    const brand = await getPdfBrand();
     const buffer = await buildDocumentPdf({
+      ...brand,
       title: 'PRODUCTION PLAN',
-      businessName: settings.businessName,
+      businessName: brand.settings.businessName,
       docMeta: [
         { label: 'Plan No', value: plan.planNo },
         { label: 'Product', value: plan.product.name },
@@ -366,8 +386,76 @@ router.get(
         { header: 'Required (Total)', width: 190, align: 'right' },
       ],
       rows: bom.map((b) => [b.component.name, `${b.qtyPerUnit} ${b.component.unit.shortName}`, `${D(b.qtyPerUnit).mul(plan.plannedQty)} ${b.component.unit.shortName}`]),
+      footer: brand.settings.pdfFooter ?? undefined,
     });
     send(res, `${plan.planNo}.pdf`, buffer);
+  })
+);
+
+const LIST_ENTITIES: Record<string, { title: string; columns: { header: string; width: number; align?: 'left' | 'right' | 'center' }[]; fetch: () => Promise<(string | number)[][]> }> = {
+  customers: {
+    title: 'CUSTOMERS',
+    columns: [
+      { header: 'Code', width: 70 },
+      { header: 'Name', width: 150 },
+      { header: 'Mobile', width: 90 },
+      { header: 'City', width: 90 },
+      { header: 'GSTIN', width: 115 },
+    ],
+    fetch: async () => {
+      const rows = await prisma.customer.findMany({ where: { active: true }, orderBy: { name: 'asc' } });
+      return rows.map((r) => [r.code, r.name, r.mobile || '-', r.city || '-', r.gstin || '-']);
+    },
+  },
+  vendors: {
+    title: 'VENDORS',
+    columns: [
+      { header: 'Code', width: 70 },
+      { header: 'Name', width: 150 },
+      { header: 'Mobile', width: 90 },
+      { header: 'City', width: 90 },
+      { header: 'GSTIN', width: 115 },
+    ],
+    fetch: async () => {
+      const rows = await prisma.vendor.findMany({ where: { active: true }, orderBy: { name: 'asc' } });
+      return rows.map((r) => [r.code, r.name, r.mobile || '-', r.city || '-', r.gstin || '-']);
+    },
+  },
+  products: {
+    title: 'PRODUCTS',
+    columns: [
+      { header: 'SKU', width: 70 },
+      { header: 'Name', width: 180 },
+      { header: 'Sale Rate', width: 85, align: 'right' },
+      { header: 'Stock', width: 85, align: 'right' },
+      { header: 'Unit', width: 95 },
+    ],
+    fetch: async () => {
+      const rows = await prisma.product.findMany({ where: { active: true }, include: { unit: true }, orderBy: { name: 'asc' } });
+      return rows.map((r) => [r.sku, r.name, r.saleRate.toFixed(2), r.currentStock.toString(), r.unit.shortName]);
+    },
+  },
+};
+
+router.get(
+  '/list/:entity',
+  requirePermission('documents', 'view'),
+  asyncHandler(async (req, res) => {
+    const entity = LIST_ENTITIES[req.params.entity];
+    if (!entity) throw new ApiError(400, `Unknown list document: ${req.params.entity}`);
+    const brand = await getPdfBrand();
+    const rows = await entity.fetch();
+    const buffer = await buildDocumentPdf({
+      ...brand,
+      title: entity.title,
+      businessName: brand.settings.businessName,
+      businessAddress: brand.settings.address ?? undefined,
+      docMeta: [{ label: 'Generated', value: dayjs().format('DD MMM YYYY') }, { label: 'Total Records', value: String(rows.length) }],
+      columns: entity.columns,
+      rows,
+      footer: brand.settings.pdfFooter ?? undefined,
+    });
+    send(res, `${req.params.entity}.pdf`, buffer);
   })
 );
 
