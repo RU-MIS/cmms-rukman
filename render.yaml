@@ -39,7 +39,7 @@ services:
       - key: APP_NAME
         value: BusinessFlow ERP
       - key: CORS_ORIGIN
-        value: http://localhost:3000 # after deploy: replace with your businessflow-web URL, then redeploy
+        sync: false # set manually in the dashboard after both services exist — see README
 
   - type: web
     name: businessflow-web
@@ -50,4 +50,4 @@ services:
     startCommand: npm start
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: http://localhost:4000/api # after deploy: replace with https://<your-businessflow-api-url>/api, then redeploy
+        sync: false # set manually in the dashboard after businessflow-api exists — see README
