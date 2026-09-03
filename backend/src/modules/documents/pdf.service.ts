@@ -275,7 +275,7 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
       const rowHeight = 18;
       for (const [ci, col] of COLS.entries()) {
         doc.rect(x, y, col.width, rowHeight).strokeColor(LINE).stroke();
-        doc.text(cells[ci], x + 2, y + 5, { width: col.width - 4, align: col.align });
+        doc.text(cells[ci], x + 2, y + 5, { width: col.width - 4, height: doc.currentLineHeight(), align: col.align, ellipsis: true });
         x += col.width;
       }
       y += rowHeight;
