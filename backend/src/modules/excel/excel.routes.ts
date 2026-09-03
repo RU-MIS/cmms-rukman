@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import fs from 'fs';
+import dayjs from 'dayjs';
 import { prisma } from '../../config/prisma';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ok, ApiError } from '../../utils/response';
@@ -199,35 +200,35 @@ router.get(
       buffer = await buildExcelBuffer('Sales', [
         { header: 'Invoice No', key: 'invoiceNo' }, { header: 'Date', key: 'date' }, { header: 'Customer', key: 'customer' },
         { header: 'Grand Total', key: 'grandTotal' }, { header: 'Paid', key: 'paidAmount' }, { header: 'Status', key: 'status' },
-      ], rows.map((r) => ({ invoiceNo: r.invoiceNo, date: r.date.toISOString().slice(0, 10), customer: r.customer.name, grandTotal: r.grandTotal.toString(), paidAmount: r.paidAmount.toString(), status: r.status })));
+      ], rows.map((r) => ({ invoiceNo: r.invoiceNo, date: dayjs(r.date).format('DD-MMM-YYYY'), customer: r.customer.name, grandTotal: r.grandTotal.toString(), paidAmount: r.paidAmount.toString(), status: r.status })));
       filename = 'sales.xlsx';
     } else if (entity === 'purchases') {
       const rows = await prisma.purchase.findMany({ include: { vendor: true }, orderBy: { date: 'desc' } });
       buffer = await buildExcelBuffer('Purchases', [
         { header: 'Bill No', key: 'billNo' }, { header: 'Date', key: 'date' }, { header: 'Vendor', key: 'vendor' },
         { header: 'Grand Total', key: 'grandTotal' }, { header: 'Paid', key: 'paidAmount' }, { header: 'Status', key: 'status' },
-      ], rows.map((r) => ({ billNo: r.billNo, date: r.date.toISOString().slice(0, 10), vendor: r.vendor.name, grandTotal: r.grandTotal.toString(), paidAmount: r.paidAmount.toString(), status: r.status })));
+      ], rows.map((r) => ({ billNo: r.billNo, date: dayjs(r.date).format('DD-MMM-YYYY'), vendor: r.vendor.name, grandTotal: r.grandTotal.toString(), paidAmount: r.paidAmount.toString(), status: r.status })));
       filename = 'purchases.xlsx';
     } else if (entity === 'payments') {
       const rows = await prisma.payment.findMany({ include: { customer: true, vendor: true }, orderBy: { date: 'desc' } });
       buffer = await buildExcelBuffer('Payments', [
         { header: 'Payment No', key: 'paymentNo' }, { header: 'Date', key: 'date' }, { header: 'Party', key: 'party' },
         { header: 'Direction', key: 'direction' }, { header: 'Amount', key: 'amount' }, { header: 'Mode', key: 'mode' },
-      ], rows.map((r) => ({ paymentNo: r.paymentNo, date: r.date.toISOString().slice(0, 10), party: r.customer?.name || r.vendor?.name || '', direction: r.direction, amount: r.amount.toString(), mode: r.mode })));
+      ], rows.map((r) => ({ paymentNo: r.paymentNo, date: dayjs(r.date).format('DD-MMM-YYYY'), party: r.customer?.name || r.vendor?.name || '', direction: r.direction, amount: r.amount.toString(), mode: r.mode })));
       filename = 'payments.xlsx';
     } else if (entity === 'stock-ledger') {
       const rows = await prisma.stockTransaction.findMany({ include: { product: true }, orderBy: { date: 'desc' }, take: 5000 });
       buffer = await buildExcelBuffer('Stock Ledger', [
         { header: 'Date', key: 'date' }, { header: 'Product', key: 'product' }, { header: 'Type', key: 'type' },
         { header: 'Qty In', key: 'qtyIn' }, { header: 'Qty Out', key: 'qtyOut' }, { header: 'Balance', key: 'balanceAfter' }, { header: 'Reference', key: 'reference' },
-      ], rows.map((r) => ({ date: r.date.toISOString().slice(0, 10), product: r.product.name, type: r.type, qtyIn: r.qtyIn.toString(), qtyOut: r.qtyOut.toString(), balanceAfter: r.balanceAfter.toString(), reference: r.reference || '' })));
+      ], rows.map((r) => ({ date: dayjs(r.date).format('DD-MMM-YYYY'), product: r.product.name, type: r.type, qtyIn: r.qtyIn.toString(), qtyOut: r.qtyOut.toString(), balanceAfter: r.balanceAfter.toString(), reference: r.reference || '' })));
       filename = 'stock-ledger.xlsx';
     } else if (entity === 'production') {
       const rows = await prisma.productionPlan.findMany({ include: { product: true }, orderBy: { date: 'desc' } });
       buffer = await buildExcelBuffer('Production', [
         { header: 'Plan No', key: 'planNo' }, { header: 'Date', key: 'date' }, { header: 'Product', key: 'product' },
         { header: 'Planned Qty', key: 'plannedQty' }, { header: 'Completed Qty', key: 'completedQty' }, { header: 'Status', key: 'status' },
-      ], rows.map((r) => ({ planNo: r.planNo, date: r.date.toISOString().slice(0, 10), product: r.product.name, plannedQty: r.plannedQty.toString(), completedQty: r.completedQty.toString(), status: r.status })));
+      ], rows.map((r) => ({ planNo: r.planNo, date: dayjs(r.date).format('DD-MMM-YYYY'), product: r.product.name, plannedQty: r.plannedQty.toString(), completedQty: r.completedQty.toString(), status: r.status })));
       filename = 'production.xlsx';
     } else {
       throw new ApiError(400, `Unknown export entity: ${entity}`);

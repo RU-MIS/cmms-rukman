@@ -84,7 +84,7 @@ export async function generateDocument(type: DocumentType, id: number): Promise<
         businessAddress: settings.address ?? undefined,
         docMeta: [
           { label: 'Bill No', value: purchase.billNo },
-          { label: 'Date', value: dayjs(purchase.date).format('DD MMM YYYY') },
+          { label: 'Date', value: dayjs(purchase.date).format('DD-MMM-YYYY') },
           { label: 'Vendor', value: purchase.vendor.name },
         ],
         columns: [
@@ -114,7 +114,7 @@ export async function generateDocument(type: DocumentType, id: number): Promise<
         businessName: settings.businessName,
         docMeta: [
           { label: 'Receipt No', value: payment.paymentNo },
-          { label: 'Date', value: dayjs(payment.date).format('DD MMM YYYY') },
+          { label: 'Date', value: dayjs(payment.date).format('DD-MMM-YYYY') },
           { label: 'Party', value: payment.customer?.name || payment.vendor?.name || '-' },
           { label: 'Mode', value: payment.mode },
         ],

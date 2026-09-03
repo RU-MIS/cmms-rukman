@@ -96,7 +96,7 @@ router.get(
       businessGstin: brand.settings.gstin ?? undefined,
       docMeta: [
         { label: 'Bill No', value: purchase.billNo },
-        { label: 'Date', value: dayjs(purchase.date).format('DD MMM YYYY') },
+        { label: 'Date', value: dayjs(purchase.date).format('DD-MMM-YYYY') },
         { label: 'Vendor', value: purchase.vendor.name },
         { label: 'GSTIN', value: purchase.vendor.gstin || '-' },
       ],
@@ -147,7 +147,7 @@ router.get(
       businessAddress: brand.settings.address ?? undefined,
       docMeta: [
         { label: 'Order No', value: order.orderNo },
-        { label: 'Date', value: dayjs(order.date).format('DD MMM YYYY') },
+        { label: 'Date', value: dayjs(order.date).format('DD-MMM-YYYY') },
         { label: 'Customer', value: order.customer.name },
         { label: 'Status', value: order.status },
       ],
@@ -181,7 +181,7 @@ router.get(
       businessAddress: brand.settings.address ?? undefined,
       docMeta: [
         { label: 'Order No', value: order.orderNo },
-        { label: 'Date', value: dayjs(order.date).format('DD MMM YYYY') },
+        { label: 'Date', value: dayjs(order.date).format('DD-MMM-YYYY') },
         { label: 'Vendor', value: order.vendor.name },
         { label: 'Status', value: order.status },
       ],
@@ -216,7 +216,7 @@ router.get(
       businessAddress: brand.settings.address ?? undefined,
       docMeta: [
         { label: 'Receipt No', value: payment.paymentNo },
-        { label: 'Date', value: dayjs(payment.date).format('DD MMM YYYY') },
+        { label: 'Date', value: dayjs(payment.date).format('DD-MMM-YYYY') },
         { label: 'Party', value: party },
         { label: 'Mode', value: payment.mode },
       ],
@@ -253,7 +253,7 @@ router.get(
     const rows = [['Opening Balance', '-', '-', '-', '-', balance.toFixed(2)]];
     for (const e of entries) {
       balance = balance.plus(e.debit).minus(e.credit);
-      rows.push([dayjs(e.date).format('DD-MMM-YY'), e.type, e.ref, e.debit.toFixed(2), e.credit.toFixed(2), balance.toFixed(2)]);
+      rows.push([dayjs(e.date).format('DD-MMM-YYYY'), e.type, e.ref, e.debit.toFixed(2), e.credit.toFixed(2), balance.toFixed(2)]);
     }
 
     const brand = await getPdfBrand();
@@ -299,7 +299,7 @@ router.get(
     const rows = [['Opening Balance', '-', '-', '-', '-', balance.toFixed(2)]];
     for (const e of entries) {
       balance = balance.plus(e.credit).minus(e.debit);
-      rows.push([dayjs(e.date).format('DD-MMM-YY'), e.type, e.ref, e.debit.toFixed(2), e.credit.toFixed(2), balance.toFixed(2)]);
+      rows.push([dayjs(e.date).format('DD-MMM-YYYY'), e.type, e.ref, e.debit.toFixed(2), e.credit.toFixed(2), balance.toFixed(2)]);
     }
 
     const brand = await getPdfBrand();
@@ -349,7 +349,7 @@ router.get(
         { header: 'Balance', width: 70, align: 'right' },
       ],
       rows: txns.map((t) => [
-        dayjs(t.date).format('DD-MMM-YY'),
+        dayjs(t.date).format('DD-MMM-YYYY'),
         t.type,
         t.reference || '-',
         t.qtyIn.toString(),
@@ -450,7 +450,7 @@ router.get(
       title: entity.title,
       businessName: brand.settings.businessName,
       businessAddress: brand.settings.address ?? undefined,
-      docMeta: [{ label: 'Generated', value: dayjs().format('DD MMM YYYY') }, { label: 'Total Records', value: String(rows.length) }],
+      docMeta: [{ label: 'Generated', value: dayjs().format('DD-MMM-YYYY') }, { label: 'Total Records', value: String(rows.length) }],
       columns: entity.columns,
       rows,
       footer: brand.settings.pdfFooter ?? undefined,

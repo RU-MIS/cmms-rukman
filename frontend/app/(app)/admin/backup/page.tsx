@@ -8,6 +8,7 @@ import { api, apiErrorMessage } from '@/lib/api';
 import { openFile } from '@/lib/files';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, Column } from '@/components/ui/DataTable';
+import { formatDateTime } from '@/lib/utils';
 
 interface Backup { filename: string; sizeBytes: number; createdAt: string }
 
@@ -32,7 +33,7 @@ export default function BackupPage() {
   const columns: Column<Backup>[] = [
     { key: 'filename', header: 'File' },
     { key: 'sizeBytes', header: 'Size', align: 'right', render: (b) => `${(b.sizeBytes / 1024 / 1024).toFixed(2)} MB` },
-    { key: 'createdAt', header: 'Created', render: (b) => new Date(b.createdAt).toLocaleString('en-IN') },
+    { key: 'createdAt', header: 'Created', render: (b) => formatDateTime(b.createdAt) },
     { key: 'actions', header: '', align: 'right', render: (b) => <button className="btn-ghost !px-2 !py-1" onClick={() => openFile(`/backup/download/${b.filename}`, b.filename)}><Download size={14} /></button> },
   ];
 

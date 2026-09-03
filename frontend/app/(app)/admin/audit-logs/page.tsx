@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Pagination } from '@/components/ui/Pagination';
-import { formatDate } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 
 interface AuditLog { id: number; action: string; module: string; recordId?: string; user?: { name: string }; ipAddress?: string; createdAt: string }
 
@@ -20,7 +20,7 @@ export default function AuditLogsPage() {
   });
 
   const columns: Column<AuditLog>[] = [
-    { key: 'createdAt', header: 'Time', render: (l) => new Date(l.createdAt).toLocaleString('en-IN') },
+    { key: 'createdAt', header: 'Time', render: (l) => formatDateTime(l.createdAt) },
     { key: 'user', header: 'User', render: (l) => l.user?.name ?? 'System' },
     { key: 'action', header: 'Action' },
     { key: 'module', header: 'Module' },
