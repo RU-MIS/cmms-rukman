@@ -265,17 +265,24 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
     y += 20;
 
     doc.font(regular).fontSize(8.5).fillColor('#000000');
+    const nameColIndex = COLS.findIndex((c) => c.key === 'name');
     opts.items.forEach((item, i) => {
-      if (y > 700) {
+      const cells = [String(i + 1), item.name, item.qty, item.unit, item.rate, item.gstPercent, item.discountPercent, item.amount];
+      const nameHeight = doc.heightOfString(item.name, { width: COLS[nameColIndex].width - 4 });
+      const rowHeight = Math.max(18, nameHeight + 10);
+
+      if (y + rowHeight > 760) {
         doc.addPage();
         y = 40;
       }
-      const cells = [String(i + 1), item.name, item.qty, item.unit, item.rate, item.gstPercent, item.discountPercent, item.amount];
       x = 40;
-      const rowHeight = 18;
       for (const [ci, col] of COLS.entries()) {
         doc.rect(x, y, col.width, rowHeight).strokeColor(LINE).stroke();
-        doc.text(cells[ci], x + 2, y + 5, { width: col.width - 4, height: doc.currentLineHeight(), align: col.align, ellipsis: true });
+        if (ci === nameColIndex) {
+          doc.text(cells[ci], x + 2, y + 5, { width: col.width - 4 });
+        } else {
+          doc.text(cells[ci], x + 2, y + 5, { width: col.width - 4, align: col.align, lineBreak: false });
+        }
         x += col.width;
       }
       y += rowHeight;
