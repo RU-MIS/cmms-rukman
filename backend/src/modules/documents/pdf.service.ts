@@ -188,14 +188,17 @@ const COLS = [
   { key: 'amount', header: 'Amount', width: 75, align: 'right' as const },
 ];
 
-const HEADER_FILL = '#d9e6f0';
+const TITLE_GRAY = '#d9d9d9';
+const ACCENT_BLUE = '#4f81bd';
+const ACCENT_BLUE_DARK = '#1f4e79';
+const TOTALS_GREEN = '#d8e4bc';
 const GRAY = '#444444';
 
 function partyBlock(doc: PDFKit.PDFDocument, x: number, y: number, width: number, title: string, party: TaxInvoiceOptions['billTo'], regular: string, bold: string) {
-  doc.rect(x, y, width, 16).fillAndStroke(HEADER_FILL, '#000000');
-  doc.font(bold).fontSize(9).fillColor('#000000').text(title, x + 6, y + 4);
-  let ly = y + 16 + 6;
-  doc.font(bold).fontSize(9).fillColor('#000000').text(party.name, x + 6, ly, { width: width - 12 });
+  doc.rect(x, y, width, 18).fillAndStroke(ACCENT_BLUE, '#000000');
+  doc.font(bold).fontSize(10).fillColor('#ffffff').text(title, x, y + 4, { width, align: 'center' });
+  let ly = y + 18 + 6;
+  doc.font(bold).fontSize(9).fillColor(ACCENT_BLUE_DARK).text(party.name, x + 6, ly, { width: width - 12 });
   ly = doc.y + 2;
   doc.font(regular).fontSize(8.5).fillColor(GRAY);
   if (party.address) {
@@ -227,11 +230,11 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
 
     doc.rect(40, 40, 515, 760).strokeColor('#000000').lineWidth(1).stroke();
 
-    doc.font(bold).fontSize(16).fillColor('#000000').text('TAX INVOICE', 40, 52, { align: 'center', width: 515 });
-    doc.moveTo(40, 76).lineTo(555, 76).strokeColor('#000000').stroke();
+    doc.rect(40, 40, 515, 28).fillAndStroke(TITLE_GRAY, '#000000');
+    doc.font(bold).fontSize(18).fillColor('#000000').text('Tax Invoice', 40, 48, { align: 'center', width: 515 });
 
     const logoWidth = drawLogo(doc, opts.logoPath, 48, 84, 30);
-    doc.font(bold).fontSize(11).fillColor('#000000').text(opts.businessName, 48 + logoWidth, 84, { width: 300 - logoWidth });
+    doc.font(bold).fontSize(11).fillColor(ACCENT_BLUE_DARK).text(opts.businessName, 48 + logoWidth, 84, { width: 300 - logoWidth });
     doc.font(regular).fontSize(8.5).fillColor(GRAY);
     if (opts.businessAddress) doc.text(opts.businessAddress, 48 + logoWidth, doc.y, { width: 300 - logoWidth });
     const bizContact = [opts.businessPhone, opts.businessEmail].filter(Boolean).join('  |  ');
@@ -239,9 +242,9 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
     if (opts.businessGstin) doc.text(`GST Number: ${opts.businessGstin}`, 48 + logoWidth, doc.y, { width: 300 - logoWidth });
 
     doc.font(regular).fontSize(9).fillColor('#000000');
-    doc.text(`Date       :  ${opts.date}`, 360, 88, { width: 190, align: 'left' });
-    doc.text(`Invoice No :  ${opts.invoiceNo}`, 360, 102, { width: 190, align: 'left' });
-    doc.text(`Customer ID:  ${opts.customerId}`, 360, 116, { width: 190, align: 'left' });
+    doc.text(`Date          :-  ${opts.date}`, 360, 88, { width: 190, align: 'left' });
+    doc.text(`Invoice No.   :-  ${opts.invoiceNo}`, 360, 102, { width: 190, align: 'left' });
+    doc.text(`Customer ID   :-  ${opts.customerId}`, 360, 116, { width: 190, align: 'left' });
 
     const partyY = 150;
     doc.moveTo(40, partyY - 6).lineTo(555, partyY - 6).strokeColor(LINE).stroke();
@@ -252,11 +255,11 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
     doc.moveTo(40, y).lineTo(555, y).strokeColor('#000000').stroke();
     y += 2;
 
-    doc.font(bold).fontSize(8).fillColor('#000000');
+    doc.font(bold).fontSize(8);
     let x = 40;
     for (const col of COLS) {
-      doc.rect(x, y, col.width, 20).fillAndStroke(HEADER_FILL, '#000000');
-      doc.fillColor('#000000').text(col.header, x + 2, y + 6, { width: col.width - 4, align: col.align });
+      doc.rect(x, y, col.width, 20).fillAndStroke(ACCENT_BLUE, '#000000');
+      doc.fillColor('#ffffff').text(col.header, x + 2, y + 6, { width: col.width - 4, align: col.align });
       x += col.width;
     }
     y += 20;
@@ -298,11 +301,12 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
     const termsWidth = 330;
     const totalsWidth = 185;
 
-    doc.font(bold).fontSize(9).fillColor('#000000').text('Terms & Conditions', 40, y, { width: termsWidth });
+    doc.rect(40, y, termsWidth, 16).fillAndStroke(ACCENT_BLUE, '#000000');
+    doc.font(bold).fontSize(9).fillColor('#ffffff').text('Terms & Conditions', 40, y + 4, { width: termsWidth, align: 'center' });
     doc.font(regular).fontSize(8).fillColor(MUTED).text(
       opts.termsConditions || '1. Total payment due within 30 days.\n2. Please include the invoice number on payment.',
       40,
-      doc.y + 3,
+      y + 16 + 4,
       { width: termsWidth }
     );
 
@@ -315,7 +319,7 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
     ];
     let ty = boxTop;
     for (const [label, value] of totalsRows) {
-      doc.rect(totalsX, ty, totalsWidth, 18).fillAndStroke('#eaf4f0', LINE);
+      doc.rect(totalsX, ty, totalsWidth, 18).fillAndStroke(TOTALS_GREEN, LINE);
       doc.font(bold).fontSize(8.5).fillColor('#000000').text(label, totalsX + 4, ty + 5, { width: totalsWidth * 0.6 });
       doc.font(regular).text(value, totalsX + totalsWidth * 0.6, ty + 5, { width: totalsWidth * 0.4 - 6, align: 'right' });
       ty += 18;
