@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { FileText, Ban, ArrowLeft } from 'lucide-react';
+import { FileText, Ban, ArrowLeft, Trash2 } from 'lucide-react';
 import { api, apiErrorMessage } from '@/lib/api';
 import { openFile } from '@/lib/files';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -33,6 +33,17 @@ function PurchaseDetailContent() {
     }
   }
 
+  async function handleDelete() {
+    if (!confirm('Permanently delete this purchase? This cannot be undone.')) return;
+    try {
+      await api.delete(`/purchases/${id}`);
+      toast.success('Purchase deleted');
+      router.push('/purchases');
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
+  }
+
   if (isLoading || !purchase) return <p className="text-sm text-ink-muted">Loading…</p>;
   const balance = Number(purchase.grandTotal) - Number(purchase.paidAmount);
 
@@ -46,6 +57,7 @@ function PurchaseDetailContent() {
             <button className="btn-ghost" onClick={() => router.push('/purchases')}><ArrowLeft size={15} /> Back</button>
             <button className="btn-secondary" onClick={() => openFile(`/documents/purchase/${id}`)}><FileText size={15} /> PDF</button>
             {purchase.status === 'CONFIRMED' && <button className="btn-danger" onClick={handleCancel}><Ban size={15} /> Cancel Purchase</button>}
+            {purchase.status === 'CANCELLED' && <button className="btn-danger" onClick={handleDelete}><Trash2 size={15} /> Delete Purchase</button>}
           </>
         }
       />

@@ -4,7 +4,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { FileText, Mail, Ban, ArrowLeft } from 'lucide-react';
+import { FileText, Mail, Ban, ArrowLeft, Trash2 } from 'lucide-react';
 import { api, apiErrorMessage } from '@/lib/api';
 import { openFile } from '@/lib/files';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -32,6 +32,17 @@ function SaleDetailContent() {
       await api.post(`/sales/${id}/cancel`);
       toast.success('Sale cancelled');
       qc.invalidateQueries({ queryKey: ['sale', id] });
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm('Permanently delete this sale? This cannot be undone.')) return;
+    try {
+      await api.delete(`/sales/${id}`);
+      toast.success('Sale deleted');
+      router.push('/sales');
     } catch (err) {
       toast.error(apiErrorMessage(err));
     }
@@ -66,6 +77,7 @@ function SaleDetailContent() {
             <button className="btn-secondary" onClick={() => openFile(`/documents/invoice/${id}`)}><FileText size={15} /> PDF</button>
             <button className="btn-secondary" onClick={() => { setRecipient(sale.customer.email ?? ''); setEmailOpen(true); }}><Mail size={15} /> Email</button>
             {sale.status === 'CONFIRMED' && <button className="btn-danger" onClick={handleCancel}><Ban size={15} /> Cancel Sale</button>}
+            {sale.status === 'CANCELLED' && <button className="btn-danger" onClick={handleDelete}><Trash2 size={15} /> Delete Sale</button>}
           </>
         }
       />

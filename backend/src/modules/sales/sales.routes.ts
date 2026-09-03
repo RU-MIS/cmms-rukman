@@ -228,4 +228,21 @@ router.post(
   })
 );
 
+router.delete(
+  '/:id',
+  requirePermission('sales', 'delete'),
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const sale = await prisma.sale.findUnique({ where: { id }, include: { paymentAllocations: true, returns: true } });
+    if (!sale) throw new ApiError(404, 'Sale not found');
+    if (sale.status !== 'CANCELLED') throw new ApiError(400, 'Only a cancelled sale can be deleted. Cancel it first.');
+    if (sale.paymentAllocations.length > 0) throw new ApiError(400, 'Cannot delete — payments are allocated to this sale.');
+    if (sale.returns.length > 0) throw new ApiError(400, 'Cannot delete — sale returns exist for this sale.');
+
+    await prisma.sale.delete({ where: { id } });
+    await writeAudit(req, 'DELETE', 'sales', id, sale, undefined);
+    ok(res, { deleted: true });
+  })
+);
+
 export default router;

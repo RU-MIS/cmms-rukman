@@ -219,4 +219,21 @@ router.post(
   })
 );
 
+router.delete(
+  '/:id',
+  requirePermission('purchases', 'delete'),
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const purchase = await prisma.purchase.findUnique({ where: { id }, include: { paymentAllocations: true, returns: true } });
+    if (!purchase) throw new ApiError(404, 'Purchase not found');
+    if (purchase.status !== 'CANCELLED') throw new ApiError(400, 'Only a cancelled purchase can be deleted. Cancel it first.');
+    if (purchase.paymentAllocations.length > 0) throw new ApiError(400, 'Cannot delete — payments are allocated to this purchase.');
+    if (purchase.returns.length > 0) throw new ApiError(400, 'Cannot delete — purchase returns exist for this purchase.');
+
+    await prisma.purchase.delete({ where: { id } });
+    await writeAudit(req, 'DELETE', 'purchases', id, purchase, undefined);
+    ok(res, { deleted: true });
+  })
+);
+
 export default router;
