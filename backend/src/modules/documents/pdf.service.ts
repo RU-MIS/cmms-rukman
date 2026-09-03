@@ -72,30 +72,33 @@ export function buildDocumentPdf(opts: PdfBuildOptions): Promise<Buffer> {
     applyScale(doc, opts.scale);
     const { regular, bold } = resolveFonts(opts.fontFamily);
 
-    const logoWidth = drawLogo(doc, opts.logoPath, 40, 36, 34);
-    const nameX = 40 + logoWidth;
+    doc.rect(40, 40, 515, 760).strokeColor('#000000').lineWidth(1).stroke();
 
-    doc.fillColor(NAVY).fontSize(18).font(bold).text(opts.businessName, nameX, 40, { width: 300 - logoWidth });
-    doc.fontSize(9).font(regular).fillColor(MUTED);
-    if (opts.businessAddress) doc.text(opts.businessAddress, nameX, doc.y, { width: 300 - logoWidth });
+    doc.rect(40, 40, 515, 26).fillAndStroke(TITLE_GRAY, '#000000');
+    doc.font(bold).fontSize(15).fillColor('#000000').text(opts.title, 40, 49, { align: 'center', width: 515 });
+
+    const logoWidth = drawLogo(doc, opts.logoPath, 48, 76, 28);
+    doc.font(bold).fontSize(11).fillColor(ACCENT_BLUE_DARK).text(opts.businessName, 48 + logoWidth, 76, { width: 300 - logoWidth });
+    doc.fontSize(8.5).font(regular).fillColor(MUTED);
+    if (opts.businessAddress) doc.text(opts.businessAddress, 48 + logoWidth, doc.y, { width: 300 - logoWidth });
     const contactLine = [opts.businessPhone, opts.businessGstin ? `GSTIN: ${opts.businessGstin}` : null].filter(Boolean).join('  |  ');
-    if (contactLine) doc.text(contactLine, nameX, doc.y, { width: 300 - logoWidth });
+    if (contactLine) doc.text(contactLine, 48 + logoWidth, doc.y, { width: 300 - logoWidth });
 
-    doc.fontSize(14).font(bold).fillColor(NAVY).text(opts.title, 40, 40, { align: 'right' });
-    let metaY = 60;
-    doc.fontSize(9).font(regular).fillColor(MUTED);
+    let metaY = 76;
+    doc.fontSize(9).font(regular).fillColor('#000000');
     for (const m of opts.docMeta) {
       doc.text(`${m.label}: ${m.value}`, 350, metaY, { align: 'right', width: 205 });
       metaY += 13;
     }
 
-    doc.moveTo(40, 115).lineTo(555, 115).strokeColor(LINE).stroke();
+    const dividerY = Math.max(122, metaY + 6);
+    doc.moveTo(40, dividerY).lineTo(555, dividerY).strokeColor('#000000').stroke();
 
-    let y = 130;
+    let y = dividerY + 12;
     const tableX = 40;
     let x = tableX;
-    doc.font(bold).fontSize(9).fillColor('#ffffff');
-    doc.rect(tableX, y, 515, 20).fill(NAVY);
+    doc.font(bold).fontSize(9);
+    doc.rect(tableX, y, 515, 20).fillAndStroke(ACCENT_BLUE, '#000000');
     doc.fillColor('#ffffff');
     for (const col of opts.columns) {
       doc.text(col.header, x + 4, y + 6, { width: col.width - 8, align: col.align ?? 'left' });
@@ -105,30 +108,33 @@ export function buildDocumentPdf(opts: PdfBuildOptions): Promise<Buffer> {
 
     doc.font(regular).fontSize(9);
     for (const [i, row] of opts.rows.entries()) {
-      if (y > 760) {
+      if (y > 750) {
         doc.addPage();
         y = 40;
       }
       if (i % 2 === 0) {
         doc.rect(tableX, y, 515, 18).fill('#f4f8fb');
       }
-      doc.fillColor('#1e2b36');
+      doc.fillColor('#000000');
       x = tableX;
       for (const [ci, col] of opts.columns.entries()) {
-        doc.text(String(row[ci] ?? ''), x + 4, y + 4, { width: col.width - 8, align: col.align ?? 'left' });
+        doc.text(String(row[ci] ?? ''), x + 4, y + 4, { width: col.width - 8, height: doc.currentLineHeight(), align: col.align ?? 'left', ellipsis: true });
         x += col.width;
       }
       y += 18;
     }
 
     doc.moveTo(40, y + 4).lineTo(555, y + 4).strokeColor(LINE).stroke();
-    y += 12;
+    y += 10;
 
     if (opts.totals) {
+      const totalsWidth = 210;
+      const totalsX = 555 - totalsWidth;
       for (const t of opts.totals) {
-        doc.font(bold).fontSize(10).fillColor(NAVY).text(t.label, 350, y, { width: 120, align: 'right' });
-        doc.font(regular).text(t.value, 470, y, { width: 85, align: 'right' });
-        y += 16;
+        doc.rect(totalsX, y, totalsWidth, 18).fillAndStroke(TOTALS_GREEN, LINE);
+        doc.font(bold).fontSize(9).fillColor('#000000').text(t.label, totalsX + 6, y + 5, { width: totalsWidth * 0.55 });
+        doc.font(regular).text(t.value, totalsX + totalsWidth * 0.55, y + 5, { width: totalsWidth * 0.45 - 8, align: 'right' });
+        y += 18;
       }
     }
 
