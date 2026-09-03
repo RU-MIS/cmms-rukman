@@ -306,7 +306,7 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
     y += 6;
     const boxTop = y;
     const termsWidth = 330;
-    const totalsWidth = 185;
+    const totalsWidth = 180;
 
     doc.rect(40, y, termsWidth, 16).fillAndStroke(ACCENT_BLUE, '#000000');
     doc.font(bold).fontSize(9).fillColor('#ffffff').text('Terms & Conditions', 40, y + 4, { width: termsWidth, align: 'center' });
