@@ -282,6 +282,7 @@ model Purchase {
   id              Int      @id @default(autoincrement())
   billNo          String   @unique
   vendorBillNo    String?
+  vendorBillDate  DateTime?
   date            DateTime @default(now())
   vendorId        Int
   vendor          Vendor   @relation(fields: [vendorId], references: [id])
@@ -365,6 +366,10 @@ model SalesOrder {
   dueDate    DateTime?
   customerId Int
   customer   Customer    @relation(fields: [customerId], references: [id])
+  subtotal   Decimal     @default(0) @db.Decimal(14, 2)
+  discount   Decimal     @default(0) @db.Decimal(14, 2)
+  taxAmount  Decimal     @default(0) @db.Decimal(14, 2)
+  grandTotal Decimal     @default(0) @db.Decimal(14, 2)
   status     OrderStatus @default(PENDING)
   remarks    String?
   createdAt  DateTime    @default(now())
@@ -385,6 +390,10 @@ model SalesOrderItem {
   orderedQty    Decimal    @db.Decimal(14, 3)
   deliveredQty  Decimal    @default(0) @db.Decimal(14, 3)
   rate          Decimal    @db.Decimal(14, 2)
+  discount      Decimal    @default(0) @db.Decimal(14, 2)
+  taxRate       Decimal    @default(0) @db.Decimal(5, 2)
+  taxAmount     Decimal    @default(0) @db.Decimal(14, 2)
+  total         Decimal    @default(0) @db.Decimal(14, 2)
 }
 
 model PurchaseOrder {
@@ -394,6 +403,10 @@ model PurchaseOrder {
   dueDate    DateTime?
   vendorId   Int
   vendor     Vendor      @relation(fields: [vendorId], references: [id])
+  subtotal   Decimal     @default(0) @db.Decimal(14, 2)
+  discount   Decimal     @default(0) @db.Decimal(14, 2)
+  taxAmount  Decimal     @default(0) @db.Decimal(14, 2)
+  grandTotal Decimal     @default(0) @db.Decimal(14, 2)
   status     OrderStatus @default(PENDING)
   remarks    String?
   createdAt  DateTime    @default(now())
@@ -414,6 +427,10 @@ model PurchaseOrderItem {
   orderedQty      Decimal       @db.Decimal(14, 3)
   receivedQty     Decimal       @default(0) @db.Decimal(14, 3)
   rate            Decimal       @db.Decimal(14, 2)
+  discount        Decimal       @default(0) @db.Decimal(14, 2)
+  taxRate         Decimal       @default(0) @db.Decimal(5, 2)
+  taxAmount       Decimal       @default(0) @db.Decimal(14, 2)
+  total           Decimal       @default(0) @db.Decimal(14, 2)
 }
 
 // ============================================================

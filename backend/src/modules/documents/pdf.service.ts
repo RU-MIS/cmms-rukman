@@ -165,34 +165,37 @@ export interface TaxInvoiceItem {
 }
 
 export interface TaxInvoiceOptions extends PdfBrand {
+  docTitle?: string;
   businessName: string;
   businessAddress?: string;
   businessPhone?: string;
   businessGstin?: string;
   businessEmail?: string;
-  invoiceNo: string;
-  date: string;
-  customerId: string;
+  docMeta: { label: string; value: string }[];
   billTo: { name: string; address?: string; gstin?: string; phone?: string; email?: string };
   shipTo: { name: string; address?: string; gstin?: string; phone?: string; email?: string };
   items: TaxInvoiceItem[];
+  rateColumnHeader?: string;
   totalTaxableValue: string;
   gstAmount: string;
   discount: string;
   totalValue: string;
+  totalValueLabel?: string;
   termsConditions?: string;
 }
 
-const COLS = [
-  { key: 'sr', header: 'Sr. No.', width: 35, align: 'center' as const },
-  { key: 'name', header: 'Item Name', width: 155, align: 'left' as const },
-  { key: 'qty', header: 'Qty', width: 40, align: 'right' as const },
-  { key: 'unit', header: 'Unit', width: 45, align: 'center' as const },
-  { key: 'rate', header: 'Rate/Price', width: 65, align: 'right' as const },
-  { key: 'gst', header: 'GST%', width: 45, align: 'right' as const },
-  { key: 'disc', header: 'Discount%', width: 55, align: 'right' as const },
-  { key: 'amount', header: 'Amount', width: 75, align: 'right' as const },
-];
+function buildCols(rateHeader?: string) {
+  return [
+    { key: 'sr', header: 'Sr. No.', width: 35, align: 'center' as const },
+    { key: 'name', header: 'Item Name', width: 155, align: 'left' as const },
+    { key: 'qty', header: 'Qty', width: 40, align: 'right' as const },
+    { key: 'unit', header: 'Unit', width: 45, align: 'center' as const },
+    { key: 'rate', header: rateHeader || 'Rate/Price', width: 65, align: 'right' as const },
+    { key: 'gst', header: 'GST%', width: 45, align: 'right' as const },
+    { key: 'disc', header: 'Discount%', width: 55, align: 'right' as const },
+    { key: 'amount', header: 'Amount', width: 75, align: 'right' as const },
+  ];
+}
 
 const TITLE_GRAY = '#d9d9d9';
 const ACCENT_BLUE = '#4f81bd';
@@ -237,7 +240,7 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
     doc.rect(40, 40, 515, 760).strokeColor('#000000').lineWidth(1).stroke();
 
     doc.rect(40, 40, 515, 28).fillAndStroke(TITLE_GRAY, '#000000');
-    doc.font(bold).fontSize(18).fillColor('#000000').text('Tax Invoice', 40, 48, { align: 'center', width: 515 });
+    doc.font(bold).fontSize(18).fillColor('#000000').text(opts.docTitle || 'Tax Invoice', 40, 48, { align: 'center', width: 515 });
 
     const logoWidth = drawLogo(doc, opts.logoPath, 48, 84, 30);
     doc.font(bold).fontSize(11).fillColor(ACCENT_BLUE_DARK).text(opts.businessName, 48 + logoWidth, 84, { width: 300 - logoWidth });
@@ -248,11 +251,13 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
     if (opts.businessGstin) doc.text(`GST Number: ${opts.businessGstin}`, 48 + logoWidth, doc.y, { width: 300 - logoWidth });
 
     doc.font(regular).fontSize(9).fillColor('#000000');
-    doc.text(`Date          :-  ${opts.date}`, 360, 88, { width: 190, align: 'left' });
-    doc.text(`Invoice No.   :-  ${opts.invoiceNo}`, 360, 102, { width: 190, align: 'left' });
-    doc.text(`Customer ID   :-  ${opts.customerId}`, 360, 116, { width: 190, align: 'left' });
+    let metaY = 88;
+    for (const m of opts.docMeta) {
+      doc.text(`${m.label.padEnd(14)}:-  ${m.value}`, 360, metaY, { width: 190, align: 'left' });
+      metaY += 14;
+    }
 
-    const partyY = 150;
+    const partyY = Math.max(150, 88 + opts.docMeta.length * 14 + 20);
     doc.moveTo(40, partyY - 6).lineTo(555, partyY - 6).strokeColor(LINE).stroke();
     const billBottom = partyBlock(doc, 40, partyY, 257, 'Bill To', opts.billTo, regular, bold);
     const shipBottom = partyBlock(doc, 298, partyY, 257, 'Ship To', opts.shipTo, regular, bold);
@@ -260,6 +265,8 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
 
     doc.moveTo(40, y).lineTo(555, y).strokeColor('#000000').stroke();
     y += 2;
+
+    const COLS = buildCols(opts.rateColumnHeader);
 
     doc.font(bold).fontSize(8);
     let x = 40;
@@ -328,7 +335,7 @@ export function buildTaxInvoicePdf(opts: TaxInvoiceOptions): Promise<Buffer> {
       ['Total Taxable Value', opts.totalTaxableValue],
       ['GST Amount', opts.gstAmount],
       ['Discount', opts.discount],
-      ['Total Value', opts.totalValue],
+      [opts.totalValueLabel || 'Total Value', opts.totalValue],
     ];
     let ty = boxTop;
     for (const [label, value] of totalsRows) {

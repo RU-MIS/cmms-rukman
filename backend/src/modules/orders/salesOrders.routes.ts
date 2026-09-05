@@ -9,9 +9,18 @@ import { requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { writeAudit } from '../../middleware/audit';
 import { nextDocNumber } from '../../utils/docNumber';
+import { D } from '../../utils/money';
 
 const router = Router();
 router.use(requireAuth);
+
+interface SalesOrderItemInput {
+  productId: number;
+  qty: number;
+  rate: number;
+  discount?: number;
+  taxRate?: number;
+}
 
 router.get(
   '/',
@@ -92,7 +101,27 @@ router.post(
   validate,
   asyncHandler(async (req, res) => {
     const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-    const items: { productId: number; qty: number; rate: number }[] = req.body.items;
+    const items: SalesOrderItemInput[] = req.body.items;
+    const overallDiscount = D(req.body.discount ?? 0);
+
+    let subtotal = D(0);
+    let taxTotal = D(0);
+    const computedItems = items.map((item) => {
+      const lineBase = D(item.qty).mul(item.rate).minus(item.discount ?? 0);
+      const lineTax = lineBase.mul(item.taxRate ?? 0).div(100);
+      subtotal = subtotal.plus(lineBase);
+      taxTotal = taxTotal.plus(lineTax);
+      return {
+        productId: item.productId,
+        orderedQty: D(item.qty),
+        rate: D(item.rate),
+        discount: D(item.discount ?? 0),
+        taxRate: D(item.taxRate ?? 0),
+        taxAmount: lineTax,
+        total: lineBase.plus(lineTax),
+      };
+    });
+    const grandTotal = subtotal.minus(overallDiscount).plus(taxTotal);
 
     const order = await prisma.$transaction(async (tx) => {
       const orderNo = await nextDocNumber(tx, settings?.soPrefix || 'SO');
@@ -102,8 +131,12 @@ router.post(
           date: req.body.date ? new Date(req.body.date) : new Date(),
           dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
           customerId: req.body.customerId,
+          subtotal,
+          discount: overallDiscount,
+          taxAmount: taxTotal,
+          grandTotal,
           remarks: req.body.remarks,
-          items: { create: items.map((i) => ({ productId: i.productId, orderedQty: i.qty, rate: i.rate })) },
+          items: { create: computedItems },
         },
         include: { items: true },
       });

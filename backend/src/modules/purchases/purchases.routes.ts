@@ -114,6 +114,7 @@ router.post(
         data: {
           billNo,
           vendorBillNo: req.body.vendorBillNo,
+          vendorBillDate: req.body.vendorBillDate ? new Date(req.body.vendorBillDate) : null,
           date: req.body.date ? new Date(req.body.date) : new Date(),
           vendorId: req.body.vendorId,
           subtotal,

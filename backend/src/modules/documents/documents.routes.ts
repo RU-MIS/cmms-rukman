@@ -52,9 +52,11 @@ router.get(
       businessPhone: brand.settings.phone ?? undefined,
       businessEmail: brand.settings.email ?? undefined,
       businessGstin: brand.settings.gstin ?? undefined,
-      invoiceNo: sale.invoiceNo,
-      date: dayjs(sale.date).format('DD-MMM-YYYY'),
-      customerId: sale.customer.code,
+      docMeta: [
+        { label: 'Date', value: dayjs(sale.date).format('DD-MMM-YYYY') },
+        { label: 'Invoice No.', value: sale.invoiceNo },
+        { label: 'Customer ID', value: sale.customer.code },
+      ],
       billTo: party,
       shipTo: party,
       items: sale.items.map((i) => ({
@@ -86,45 +88,56 @@ router.get(
     });
     if (!purchase) throw new ApiError(404, 'Purchase not found');
     const brand = await getPdfBrand();
+    const vendorAddress = [purchase.vendor.address, purchase.vendor.city, purchase.vendor.state, purchase.vendor.pincode].filter(Boolean).join(', ');
+    const billTo = {
+      name: purchase.vendor.name,
+      address: vendorAddress || undefined,
+      gstin: purchase.vendor.gstin ?? undefined,
+      phone: purchase.vendor.mobile ?? undefined,
+      email: purchase.vendor.email ?? undefined,
+    };
+    const shipTo = {
+      name: brand.settings.businessName,
+      address: brand.settings.address ?? undefined,
+      gstin: brand.settings.gstin ?? undefined,
+      phone: brand.settings.phone ?? undefined,
+      email: brand.settings.email ?? undefined,
+    };
 
-    const buffer = await buildDocumentPdf({
-      ...brand,
-      title: 'PURCHASE BILL',
+    const buffer = await buildTaxInvoicePdf({
+      logoPath: brand.logoPath,
+      fontFamily: brand.fontFamily,
+      scale: brand.scale,
+      docTitle: 'Purchase Entry',
       businessName: brand.settings.businessName,
       businessAddress: brand.settings.address ?? undefined,
       businessPhone: brand.settings.phone ?? undefined,
+      businessEmail: brand.settings.email ?? undefined,
       businessGstin: brand.settings.gstin ?? undefined,
       docMeta: [
-        { label: 'Bill No', value: purchase.billNo },
+        { label: 'Bill No.', value: purchase.billNo },
         { label: 'Date', value: dayjs(purchase.date).format('DD-MMM-YYYY') },
-        { label: 'Vendor', value: purchase.vendor.name },
-        { label: 'GSTIN', value: purchase.vendor.gstin || '-' },
+        { label: 'Supplier Bill No.', value: purchase.vendorBillNo || '-' },
+        { label: 'Supplier Bill Date', value: purchase.vendorBillDate ? dayjs(purchase.vendorBillDate).format('DD-MMM-YYYY') : '-' },
       ],
-      columns: [
-        { header: 'Product', width: 195 },
-        { header: 'Qty', width: 55, align: 'right' },
-        { header: 'Rate', width: 75, align: 'right' },
-        { header: 'Disc', width: 60, align: 'right' },
-        { header: 'Tax', width: 60, align: 'right' },
-        { header: 'Total', width: 70, align: 'right' },
-      ],
-      rows: purchase.items.map((i) => [
-        `${i.product.name} (${i.product.unit.shortName})`,
-        i.qty.toString(),
-        i.rate.toFixed(2),
-        i.discount.toFixed(2),
-        i.taxAmount.toFixed(2),
-        i.total.toFixed(2),
-      ]),
-      totals: [
-        { label: 'Subtotal', value: purchase.subtotal.toFixed(2) },
-        { label: 'Discount', value: purchase.discount.toFixed(2) },
-        { label: 'Tax', value: purchase.taxAmount.toFixed(2) },
-        { label: 'Grand Total', value: purchase.grandTotal.toFixed(2) },
-        { label: 'Paid', value: purchase.paidAmount.toFixed(2) },
-        { label: 'Balance', value: D(purchase.grandTotal).minus(purchase.paidAmount).toFixed(2) },
-      ],
-      footer: brand.settings.pdfFooter ?? undefined,
+      billTo,
+      shipTo,
+      items: purchase.items.map((i) => ({
+        name: i.product.name,
+        qty: i.qty.toString(),
+        unit: i.product.unit.shortName,
+        rate: i.rate.toFixed(2),
+        gstPercent: i.taxRate.toFixed(2),
+        discountPercent: pct(i.discount, D(i.qty).mul(i.rate)),
+        amount: i.total.toFixed(2),
+      })),
+      rateColumnHeader: 'Purchase Rate',
+      totalTaxableValue: purchase.subtotal.toFixed(2),
+      gstAmount: purchase.taxAmount.toFixed(2),
+      discount: purchase.discount.toFixed(2),
+      totalValue: purchase.grandTotal.toFixed(2),
+      totalValueLabel: 'Total Purchase Value',
+      termsConditions: brand.settings.termsConditions ?? undefined,
     });
     send(res, `${purchase.billNo}.pdf`, buffer);
   })
@@ -140,25 +153,47 @@ router.get(
     });
     if (!order) throw new ApiError(404, 'Sales order not found');
     const brand = await getPdfBrand();
-    const buffer = await buildDocumentPdf({
-      ...brand,
-      title: 'SALES ORDER',
+    const address = [order.customer.address, order.customer.city, order.customer.state, order.customer.pincode].filter(Boolean).join(', ');
+    const party = {
+      name: order.customer.name,
+      address: address || undefined,
+      gstin: order.customer.gstin ?? undefined,
+      phone: order.customer.mobile ?? undefined,
+      email: order.customer.email ?? undefined,
+    };
+
+    const buffer = await buildTaxInvoicePdf({
+      logoPath: brand.logoPath,
+      fontFamily: brand.fontFamily,
+      scale: brand.scale,
+      docTitle: 'Sale Order',
       businessName: brand.settings.businessName,
       businessAddress: brand.settings.address ?? undefined,
+      businessPhone: brand.settings.phone ?? undefined,
+      businessEmail: brand.settings.email ?? undefined,
+      businessGstin: brand.settings.gstin ?? undefined,
       docMeta: [
-        { label: 'Order No', value: order.orderNo },
+        { label: 'Order No.', value: order.orderNo },
         { label: 'Date', value: dayjs(order.date).format('DD-MMM-YYYY') },
-        { label: 'Customer', value: order.customer.name },
-        { label: 'Status', value: order.status },
+        { label: 'Due Date', value: order.dueDate ? dayjs(order.dueDate).format('DD-MMM-YYYY') : '-' },
       ],
-      columns: [
-        { header: 'Product', width: 235 },
-        { header: 'Ordered', width: 90, align: 'right' },
-        { header: 'Delivered', width: 90, align: 'right' },
-        { header: 'Rate', width: 100, align: 'right' },
-      ],
-      rows: order.items.map((i) => [`${i.product.name} (${i.product.unit.shortName})`, i.orderedQty.toString(), i.deliveredQty.toString(), i.rate.toFixed(2)]),
-      footer: brand.settings.pdfFooter ?? undefined,
+      billTo: party,
+      shipTo: party,
+      items: order.items.map((i) => ({
+        name: i.product.name,
+        qty: i.orderedQty.toString(),
+        unit: i.product.unit.shortName,
+        rate: i.rate.toFixed(2),
+        gstPercent: i.taxRate.toFixed(2),
+        discountPercent: pct(i.discount, D(i.orderedQty).mul(i.rate)),
+        amount: i.total.toFixed(2),
+      })),
+      totalTaxableValue: order.subtotal.toFixed(2),
+      gstAmount: order.taxAmount.toFixed(2),
+      discount: order.discount.toFixed(2),
+      totalValue: order.grandTotal.toFixed(2),
+      totalValueLabel: 'Order Total',
+      termsConditions: 'This is a Sales Order and not a Tax Invoice. GST and totals are indicative and subject to change at the time of final billing.',
     });
     send(res, `${order.orderNo}.pdf`, buffer);
   })
@@ -174,25 +209,54 @@ router.get(
     });
     if (!order) throw new ApiError(404, 'Purchase order not found');
     const brand = await getPdfBrand();
-    const buffer = await buildDocumentPdf({
-      ...brand,
-      title: 'PURCHASE ORDER',
+    const vendorAddress = [order.vendor.address, order.vendor.city, order.vendor.state, order.vendor.pincode].filter(Boolean).join(', ');
+    const billTo = {
+      name: order.vendor.name,
+      address: vendorAddress || undefined,
+      gstin: order.vendor.gstin ?? undefined,
+      phone: order.vendor.mobile ?? undefined,
+      email: order.vendor.email ?? undefined,
+    };
+    const shipTo = {
+      name: brand.settings.businessName,
+      address: brand.settings.address ?? undefined,
+      gstin: brand.settings.gstin ?? undefined,
+      phone: brand.settings.phone ?? undefined,
+      email: brand.settings.email ?? undefined,
+    };
+
+    const buffer = await buildTaxInvoicePdf({
+      logoPath: brand.logoPath,
+      fontFamily: brand.fontFamily,
+      scale: brand.scale,
+      docTitle: 'Purchase Order',
       businessName: brand.settings.businessName,
       businessAddress: brand.settings.address ?? undefined,
+      businessPhone: brand.settings.phone ?? undefined,
+      businessEmail: brand.settings.email ?? undefined,
+      businessGstin: brand.settings.gstin ?? undefined,
       docMeta: [
-        { label: 'Order No', value: order.orderNo },
+        { label: 'PO No.', value: order.orderNo },
         { label: 'Date', value: dayjs(order.date).format('DD-MMM-YYYY') },
-        { label: 'Vendor', value: order.vendor.name },
-        { label: 'Status', value: order.status },
+        { label: 'Due Date', value: order.dueDate ? dayjs(order.dueDate).format('DD-MMM-YYYY') : '-' },
       ],
-      columns: [
-        { header: 'Product', width: 235 },
-        { header: 'Ordered', width: 90, align: 'right' },
-        { header: 'Received', width: 90, align: 'right' },
-        { header: 'Rate', width: 100, align: 'right' },
-      ],
-      rows: order.items.map((i) => [`${i.product.name} (${i.product.unit.shortName})`, i.orderedQty.toString(), i.receivedQty.toString(), i.rate.toFixed(2)]),
-      footer: brand.settings.pdfFooter ?? undefined,
+      billTo,
+      shipTo,
+      items: order.items.map((i) => ({
+        name: i.product.name,
+        qty: i.orderedQty.toString(),
+        unit: i.product.unit.shortName,
+        rate: i.rate.toFixed(2),
+        gstPercent: i.taxRate.toFixed(2),
+        discountPercent: pct(i.discount, D(i.orderedQty).mul(i.rate)),
+        amount: i.total.toFixed(2),
+      })),
+      totalTaxableValue: order.subtotal.toFixed(2),
+      gstAmount: order.taxAmount.toFixed(2),
+      discount: order.discount.toFixed(2),
+      totalValue: order.grandTotal.toFixed(2),
+      totalValueLabel: 'PO Total',
+      termsConditions: 'This is a Purchase Order and not a Tax Invoice. Please deliver as per the terms agreed with our purchase department.',
     });
     send(res, `${order.orderNo}.pdf`, buffer);
   })

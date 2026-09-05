@@ -52,9 +52,11 @@ export async function generateDocument(type: DocumentType, id: number): Promise<
         businessPhone: settings.phone ?? undefined,
         businessEmail: settings.email ?? undefined,
         businessGstin: settings.gstin ?? undefined,
-        invoiceNo: sale.invoiceNo,
-        date: dayjs(sale.date).format('DD-MMM-YYYY'),
-        customerId: sale.customer.code,
+        docMeta: [
+          { label: 'Date', value: dayjs(sale.date).format('DD-MMM-YYYY') },
+          { label: 'Invoice No.', value: sale.invoiceNo },
+          { label: 'Customer ID', value: sale.customer.code },
+        ],
         billTo: party,
         shipTo: party,
         items: sale.items.map((i) => ({
@@ -77,31 +79,55 @@ export async function generateDocument(type: DocumentType, id: number): Promise<
     case 'purchase': {
       const purchase = await prisma.purchase.findUnique({ where: { id }, include: { vendor: true, items: { include: { product: { include: { unit: true } } } } } });
       if (!purchase) throw new ApiError(404, 'Purchase not found');
-      const buffer = await buildDocumentPdf({
-        ...brand,
-        title: 'PURCHASE BILL',
+      const vendorAddress = [purchase.vendor.address, purchase.vendor.city, purchase.vendor.state, purchase.vendor.pincode].filter(Boolean).join(', ');
+      const billTo = {
+        name: purchase.vendor.name,
+        address: vendorAddress || undefined,
+        gstin: purchase.vendor.gstin ?? undefined,
+        phone: purchase.vendor.mobile ?? undefined,
+        email: purchase.vendor.email ?? undefined,
+      };
+      const shipTo = {
+        name: settings.businessName,
+        address: settings.address ?? undefined,
+        gstin: settings.gstin ?? undefined,
+        phone: settings.phone ?? undefined,
+        email: settings.email ?? undefined,
+      };
+      const buffer = await buildTaxInvoicePdf({
+        logoPath: brand.logoPath,
+        fontFamily: brand.fontFamily,
+        scale: brand.scale,
+        docTitle: 'Purchase Entry',
         businessName: settings.businessName,
         businessAddress: settings.address ?? undefined,
+        businessPhone: settings.phone ?? undefined,
+        businessEmail: settings.email ?? undefined,
+        businessGstin: settings.gstin ?? undefined,
         docMeta: [
-          { label: 'Bill No', value: purchase.billNo },
+          { label: 'Bill No.', value: purchase.billNo },
           { label: 'Date', value: dayjs(purchase.date).format('DD-MMM-YYYY') },
-          { label: 'Vendor', value: purchase.vendor.name },
+          { label: 'Supplier Bill No.', value: purchase.vendorBillNo || '-' },
+          { label: 'Supplier Bill Date', value: purchase.vendorBillDate ? dayjs(purchase.vendorBillDate).format('DD-MMM-YYYY') : '-' },
         ],
-        columns: [
-          { header: 'Product', width: 195 },
-          { header: 'Qty', width: 55, align: 'right' },
-          { header: 'Rate', width: 75, align: 'right' },
-          { header: 'Disc', width: 60, align: 'right' },
-          { header: 'Tax', width: 60, align: 'right' },
-          { header: 'Total', width: 70, align: 'right' },
-        ],
-        rows: purchase.items.map((i) => [`${i.product.name} (${i.product.unit.shortName})`, i.qty.toString(), i.rate.toFixed(2), i.discount.toFixed(2), i.taxAmount.toFixed(2), i.total.toFixed(2)]),
-        totals: [
-          { label: 'Grand Total', value: purchase.grandTotal.toFixed(2) },
-          { label: 'Paid', value: purchase.paidAmount.toFixed(2) },
-          { label: 'Balance', value: D(purchase.grandTotal).minus(purchase.paidAmount).toFixed(2) },
-        ],
-        footer: settings.pdfFooter ?? undefined,
+        billTo,
+        shipTo,
+        items: purchase.items.map((i) => ({
+          name: i.product.name,
+          qty: i.qty.toString(),
+          unit: i.product.unit.shortName,
+          rate: i.rate.toFixed(2),
+          gstPercent: i.taxRate.toFixed(2),
+          discountPercent: pct(i.discount, D(i.qty).mul(i.rate)),
+          amount: i.total.toFixed(2),
+        })),
+        rateColumnHeader: 'Purchase Rate',
+        totalTaxableValue: purchase.subtotal.toFixed(2),
+        gstAmount: purchase.taxAmount.toFixed(2),
+        discount: purchase.discount.toFixed(2),
+        totalValue: purchase.grandTotal.toFixed(2),
+        totalValueLabel: 'Total Purchase Value',
+        termsConditions: settings.termsConditions ?? undefined,
       });
       return { filename: `${purchase.billNo}.pdf`, buffer };
     }
