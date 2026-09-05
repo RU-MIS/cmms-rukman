@@ -20,6 +20,12 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
+    if (error?.response?.status === 428) {
+      useAuthStore.getState().setMustChangePassword(true);
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/account/change-password')) {
+        window.location.href = '/account/change-password';
+      }
+    }
     return Promise.reject(error);
   }
 );

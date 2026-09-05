@@ -122,6 +122,7 @@ model User {
   email            String?   @unique
   phone            String?
   passwordHash     String
+  mustChangePassword Boolean @default(false)
   isSuperAdmin     Boolean   @default(false)
   active           Boolean   @default(true)
   lastLoginAt      DateTime?

@@ -52,12 +52,20 @@ router.post(
       roleId: active.roleId,
       roleName: active.role.name,
       isSuperAdmin: user.isSuperAdmin,
+      mustChangePassword: user.mustChangePassword,
     };
     await runWithCompany(active.companyId, () => writeAudit(req, 'LOGIN', 'auth', user.id));
 
     ok(res, {
       token,
-      user: { id: user.id, username: user.username, name: user.name, email: user.email, isSuperAdmin: user.isSuperAdmin },
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        isSuperAdmin: user.isSuperAdmin,
+        mustChangePassword: user.mustChangePassword,
+      },
       activeCompany: { id: active.companyId, name: active.company.name, role: active.role.name },
       companies: activeMemberships.map((m) => ({ id: m.companyId, name: m.company.name, role: m.role.name })),
     });
@@ -98,7 +106,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      select: { id: true, username: true, name: true, email: true, phone: true, isSuperAdmin: true },
+      select: { id: true, username: true, name: true, email: true, phone: true, isSuperAdmin: true, mustChangePassword: true },
     });
     const memberships = await prisma.companyUser.findMany({
       where: { userId: req.user!.id },
@@ -125,7 +133,7 @@ router.post(
     if (!match) throw new ApiError(400, 'Current password is incorrect');
 
     const passwordHash = await hashPassword(req.body.newPassword);
-    await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash, mustChangePassword: false } });
     await writeAudit(req, 'UPDATE', 'auth.password', user.id);
     ok(res, { changed: true });
   })
@@ -195,7 +203,7 @@ router.post(
     const passwordHash = await hashPassword(req.body.newPassword);
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, resetTokenHash: null, resetTokenExpiry: null },
+      data: { passwordHash, resetTokenHash: null, resetTokenExpiry: null, mustChangePassword: false },
     });
     await writeAudit(req, 'UPDATE', 'auth.reset-password', user.id);
     ok(res, { reset: true });

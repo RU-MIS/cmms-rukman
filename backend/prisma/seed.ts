@@ -23,7 +23,7 @@ async function seedCompany(name: string, permissions: { id: number; module: stri
     const adminUser = await prisma.user.upsert({
       where: { username: 'admin' },
       update: {},
-      create: { username: 'admin', name: 'Administrator', email: 'admin@example.com', passwordHash },
+      create: { username: 'admin', name: 'Administrator', email: 'admin@example.com', passwordHash, mustChangePassword: true },
     });
     await prisma.companyUser.upsert({
       where: { companyId_userId: { companyId: company.id, userId: adminUser.id } },

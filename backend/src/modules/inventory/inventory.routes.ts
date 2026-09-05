@@ -9,6 +9,7 @@ import { requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { writeAudit } from '../../middleware/audit';
 import { D } from '../../utils/money';
+import { assertOwned } from '../../utils/ownership';
 
 const router = Router();
 router.use(requireAuth);
@@ -132,6 +133,9 @@ router.post(
   [body('productId').isInt(), body('qty').isFloat({ gt: 0 })],
   validate,
   asyncHandler(async (req, res) => {
+    if (req.body.warehouseId) {
+      assertOwned(await prisma.warehouse.findUnique({ where: { id: Number(req.body.warehouseId) } }), 'warehouse');
+    }
     const txn = await applyStockChange(req.user!.companyId, req.body.productId, req.body.qty, req.user!.id, 'STOCK_IN', req.body.reference, req.body.remarks, req.body.warehouseId, req.body.rate);
     await writeAudit(req, 'CREATE', 'inventory.stock_in', txn.id, undefined, txn);
     created(res, txn);
@@ -144,6 +148,9 @@ router.post(
   [body('productId').isInt(), body('qty').isFloat({ gt: 0 })],
   validate,
   asyncHandler(async (req, res) => {
+    if (req.body.warehouseId) {
+      assertOwned(await prisma.warehouse.findUnique({ where: { id: Number(req.body.warehouseId) } }), 'warehouse');
+    }
     const txn = await applyStockChange(req.user!.companyId, req.body.productId, -Math.abs(req.body.qty), req.user!.id, 'STOCK_OUT', req.body.reference, req.body.remarks, req.body.warehouseId);
     await writeAudit(req, 'CREATE', 'inventory.stock_out', txn.id, undefined, txn);
     created(res, txn);
@@ -171,6 +178,8 @@ router.post(
     if (req.body.fromWarehouseId === req.body.toWarehouseId) throw new ApiError(400, 'Source and destination warehouse must differ');
     const product = await prisma.product.findUnique({ where: { id: req.body.productId } });
     if (!product) throw new ApiError(404, 'Product not found');
+    assertOwned(await prisma.warehouse.findUnique({ where: { id: Number(req.body.fromWarehouseId) } }), 'source warehouse');
+    assertOwned(await prisma.warehouse.findUnique({ where: { id: Number(req.body.toWarehouseId) } }), 'destination warehouse');
 
     const [out, inn] = await prisma.$transaction([
       prisma.stockTransaction.create({

@@ -1,15 +1,20 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { api, apiErrorMessage } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { useAuthStore } from '@/store/authStore';
 
 export default function ChangePasswordPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const mustChangePassword = useAuthStore((s) => s.user?.mustChangePassword);
+  const setMustChangePassword = useAuthStore((s) => s.setMustChangePassword);
+  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,6 +26,10 @@ export default function ChangePasswordPage() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      if (mustChangePassword) {
+        setMustChangePassword(false);
+        router.replace('/dashboard');
+      }
     } catch (err) {
       toast.error(apiErrorMessage(err));
     } finally {
@@ -30,7 +39,10 @@ export default function ChangePasswordPage() {
 
   return (
     <div className="max-w-md">
-      <PageHeader title="Change Password" description="Update your login password" />
+      <PageHeader
+        title="Change Password"
+        description={mustChangePassword ? 'For security, you must set a new password before continuing.' : 'Update your login password'}
+      />
       <form onSubmit={handleSubmit} className="card p-5 space-y-4">
         <div>
           <label className="label">Current Password</label>

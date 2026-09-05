@@ -9,12 +9,19 @@ import { Header } from './Header';
 export function AppShell({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
+  const mustChangePassword = useAuthStore((s) => s.user?.mustChangePassword);
   const router = useRouter();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     if (hasHydrated && !token) router.replace('/login');
   }, [hasHydrated, token, router]);
+
+  useEffect(() => {
+    if (hasHydrated && token && mustChangePassword && typeof window !== 'undefined' && !window.location.pathname.startsWith('/account/change-password')) {
+      router.replace('/account/change-password');
+    }
+  }, [hasHydrated, token, mustChangePassword, router]);
 
   if (!hasHydrated || !token) return null;
 

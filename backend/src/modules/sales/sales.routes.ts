@@ -12,6 +12,7 @@ import { nextDocNumber } from '../../utils/docNumber';
 import { D } from '../../utils/money';
 import { getSettings } from '../settings/settings.service';
 import { updateSalesOrderProgress } from '../orders/orderProgress';
+import { assertOwned } from '../../utils/ownership';
 
 const router = Router();
 router.use(requireAuth);
@@ -85,6 +86,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const items: SaleItemInput[] = req.body.items;
     const overallDiscount = D(req.body.discount ?? 0);
+
+    assertOwned(await prisma.customer.findUnique({ where: { id: Number(req.body.customerId) } }), 'customer');
+    if (req.body.warehouseId) {
+      assertOwned(await prisma.warehouse.findUnique({ where: { id: Number(req.body.warehouseId) } }), 'warehouse');
+    }
+    if (req.body.salesOrderId) {
+      assertOwned(await prisma.salesOrder.findUnique({ where: { id: Number(req.body.salesOrderId) } }), 'sales order');
+    }
 
     const products = await prisma.product.findMany({ where: { id: { in: items.map((i) => i.productId) } } });
     const productMap = new Map(products.map((p) => [p.id, p]));

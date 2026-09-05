@@ -10,6 +10,7 @@ import { validate } from '../../middleware/validate';
 import { writeAudit } from '../../middleware/audit';
 import { nextDocNumber } from '../../utils/docNumber';
 import { D } from '../../utils/money';
+import { assertOwned } from '../../utils/ownership';
 
 const router = Router();
 router.use(requireAuth);
@@ -103,6 +104,13 @@ router.post(
     const settings = await prisma.settings.findUnique({ where: { companyId: req.user!.companyId } });
     const items: SalesOrderItemInput[] = req.body.items;
     const overallDiscount = D(req.body.discount ?? 0);
+
+    assertOwned(await prisma.customer.findUnique({ where: { id: Number(req.body.customerId) } }), 'customer');
+    const products = await prisma.product.findMany({ where: { id: { in: items.map((i) => i.productId) } } });
+    const productIds = new Set(products.map((p) => p.id));
+    for (const item of items) {
+      if (!productIds.has(item.productId)) throw new ApiError(400, `Invalid product id ${item.productId}`);
+    }
 
     let subtotal = D(0);
     let taxTotal = D(0);

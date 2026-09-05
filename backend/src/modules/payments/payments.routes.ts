@@ -11,6 +11,7 @@ import { writeAudit } from '../../middleware/audit';
 import { nextDocNumber } from '../../utils/docNumber';
 import { D } from '../../utils/money';
 import { getSettings } from '../settings/settings.service';
+import { assertOwned } from '../../utils/ownership';
 
 const router = Router();
 router.use(requireAuth);
@@ -73,13 +74,21 @@ router.post(
   asyncHandler(async (req, res) => {
     const amount = D(req.body.amount);
     const settings = await getSettings(req.user!.companyId);
+    const isCustomer = req.body.partyType === 'CUSTOMER';
+
+    if (isCustomer && !req.body.customerId) throw new ApiError(400, 'customerId is required for a customer payment');
+    if (!isCustomer && !req.body.vendorId) throw new ApiError(400, 'vendorId is required for a vendor payment');
+    if (isCustomer) {
+      assertOwned(await prisma.customer.findUnique({ where: { id: Number(req.body.customerId) } }), 'customer');
+    } else {
+      assertOwned(await prisma.vendor.findUnique({ where: { id: Number(req.body.vendorId) } }), 'vendor');
+    }
+    if (req.body.accountId) {
+      assertOwned(await prisma.account.findUnique({ where: { id: Number(req.body.accountId) } }), 'account');
+    }
 
     const payment = await prisma.$transaction(async (tx) => {
       const paymentNo = await nextDocNumber(tx, req.user!.companyId, settings.paymentPrefix);
-      const isCustomer = req.body.partyType === 'CUSTOMER';
-
-      if (isCustomer && !req.body.customerId) throw new ApiError(400, 'customerId is required for a customer payment');
-      if (!isCustomer && !req.body.vendorId) throw new ApiError(400, 'vendorId is required for a vendor payment');
 
       const created = await tx.payment.create({
         data: {

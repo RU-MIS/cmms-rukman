@@ -114,10 +114,6 @@ export default function LoginPage() {
               Sign In
             </button>
           </form>
-
-          <p className="text-center text-xs text-ink-faint mt-4">
-            Default demo login — username <b>admin</b>, password <b>Admin@1234</b>
-          </p>
         </div>
       </div>
     </div>

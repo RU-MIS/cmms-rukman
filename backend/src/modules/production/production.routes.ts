@@ -10,6 +10,7 @@ import { validate } from '../../middleware/validate';
 import { writeAudit } from '../../middleware/audit';
 import { nextDocNumber } from '../../utils/docNumber';
 import { D } from '../../utils/money';
+import { assertOwned } from '../../utils/ownership';
 
 const router = Router();
 router.use(requireAuth);
@@ -36,6 +37,14 @@ router.put(
     const items: { componentId: number; qtyPerUnit: number }[] = req.body.items;
     if (items.some((i) => i.componentId === finishedProductId)) {
       throw new ApiError(400, 'A product cannot be a component of itself');
+    }
+    assertOwned(await prisma.product.findUnique({ where: { id: finishedProductId } }), 'product');
+    if (items.length > 0) {
+      const components = await prisma.product.findMany({ where: { id: { in: items.map((i) => i.componentId) } } });
+      const componentIds = new Set(components.map((p) => p.id));
+      for (const item of items) {
+        if (!componentIds.has(item.componentId)) throw new ApiError(400, `Invalid component product id ${item.componentId}`);
+      }
     }
     await prisma.$transaction([
       prisma.bomItem.deleteMany({ where: { finishedProductId } }),
@@ -99,6 +108,7 @@ router.post(
   [body('productId').isInt(), body('plannedQty').isFloat({ gt: 0 })],
   validate,
   asyncHandler(async (req, res) => {
+    assertOwned(await prisma.product.findUnique({ where: { id: Number(req.body.productId) } }), 'product');
     const plan = await prisma.$transaction(async (tx) => {
       const planNo = await nextDocNumber(tx, req.user!.companyId, 'PRD');
       return tx.productionPlan.create({

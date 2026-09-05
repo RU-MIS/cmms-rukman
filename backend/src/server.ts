@@ -6,8 +6,11 @@ import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
-import { env } from './config/env';
+import { env, validateProductionEnv } from './config/env';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler';
+
+// Fail fast, before anything else stands up, if production is misconfigured.
+validateProductionEnv();
 
 import authRoutes from './modules/auth/auth.routes';
 import companyRoutes from './modules/companies/companies.routes';
@@ -66,6 +69,20 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
+// Login/password endpoints are the most valuable target for credential
+// stuffing and brute-force — a much tighter limit than the general API
+// limiter above, keyed per-IP regardless of the global window/max config.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many attempts. Please try again later.' },
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
+
 app.use('/uploads', express.static(path.join(process.cwd(), env.uploadDir)));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', app: env.appName }));
@@ -104,22 +121,26 @@ app.use('/api/gst', gstRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(env.port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`${env.appName} API listening on port ${env.port} [${env.nodeEnv}]`);
-});
-
-function shutdown(signal: string) {
-  // eslint-disable-next-line no-console
-  console.log(`${signal} received, shutting down gracefully...`);
-  server.close(() => {
+// The test suite imports `app` directly (via supertest) without wanting a
+// real socket bound — only listen outside of NODE_ENV=test.
+if (env.nodeEnv !== 'test') {
+  const server = app.listen(env.port, () => {
     // eslint-disable-next-line no-console
-    console.log('HTTP server closed.');
-    process.exit(0);
+    console.log(`${env.appName} API listening on port ${env.port} [${env.nodeEnv}]`);
   });
-  setTimeout(() => process.exit(1), 10_000).unref();
+
+  const shutdown = (signal: string) => {
+    // eslint-disable-next-line no-console
+    console.log(`${signal} received, shutting down gracefully...`);
+    server.close(() => {
+      // eslint-disable-next-line no-console
+      console.log('HTTP server closed.');
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10_000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
 
 export default app;

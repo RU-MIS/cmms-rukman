@@ -7,6 +7,7 @@ export interface AuthUser {
   name: string;
   email?: string | null;
   isSuperAdmin?: boolean;
+  mustChangePassword?: boolean;
 }
 
 export interface CompanyRef {
@@ -23,6 +24,7 @@ interface AuthState {
   hasHydrated: boolean;
   setAuth: (token: string, user: AuthUser, activeCompany: CompanyRef, companies: CompanyRef[]) => void;
   setActiveCompany: (token: string, activeCompany: CompanyRef) => void;
+  setMustChangePassword: (v: boolean) => void;
   logout: () => void;
   setHasHydrated: (v: boolean) => void;
 }
@@ -37,6 +39,7 @@ export const useAuthStore = create<AuthState>()(
       hasHydrated: false,
       setAuth: (token, user, activeCompany, companies) => set({ token, user, activeCompany, companies }),
       setActiveCompany: (token, activeCompany) => set({ token, activeCompany }),
+      setMustChangePassword: (v) => set((s) => (s.user ? { user: { ...s.user, mustChangePassword: v } } : {})),
       logout: () => set({ token: null, user: null, activeCompany: null, companies: [] }),
       setHasHydrated: (v) => set({ hasHydrated: v }),
     }),

@@ -96,6 +96,7 @@ router.post(
           email: req.body.email || null,
           phone: req.body.phone,
           passwordHash,
+          mustChangePassword: true,
         },
       });
       return tx.companyUser.create({
@@ -169,7 +170,7 @@ router.post(
     });
     if (!membership) throw new ApiError(404, 'User not found in this company');
     const passwordHash = await hashPassword(req.body.newPassword);
-    await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash, mustChangePassword: true } });
     await writeAudit(req, 'UPDATE', 'users.password', userId);
     ok(res, { reset: true });
   })

@@ -13,7 +13,16 @@ export interface AuthUser {
   roleId: number;
   roleName: string;
   isSuperAdmin: boolean;
+  mustChangePassword: boolean;
 }
+
+// Routes a user must still be able to reach while forced to change their
+// password — everything else is blocked until they do.
+const MUST_CHANGE_PASSWORD_ALLOWLIST = [
+  /^\/api\/auth\/change-password(\/|\?|$)/,
+  /^\/api\/auth\/me(\/|\?|$)/,
+  /^\/api\/auth\/logout(\/|\?|$)/,
+];
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -48,6 +57,12 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     if (!membership || !membership.user.active || !membership.company.active) {
       throw new ApiError(401, 'Invalid session');
     }
+    if (
+      membership.user.mustChangePassword &&
+      !MUST_CHANGE_PASSWORD_ALLOWLIST.some((re) => re.test(req.originalUrl))
+    ) {
+      throw new ApiError(428, 'You must change your password before continuing.');
+    }
     req.user = {
       id: membership.user.id,
       username: membership.user.username,
@@ -56,6 +71,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       roleId: membership.roleId,
       roleName: membership.role.name,
       isSuperAdmin: membership.user.isSuperAdmin,
+      mustChangePassword: membership.user.mustChangePassword,
     };
     return runWithCompany(membership.companyId, () => next());
   } catch (err) {

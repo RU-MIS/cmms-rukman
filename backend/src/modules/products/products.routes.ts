@@ -8,6 +8,7 @@ import { requireAuth } from '../../middleware/auth';
 import { requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { writeAudit } from '../../middleware/audit';
+import { assertOwned } from '../../utils/ownership';
 
 const router = Router();
 router.use(requireAuth);
@@ -87,6 +88,11 @@ router.post(
     const sku = req.body.sku || (await generateSku());
     const openingStock = req.body.openingStock ?? 0;
 
+    assertOwned(await prisma.unit.findUnique({ where: { id: Number(req.body.unitId) } }), 'unit');
+    if (req.body.categoryId) {
+      assertOwned(await prisma.productCategory.findUnique({ where: { id: Number(req.body.categoryId) } }), 'category');
+    }
+
     const product = await prisma.$transaction(async (tx) => {
       const p = await tx.product.create({
         data: {
@@ -135,6 +141,11 @@ router.put(
     const id = Number(req.params.id);
     const before = await prisma.product.findUnique({ where: { id } });
     if (!before) throw new ApiError(404, 'Product not found');
+
+    assertOwned(await prisma.unit.findUnique({ where: { id: Number(req.body.unitId) } }), 'unit');
+    if (req.body.categoryId) {
+      assertOwned(await prisma.productCategory.findUnique({ where: { id: Number(req.body.categoryId) } }), 'category');
+    }
 
     const product = await prisma.product.update({
       where: { id },
