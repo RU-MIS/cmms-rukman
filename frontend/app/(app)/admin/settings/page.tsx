@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { api, apiErrorMessage } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { GstinInput } from '@/components/forms/GstinInput';
 
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api').replace(/\/api\/?$/, '');
 
@@ -63,7 +64,7 @@ export default function SettingsPage() {
         <div className="md:col-span-2"><label className="label">Address</label><input className="input" value={form.address ?? ''} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
         <div><label className="label">Phone</label><input className="input" value={form.phone ?? ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
         <div><label className="label">Email</label><input className="input" value={form.email ?? ''} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-        <div><label className="label">GSTIN</label><input className="input" value={form.gstin ?? ''} onChange={(e) => setForm({ ...form, gstin: e.target.value })} /></div>
+        <div className="md:col-span-2"><GstinInput value={form.gstin} onChange={(v) => setForm({ ...form, gstin: v })} /></div>
         <div><label className="label">Currency</label><input className="input" value={form.currency ?? ''} onChange={(e) => setForm({ ...form, currency: e.target.value })} /></div>
         <div><label className="label">Invoice Prefix</label><input className="input" value={form.invoicePrefix ?? ''} onChange={(e) => setForm({ ...form, invoicePrefix: e.target.value })} /></div>
         <div><label className="label">Purchase Order Prefix</label><input className="input" value={form.poPrefix ?? ''} onChange={(e) => setForm({ ...form, poPrefix: e.target.value })} /></div>

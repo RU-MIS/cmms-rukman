@@ -8,6 +8,7 @@ import { requireAuth } from '../../middleware/auth';
 import { requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { writeAudit } from '../../middleware/audit';
+import { gstinValidator } from '../../utils/gstin';
 
 const router = Router();
 router.use(requireAuth);
@@ -63,6 +64,7 @@ const vendorValidators = [
   body('name').notEmpty().withMessage('Name is required'),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('Invalid email'),
   body('openingBalance').optional().isNumeric(),
+  gstinValidator,
 ];
 
 router.post(

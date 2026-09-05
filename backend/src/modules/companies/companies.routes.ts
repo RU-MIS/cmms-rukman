@@ -4,11 +4,12 @@ import { prisma } from '../../config/prisma';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ok, created, ApiError } from '../../utils/response';
 import { requireAuth, signToken } from '../../middleware/auth';
-import { requireSuperAdmin } from '../../middleware/rbac';
+import { requireSuperAdmin, requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { writeAudit } from '../../middleware/audit';
 import { runWithCompany } from '../../lib/tenantContext';
 import { ensurePermissionCatalog, createDefaultRoles } from './companyDefaults';
+import { gstinValidator } from '../../utils/gstin';
 
 const router = Router();
 router.use(requireAuth);
@@ -32,7 +33,7 @@ router.get(
 
 router.post(
   '/',
-  [body('name').notEmpty()],
+  [body('name').notEmpty(), gstinValidator],
   validate,
   asyncHandler(async (req, res) => {
     const company = await prisma.company.create({
@@ -132,6 +133,55 @@ router.patch(
     if (!before) throw new ApiError(404, 'Company not found');
     const company = await prisma.company.update({ where: { id }, data: { active: req.body.active } });
     await writeAudit(req, 'UPDATE', 'companies.active', id, { active: before.active }, { active: company.active });
+    ok(res, company);
+  })
+);
+
+router.get(
+  '/:id',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    const membership = await prisma.companyUser.findUnique({
+      where: { companyId_userId: { companyId: id, userId: req.user!.id } },
+    });
+    if (!membership) throw new ApiError(404, 'Company not found');
+    const company = await prisma.company.findUnique({ where: { id } });
+    if (!company) throw new ApiError(404, 'Company not found');
+    ok(res, company);
+  })
+);
+
+router.put(
+  '/:id',
+  requirePermission('settings', 'edit'),
+  [body('name').optional().notEmpty(), gstinValidator, body('registrationDate').optional({ values: 'falsy' }).isISO8601()],
+  validate,
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (id !== req.user!.companyId) throw new ApiError(403, 'You can only edit the company you are currently working in.');
+    const before = await prisma.company.findUnique({ where: { id } });
+    if (!before) throw new ApiError(404, 'Company not found');
+
+    const company = await prisma.company.update({
+      where: { id },
+      data: {
+        name: req.body.name,
+        legalName: req.body.legalName || null,
+        tradeName: req.body.tradeName || null,
+        gstin: req.body.gstin || null,
+        pan: req.body.pan || null,
+        businessType: req.body.businessType || null,
+        address: req.body.address || null,
+        state: req.body.state || null,
+        district: req.body.district || null,
+        pincode: req.body.pincode || null,
+        registrationStatus: req.body.registrationStatus || null,
+        registrationDate: req.body.registrationDate ? new Date(req.body.registrationDate) : null,
+        principalPlaceOfBusiness: req.body.principalPlaceOfBusiness || null,
+        natureOfBusiness: req.body.natureOfBusiness || null,
+      },
+    });
+    await writeAudit(req, 'UPDATE', 'companies', id, before, company);
     ok(res, company);
   })
 );

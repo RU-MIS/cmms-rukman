@@ -38,6 +38,7 @@ import excelRoutes from './modules/excel/excel.routes';
 import auditLogRoutes from './modules/audit/audit.routes';
 import settingsRoutes from './modules/settings/settings.routes';
 import backupRoutes from './modules/backup/backup.routes';
+import gstRoutes from './modules/gst/gst.routes';
 
 const app = express();
 
@@ -98,6 +99,7 @@ app.use('/api/excel', excelRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/backup', backupRoutes);
+app.use('/api/gst', gstRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

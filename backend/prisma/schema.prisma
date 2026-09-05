@@ -12,22 +12,28 @@ datasource db {
 // ============================================================
 
 model Company {
-  id                 Int      @id @default(autoincrement())
-  name               String
-  legalName          String?
-  tradeName          String?
-  gstin              String?
-  pan                String?
-  businessType       String?
-  address            String?
-  state              String?
-  district           String?
-  pincode            String?
-  financialYearStart Int      @default(4)
-  currency           String   @default("INR")
-  active             Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                       Int       @id @default(autoincrement())
+  name                     String
+  legalName                String?
+  tradeName                String?
+  gstin                    String?
+  pan                      String?
+  businessType             String? // "Business Constitution" — proprietorship, partnership, pvt ltd, etc.
+  address                  String?
+  state                    String?
+  district                 String?
+  pincode                  String?
+  // GST registration profile — entered manually today; the same fields a
+  // future GST lookup API call would auto-fill once one is connected.
+  registrationStatus       String?
+  registrationDate         DateTime?
+  principalPlaceOfBusiness String?
+  natureOfBusiness         String?
+  financialYearStart       Int       @default(4)
+  currency                 String    @default("INR")
+  active                   Boolean   @default(true)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   memberships CompanyUser[]
   roles       Role[]

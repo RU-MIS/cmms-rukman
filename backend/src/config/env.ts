@@ -30,4 +30,12 @@ export const env = {
     password: process.env.SMTP_PASSWORD || '',
     from: process.env.EMAIL_FROM || 'BusinessFlow ERP <no-reply@example.com>',
   },
+  // GST lookup provider — optional. Unset until a plan is purchased; the
+  // provider name is a free-text label only, kept deliberately generic so
+  // switching vendors later never requires touching frontend code.
+  gst: {
+    apiKey: process.env.GST_API_KEY || '',
+    apiBaseUrl: process.env.GST_API_BASE_URL || '',
+    provider: process.env.GST_API_PROVIDER || '',
+  },
 };

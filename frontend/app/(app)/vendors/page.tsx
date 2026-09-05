@@ -13,6 +13,7 @@ import { DataTable, Column } from '@/components/ui/DataTable';
 import { Pagination } from '@/components/ui/Pagination';
 import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
+import { GstinInput } from '@/components/forms/GstinInput';
 import { formatCurrency } from '@/lib/utils';
 
 interface Vendor {
@@ -119,7 +120,7 @@ export default function VendorsPage() {
           <div><label className="label">City</label><input className="input" value={form.city ?? ''} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
           <div><label className="label">State</label><input className="input" value={form.state ?? ''} onChange={(e) => setForm({ ...form, state: e.target.value })} /></div>
           <div><label className="label">Pincode</label><input className="input" value={form.pincode ?? ''} onChange={(e) => setForm({ ...form, pincode: e.target.value })} /></div>
-          <div><label className="label">GSTIN</label><input className="input" value={form.gstin ?? ''} onChange={(e) => setForm({ ...form, gstin: e.target.value })} /></div>
+          <div className="col-span-2"><GstinInput value={form.gstin} onChange={(v) => setForm({ ...form, gstin: v })} /></div>
           <div><label className="label">Opening Balance</label><input type="number" step="0.01" className="input" value={form.openingBalance} onChange={(e) => setForm({ ...form, openingBalance: e.target.value })} /></div>
           <div><label className="label">Payment Terms</label><input className="input" value={form.paymentTerms ?? ''} onChange={(e) => setForm({ ...form, paymentTerms: e.target.value })} /></div>
           <div className="col-span-2"><label className="label">Notes</label><textarea className="input" rows={2} value={form.notes ?? ''} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>

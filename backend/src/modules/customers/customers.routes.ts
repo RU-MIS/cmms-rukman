@@ -8,6 +8,7 @@ import { requireAuth } from '../../middleware/auth';
 import { requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { writeAudit } from '../../middleware/audit';
+import { gstinValidator } from '../../utils/gstin';
 
 const router = Router();
 router.use(requireAuth);
@@ -65,6 +66,7 @@ const customerValidators = [
   body('mobile').optional({ values: 'falsy' }).isString(),
   body('openingBalance').optional().isNumeric(),
   body('creditLimit').optional().isNumeric(),
+  gstinValidator,
 ];
 
 router.post(

@@ -9,6 +9,7 @@ import { body } from 'express-validator';
 import { upload } from '../../middleware/upload';
 import { prisma } from '../../config/prisma';
 import { getSettings } from './settings.service';
+import { gstinValidator } from '../../utils/gstin';
 
 const PDF_FONTS = ['Helvetica', 'Times-Roman', 'Courier'];
 
@@ -26,7 +27,7 @@ router.get(
 router.put(
   '/',
   requirePermission('settings', 'edit'),
-  [body('pdfScale').optional({ values: 'null' }).isInt({ min: 50, max: 150 })],
+  [body('pdfScale').optional({ values: 'null' }).isInt({ min: 50, max: 150 }), gstinValidator],
   validate,
   asyncHandler(async (req, res) => {
     const before = await getSettings(req.user!.companyId);
