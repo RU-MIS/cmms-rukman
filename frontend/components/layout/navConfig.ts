@@ -4,7 +4,7 @@ import {
   ClipboardList, PackageCheck, ArrowLeftRight, ArrowDownToLine, ArrowUpFromLine,
   SlidersHorizontal, AlertTriangle, Factory, ListChecks, Wallet,
   Receipt, HandCoins, Scale, FileText, Mail, MailCheck, Settings2,
-  ShieldCheck, KeyRound, History, DatabaseBackup, LogOut, Landmark,
+  ShieldCheck, KeyRound, History, DatabaseBackup, LogOut, Landmark, Building2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -118,6 +118,7 @@ export const NAV: NavGroup[] = [
   {
     label: 'Administration',
     items: [
+      { label: 'Companies', href: '/companies', icon: Building2 },
       { label: 'Users', href: '/admin/users', icon: Users },
       { label: 'Roles & Permissions', href: '/admin/roles', icon: ShieldCheck },
       { label: 'Audit Logs', href: '/admin/audit-logs', icon: History },

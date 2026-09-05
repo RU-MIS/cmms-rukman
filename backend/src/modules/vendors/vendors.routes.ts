@@ -74,6 +74,7 @@ router.post(
     const code = req.body.code || (await generateVendorCode());
     const vendor = await prisma.vendor.create({
       data: {
+        companyId: req.user!.companyId,
         code,
         name: req.body.name,
         companyName: req.body.companyName,

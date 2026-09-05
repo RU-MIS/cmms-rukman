@@ -26,7 +26,7 @@ router.post(
   [body('name').notEmpty()],
   validate,
   asyncHandler(async (req, res) => {
-    const category = await prisma.productCategory.create({ data: { name: req.body.name } });
+    const category = await prisma.productCategory.create({ data: { companyId: req.user!.companyId, name: req.body.name } });
     await writeAudit(req, 'CREATE', 'product_categories', category.id, undefined, category);
     created(res, category);
   })

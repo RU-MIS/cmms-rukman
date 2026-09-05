@@ -13,7 +13,7 @@ export function requirePermission(module: string, action: string) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       if (!req.user) throw new ApiError(401, 'Not authenticated');
-      if (req.user.roleName === ADMIN_ROLE) return next();
+      if (req.user.isSuperAdmin || req.user.roleName === ADMIN_ROLE) return next();
 
       const grant = await prisma.rolePermission.findFirst({
         where: {
@@ -29,4 +29,11 @@ export function requirePermission(module: string, action: string) {
       next(err);
     }
   };
+}
+
+/** Gates platform-level endpoints (cross-company): manage companies, central config. */
+export function requireSuperAdmin(req: Request, _res: Response, next: NextFunction) {
+  if (!req.user) return next(new ApiError(401, 'Not authenticated'));
+  if (!req.user.isSuperAdmin) return next(new ApiError(403, 'Super admin access required'));
+  next();
 }

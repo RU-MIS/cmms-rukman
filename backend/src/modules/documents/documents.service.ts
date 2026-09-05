@@ -27,8 +27,8 @@ function pct(part: unknown, whole: unknown): string {
   return ((Number(part) / w) * 100).toFixed(2);
 }
 
-export async function generateDocument(type: DocumentType, id: number): Promise<GeneratedDocument> {
-  const brand = await getPdfBrand();
+export async function generateDocument(type: DocumentType, id: number, companyId: number): Promise<GeneratedDocument> {
+  const brand = await getPdfBrand(companyId);
   const settings = brand.settings;
 
   switch (type) {

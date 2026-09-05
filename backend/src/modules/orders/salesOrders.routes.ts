@@ -100,7 +100,7 @@ router.post(
   [body('customerId').isInt(), body('items').isArray({ min: 1 })],
   validate,
   asyncHandler(async (req, res) => {
-    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    const settings = await prisma.settings.findUnique({ where: { companyId: req.user!.companyId } });
     const items: SalesOrderItemInput[] = req.body.items;
     const overallDiscount = D(req.body.discount ?? 0);
 
@@ -124,9 +124,10 @@ router.post(
     const grandTotal = subtotal.minus(overallDiscount).plus(taxTotal);
 
     const order = await prisma.$transaction(async (tx) => {
-      const orderNo = await nextDocNumber(tx, settings?.soPrefix || 'SO');
+      const orderNo = await nextDocNumber(tx, req.user!.companyId, settings?.soPrefix || 'SO');
       return tx.salesOrder.create({
         data: {
+          companyId: req.user!.companyId,
           orderNo,
           date: req.body.date ? new Date(req.body.date) : new Date(),
           dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,

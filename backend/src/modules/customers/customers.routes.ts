@@ -76,6 +76,7 @@ router.post(
     const code = req.body.code || (await generateCustomerCode());
     const customer = await prisma.customer.create({
       data: {
+        companyId: req.user!.companyId,
         code,
         name: req.body.name,
         companyName: req.body.companyName,

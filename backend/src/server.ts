@@ -10,6 +10,7 @@ import { env } from './config/env';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler';
 
 import authRoutes from './modules/auth/auth.routes';
+import companyRoutes from './modules/companies/companies.routes';
 import userRoutes from './modules/users/users.routes';
 import roleRoutes from './modules/roles/roles.routes';
 import customerRoutes from './modules/customers/customers.routes';
@@ -69,6 +70,7 @@ app.use('/uploads', express.static(path.join(process.cwd(), env.uploadDir)));
 app.get('/health', (_req, res) => res.json({ status: 'ok', app: env.appName }));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/companies', companyRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/customers', customerRoutes);

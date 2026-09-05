@@ -90,6 +90,7 @@ router.post(
     const product = await prisma.$transaction(async (tx) => {
       const p = await tx.product.create({
         data: {
+          companyId: req.user!.companyId,
           sku,
           name: req.body.name,
           categoryId: req.body.categoryId || null,
@@ -107,6 +108,7 @@ router.post(
       if (Number(openingStock) > 0) {
         await tx.stockTransaction.create({
           data: {
+            companyId: req.user!.companyId,
             productId: p.id,
             type: 'OPENING',
             qtyIn: openingStock,

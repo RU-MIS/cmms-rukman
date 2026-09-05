@@ -69,9 +69,10 @@ router.post(
     });
 
     const purchaseReturn = await prisma.$transaction(async (tx) => {
-      const returnNo = await nextDocNumber(tx, 'PB-RET');
+      const returnNo = await nextDocNumber(tx, req.user!.companyId, 'PB-RET');
       const pr = await tx.purchaseReturn.create({
         data: {
+          companyId: req.user!.companyId,
           returnNo,
           purchaseId: purchase.id,
           vendorId: purchase.vendorId,
@@ -88,6 +89,7 @@ router.post(
         await tx.product.update({ where: { id: item.productId }, data: { currentStock: newStock } });
         await tx.stockTransaction.create({
           data: {
+            companyId: req.user!.companyId,
             productId: item.productId,
             type: 'PURCHASE_RETURN',
             qtyOut: item.qty,

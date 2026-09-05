@@ -11,7 +11,7 @@ router.use(requireAuth);
 
 router.get(
   '/',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const todayStart = dayjs().startOf('day').toDate();
     const todayEnd = dayjs().endOf('day').toDate();
     const trendStart = dayjs().subtract(13, 'day').startOf('day').toDate();
@@ -45,7 +45,7 @@ router.get(
       prisma.purchase.findMany({ where: { date: { gte: trendStart }, status: 'CONFIRMED' }, select: { date: true, grandTotal: true } }),
       prisma.payment.findMany({ where: { date: { gte: trendStart } }, select: { date: true, amount: true, direction: true } }),
       prisma.expense.findMany({ where: { date: { gte: trendStart } } }),
-      prisma.saleItem.groupBy({ by: ['productId'], _sum: { total: true, qty: true }, orderBy: { _sum: { total: 'desc' } }, take: 5 }),
+      prisma.saleItem.groupBy({ by: ['productId'], _sum: { total: true, qty: true }, orderBy: { _sum: { total: 'desc' } }, take: 5, where: { sale: { companyId: req.user!.companyId } } }),
       prisma.sale.groupBy({ by: ['customerId'], _sum: { grandTotal: true }, orderBy: { _sum: { grandTotal: 'desc' } }, take: 5, where: { status: 'CONFIRMED' } }),
       prisma.productCategory.findMany({ include: { products: { where: { active: true } } } }),
     ]);

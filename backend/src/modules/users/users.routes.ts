@@ -13,17 +13,27 @@ import { hashPassword } from '../../utils/password';
 const router = Router();
 router.use(requireAuth);
 
-const userSelect = {
-  id: true,
-  username: true,
-  name: true,
-  email: true,
-  phone: true,
-  active: true,
-  lastLoginAt: true,
-  createdAt: true,
-  role: { select: { id: true, name: true } },
-};
+function toUserResponse(m: { user: any; role: { id: number; name: string } }) {
+  const { user, role } = m;
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    active: user.active,
+    lastLoginAt: user.lastLoginAt,
+    createdAt: user.createdAt,
+    role: { id: role.id, name: role.name },
+  };
+}
+
+/**
+ * Users are global logins (one login can belong to several companies), but
+ * "who works on this company" and "what role do they have here" is per
+ * CompanyUser membership. This module manages membership in the currently
+ * active company, not the global User record's role.
+ */
 
 router.get(
   '/',
@@ -31,51 +41,70 @@ router.get(
   asyncHandler(async (req, res) => {
     const params = getPageParams(req);
     const search = String(req.query.search ?? '').trim();
-    const where = search
-      ? {
-          OR: [
-            { name: { contains: search } },
-            { username: { contains: search } },
-            { email: { contains: search } },
-          ],
-        }
+    const userFilter = search
+      ? { user: { OR: [{ name: { contains: search } }, { username: { contains: search } }, { email: { contains: search } }] } }
       : {};
-    const [items, total] = await Promise.all([
-      prisma.user.findMany({ where, select: userSelect, orderBy: { name: 'asc' }, skip: params.skip, take: params.take }),
-      prisma.user.count({ where }),
+    const where = { companyId: req.user!.companyId, ...userFilter };
+
+    const [memberships, total] = await Promise.all([
+      prisma.companyUser.findMany({
+        where,
+        include: { user: true, role: { select: { id: true, name: true } } },
+        orderBy: { user: { name: 'asc' } },
+        skip: params.skip,
+        take: params.take,
+      }),
+      prisma.companyUser.count({ where }),
     ]);
-    ok(res, items, pageMeta(total, params));
+    ok(res, memberships.map(toUserResponse), pageMeta(total, params));
   })
 );
 
 router.post(
   '/',
   requirePermission('users', 'create'),
-  [
-    body('username').isLength({ min: 3 }),
-    body('name').notEmpty(),
-    body('password').isLength({ min: 6 }),
-    body('roleId').isInt(),
-  ],
+  [body('username').isLength({ min: 3 }), body('name').notEmpty(), body('roleId').isInt()],
   validate,
   asyncHandler(async (req, res) => {
-    const existing = await prisma.user.findUnique({ where: { username: req.body.username } });
-    if (existing) throw new ApiError(409, 'Username already taken');
+    const role = await prisma.role.findUnique({ where: { id: Number(req.body.roleId) } });
+    if (!role) throw new ApiError(400, 'Invalid role');
 
+    const existingUser = await prisma.user.findUnique({ where: { username: req.body.username } });
+    if (existingUser) {
+      const existingMembership = await prisma.companyUser.findUnique({
+        where: { companyId_userId: { companyId: req.user!.companyId, userId: existingUser.id } },
+      });
+      if (existingMembership) throw new ApiError(409, 'This user is already a member of this company');
+
+      const membership = await prisma.companyUser.create({
+        data: { companyId: req.user!.companyId, userId: existingUser.id, roleId: role.id },
+        include: { user: true, role: { select: { id: true, name: true } } },
+      });
+      await writeAudit(req, 'CREATE', 'users', existingUser.id, undefined, membership);
+      return created(res, toUserResponse(membership));
+    }
+
+    if (!req.body.password || String(req.body.password).length < 6) {
+      throw new ApiError(400, 'password must be at least 6 characters for a new user');
+    }
     const passwordHash = await hashPassword(req.body.password);
-    const user = await prisma.user.create({
-      data: {
-        username: req.body.username,
-        name: req.body.name,
-        email: req.body.email || null,
-        phone: req.body.phone,
-        passwordHash,
-        roleId: req.body.roleId,
-      },
-      select: userSelect,
+    const membership = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          username: req.body.username,
+          name: req.body.name,
+          email: req.body.email || null,
+          phone: req.body.phone,
+          passwordHash,
+        },
+      });
+      return tx.companyUser.create({
+        data: { companyId: req.user!.companyId, userId: user.id, roleId: role.id },
+        include: { user: true, role: { select: { id: true, name: true } } },
+      });
     });
-    await writeAudit(req, 'CREATE', 'users', user.id, undefined, user);
-    created(res, user);
+    await writeAudit(req, 'CREATE', 'users', membership.userId, undefined, membership);
+    created(res, toUserResponse(membership));
   })
 );
 
@@ -85,22 +114,29 @@ router.put(
   [body('name').notEmpty(), body('roleId').isInt()],
   validate,
   asyncHandler(async (req, res) => {
-    const id = Number(req.params.id);
-    const before = await prisma.user.findUnique({ where: { id } });
-    if (!before) throw new ApiError(404, 'User not found');
-
-    const user = await prisma.user.update({
-      where: { id },
-      data: {
-        name: req.body.name,
-        email: req.body.email || null,
-        phone: req.body.phone,
-        roleId: req.body.roleId,
-      },
-      select: userSelect,
+    const userId = Number(req.params.id);
+    const membership = await prisma.companyUser.findUnique({
+      where: { companyId_userId: { companyId: req.user!.companyId, userId } },
+      include: { user: true, role: true },
     });
-    await writeAudit(req, 'UPDATE', 'users', id, { name: before.name, roleId: before.roleId }, user);
-    ok(res, user);
+    if (!membership) throw new ApiError(404, 'User not found in this company');
+
+    const role = await prisma.role.findUnique({ where: { id: Number(req.body.roleId) } });
+    if (!role) throw new ApiError(400, 'Invalid role');
+
+    const [, updatedMembership] = await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { name: req.body.name, email: req.body.email || null, phone: req.body.phone },
+      }),
+      prisma.companyUser.update({
+        where: { id: membership.id },
+        data: { roleId: role.id },
+        include: { user: true, role: { select: { id: true, name: true } } },
+      }),
+    ]);
+    await writeAudit(req, 'UPDATE', 'users', userId, { name: membership.user.name, roleId: membership.roleId }, updatedMembership);
+    ok(res, toUserResponse(updatedMembership));
   })
 );
 
@@ -108,13 +144,16 @@ router.patch(
   '/:id/toggle-active',
   requirePermission('users', 'edit'),
   asyncHandler(async (req, res) => {
-    const id = Number(req.params.id);
-    if (id === req.user!.id) throw new ApiError(400, 'You cannot deactivate your own account.');
-    const existing = await prisma.user.findUnique({ where: { id } });
-    if (!existing) throw new ApiError(404, 'User not found');
-    const user = await prisma.user.update({ where: { id }, data: { active: !existing.active }, select: userSelect });
-    await writeAudit(req, 'UPDATE', 'users.status', id, { active: existing.active }, user);
-    ok(res, user);
+    const userId = Number(req.params.id);
+    if (userId === req.user!.id) throw new ApiError(400, 'You cannot deactivate your own account.');
+    const membership = await prisma.companyUser.findUnique({
+      where: { companyId_userId: { companyId: req.user!.companyId, userId } },
+      include: { user: true, role: { select: { id: true, name: true } } },
+    });
+    if (!membership) throw new ApiError(404, 'User not found in this company');
+    const user = await prisma.user.update({ where: { id: userId }, data: { active: !membership.user.active } });
+    await writeAudit(req, 'UPDATE', 'users.status', userId, { active: membership.user.active }, { active: user.active });
+    ok(res, toUserResponse({ ...membership, user }));
   })
 );
 
@@ -124,10 +163,14 @@ router.post(
   [body('newPassword').isLength({ min: 6 })],
   validate,
   asyncHandler(async (req, res) => {
-    const id = Number(req.params.id);
+    const userId = Number(req.params.id);
+    const membership = await prisma.companyUser.findUnique({
+      where: { companyId_userId: { companyId: req.user!.companyId, userId } },
+    });
+    if (!membership) throw new ApiError(404, 'User not found in this company');
     const passwordHash = await hashPassword(req.body.newPassword);
-    await prisma.user.update({ where: { id }, data: { passwordHash } });
-    await writeAudit(req, 'UPDATE', 'users.password', id);
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    await writeAudit(req, 'UPDATE', 'users.password', userId);
     ok(res, { reset: true });
   })
 );

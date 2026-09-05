@@ -40,7 +40,7 @@ router.put(
     await prisma.$transaction([
       prisma.bomItem.deleteMany({ where: { finishedProductId } }),
       prisma.bomItem.createMany({
-        data: items.map((i) => ({ finishedProductId, componentId: i.componentId, qtyPerUnit: i.qtyPerUnit })),
+        data: items.map((i) => ({ companyId: req.user!.companyId, finishedProductId, componentId: i.componentId, qtyPerUnit: i.qtyPerUnit })),
       }),
     ]);
     await writeAudit(req, 'UPDATE', 'bom', finishedProductId, undefined, { items });
@@ -100,9 +100,10 @@ router.post(
   validate,
   asyncHandler(async (req, res) => {
     const plan = await prisma.$transaction(async (tx) => {
-      const planNo = await nextDocNumber(tx, 'PRD');
+      const planNo = await nextDocNumber(tx, req.user!.companyId, 'PRD');
       return tx.productionPlan.create({
         data: {
+          companyId: req.user!.companyId,
           planNo,
           date: req.body.date ? new Date(req.body.date) : new Date(),
           dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
@@ -170,6 +171,7 @@ router.post(
         await tx.product.update({ where: { id: b.componentId }, data: { currentStock: newStock } });
         await tx.stockTransaction.create({
           data: {
+            companyId: req.user!.companyId,
             productId: b.componentId,
             type: 'PRODUCTION_CONSUME',
             qtyOut: required,
@@ -185,6 +187,7 @@ router.post(
       await tx.product.update({ where: { id: plan.productId }, data: { currentStock: newFinishedStock } });
       await tx.stockTransaction.create({
         data: {
+          companyId: req.user!.companyId,
           productId: plan.productId,
           type: 'PRODUCTION_IN',
           qtyIn: completeQty,

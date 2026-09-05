@@ -45,7 +45,7 @@ router.post(
     let error: string | undefined;
     let doc;
     try {
-      doc = await generateDocument(documentType, documentId);
+      doc = await generateDocument(documentType, documentId, req.user!.companyId);
       await sendEmailWithAttachment({
         to: recipient,
         subject: subject || doc.filename.replace('.pdf', ''),

@@ -139,7 +139,7 @@ router.post(
           const newStock = D(product.currentStock).plus(r.qty);
           await tx.product.update({ where: { id: r.productId }, data: { currentStock: newStock } });
           await tx.stockTransaction.create({
-            data: { productId: r.productId, type: 'OPENING', qtyIn: r.qty, balanceAfter: newStock, reference: 'Excel Import', createdById: req.user!.id },
+            data: { companyId: req.user!.companyId, productId: r.productId, type: 'OPENING', qtyIn: r.qty, balanceAfter: newStock, reference: 'Excel Import', createdById: req.user!.id },
           });
         });
         count++;

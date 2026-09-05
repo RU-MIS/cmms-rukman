@@ -72,10 +72,10 @@ router.post(
   validate,
   asyncHandler(async (req, res) => {
     const amount = D(req.body.amount);
-    const settings = await getSettings();
+    const settings = await getSettings(req.user!.companyId);
 
     const payment = await prisma.$transaction(async (tx) => {
-      const paymentNo = await nextDocNumber(tx, settings.paymentPrefix);
+      const paymentNo = await nextDocNumber(tx, req.user!.companyId, settings.paymentPrefix);
       const isCustomer = req.body.partyType === 'CUSTOMER';
 
       if (isCustomer && !req.body.customerId) throw new ApiError(400, 'customerId is required for a customer payment');
@@ -83,6 +83,7 @@ router.post(
 
       const created = await tx.payment.create({
         data: {
+          companyId: req.user!.companyId,
           paymentNo,
           date: req.body.date ? new Date(req.body.date) : new Date(),
           partyType: req.body.partyType,

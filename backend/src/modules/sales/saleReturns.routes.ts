@@ -69,11 +69,12 @@ router.post(
       return { productId: i.productId, qty: D(i.qty), rate: D(i.rate), total };
     });
 
-    const settings = await getSettings();
+    const settings = await getSettings(req.user!.companyId);
     const saleReturn = await prisma.$transaction(async (tx) => {
-      const returnNo = await nextDocNumber(tx, `${settings.invoicePrefix}-RET`);
+      const returnNo = await nextDocNumber(tx, req.user!.companyId, `${settings.invoicePrefix}-RET`);
       const sr = await tx.saleReturn.create({
         data: {
+          companyId: req.user!.companyId,
           returnNo,
           saleId: sale.id,
           customerId: sale.customerId,
@@ -90,6 +91,7 @@ router.post(
         await tx.product.update({ where: { id: item.productId }, data: { currentStock: newStock } });
         await tx.stockTransaction.create({
           data: {
+            companyId: req.user!.companyId,
             productId: item.productId,
             type: 'SALE_RETURN',
             qtyIn: item.qty,

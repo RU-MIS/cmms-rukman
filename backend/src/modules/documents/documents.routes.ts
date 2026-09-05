@@ -33,7 +33,7 @@ router.get(
       include: { customer: true, items: { include: { product: { include: { unit: true } } } } },
     });
     if (!sale) throw new ApiError(404, 'Sale not found');
-    const brand = await getPdfBrand();
+    const brand = await getPdfBrand(req.user!.companyId);
     const address = [sale.customer.address, sale.customer.city, sale.customer.state, sale.customer.pincode].filter(Boolean).join(', ');
     const party = {
       name: sale.customer.name,
@@ -87,7 +87,7 @@ router.get(
       include: { vendor: true, items: { include: { product: { include: { unit: true } } } } },
     });
     if (!purchase) throw new ApiError(404, 'Purchase not found');
-    const brand = await getPdfBrand();
+    const brand = await getPdfBrand(req.user!.companyId);
     const vendorAddress = [purchase.vendor.address, purchase.vendor.city, purchase.vendor.state, purchase.vendor.pincode].filter(Boolean).join(', ');
     const billTo = {
       name: purchase.vendor.name,
@@ -152,7 +152,7 @@ router.get(
       include: { customer: true, items: { include: { product: { include: { unit: true } } } } },
     });
     if (!order) throw new ApiError(404, 'Sales order not found');
-    const brand = await getPdfBrand();
+    const brand = await getPdfBrand(req.user!.companyId);
     const address = [order.customer.address, order.customer.city, order.customer.state, order.customer.pincode].filter(Boolean).join(', ');
     const party = {
       name: order.customer.name,
@@ -208,7 +208,7 @@ router.get(
       include: { vendor: true, items: { include: { product: { include: { unit: true } } } } },
     });
     if (!order) throw new ApiError(404, 'Purchase order not found');
-    const brand = await getPdfBrand();
+    const brand = await getPdfBrand(req.user!.companyId);
     const vendorAddress = [order.vendor.address, order.vendor.city, order.vendor.state, order.vendor.pincode].filter(Boolean).join(', ');
     const billTo = {
       name: order.vendor.name,
@@ -271,7 +271,7 @@ router.get(
       include: { customer: true, vendor: true, allocations: { include: { sale: true, purchase: true } } },
     });
     if (!payment) throw new ApiError(404, 'Payment not found');
-    const brand = await getPdfBrand();
+    const brand = await getPdfBrand(req.user!.companyId);
     const party = payment.customer?.name || payment.vendor?.name || '-';
     const buffer = await buildDocumentPdf({
       ...brand,
@@ -320,7 +320,7 @@ router.get(
       rows.push([dayjs(e.date).format('DD-MMM-YYYY'), e.type, e.ref, e.debit.toFixed(2), e.credit.toFixed(2), balance.toFixed(2)]);
     }
 
-    const brand = await getPdfBrand();
+    const brand = await getPdfBrand(req.user!.companyId);
     const buffer = await buildDocumentPdf({
       ...brand,
       title: 'CUSTOMER LEDGER',
@@ -366,7 +366,7 @@ router.get(
       rows.push([dayjs(e.date).format('DD-MMM-YYYY'), e.type, e.ref, e.debit.toFixed(2), e.credit.toFixed(2), balance.toFixed(2)]);
     }
 
-    const brand = await getPdfBrand();
+    const brand = await getPdfBrand(req.user!.companyId);
     const buffer = await buildDocumentPdf({
       ...brand,
       title: 'VENDOR LEDGER',
@@ -398,7 +398,7 @@ router.get(
     if (!product) throw new ApiError(404, 'Product not found');
     const txns = await prisma.stockTransaction.findMany({ where: { productId }, orderBy: { date: 'asc' } });
 
-    const brand = await getPdfBrand();
+    const brand = await getPdfBrand(req.user!.companyId);
     const buffer = await buildDocumentPdf({
       ...brand,
       title: 'STOCK LEDGER',
@@ -433,7 +433,7 @@ router.get(
     const plan = await prisma.productionPlan.findUnique({ where: { id: Number(req.params.id) }, include: { product: { include: { unit: true } } } });
     if (!plan) throw new ApiError(404, 'Production plan not found');
     const bom = await prisma.bomItem.findMany({ where: { finishedProductId: plan.productId }, include: { component: { include: { unit: true } } } });
-    const brand = await getPdfBrand();
+    const brand = await getPdfBrand(req.user!.companyId);
     const buffer = await buildDocumentPdf({
       ...brand,
       title: 'PRODUCTION PLAN',
@@ -507,7 +507,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const entity = LIST_ENTITIES[req.params.entity];
     if (!entity) throw new ApiError(400, `Unknown list document: ${req.params.entity}`);
-    const brand = await getPdfBrand();
+    const brand = await getPdfBrand(req.user!.companyId);
     const rows = await entity.fetch();
     const buffer = await buildDocumentPdf({
       ...brand,

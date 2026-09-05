@@ -101,7 +101,7 @@ router.get(
   })
 );
 
-async function applyStockChange(productId: number, delta: number, userId: number, type: 'STOCK_IN' | 'STOCK_OUT' | 'ADJUSTMENT', reference?: string, remarks?: string, warehouseId?: number, rate?: number) {
+async function applyStockChange(companyId: number, productId: number, delta: number, userId: number, type: 'STOCK_IN' | 'STOCK_OUT' | 'ADJUSTMENT', reference?: string, remarks?: string, warehouseId?: number, rate?: number) {
   return prisma.$transaction(async (tx) => {
     const product = await tx.product.findUnique({ where: { id: productId } });
     if (!product) throw new ApiError(404, 'Product not found');
@@ -110,6 +110,7 @@ async function applyStockChange(productId: number, delta: number, userId: number
     await tx.product.update({ where: { id: productId }, data: { currentStock: newStock } });
     return tx.stockTransaction.create({
       data: {
+        companyId,
         productId,
         warehouseId: warehouseId || null,
         type,
@@ -131,7 +132,7 @@ router.post(
   [body('productId').isInt(), body('qty').isFloat({ gt: 0 })],
   validate,
   asyncHandler(async (req, res) => {
-    const txn = await applyStockChange(req.body.productId, req.body.qty, req.user!.id, 'STOCK_IN', req.body.reference, req.body.remarks, req.body.warehouseId, req.body.rate);
+    const txn = await applyStockChange(req.user!.companyId, req.body.productId, req.body.qty, req.user!.id, 'STOCK_IN', req.body.reference, req.body.remarks, req.body.warehouseId, req.body.rate);
     await writeAudit(req, 'CREATE', 'inventory.stock_in', txn.id, undefined, txn);
     created(res, txn);
   })
@@ -143,7 +144,7 @@ router.post(
   [body('productId').isInt(), body('qty').isFloat({ gt: 0 })],
   validate,
   asyncHandler(async (req, res) => {
-    const txn = await applyStockChange(req.body.productId, -Math.abs(req.body.qty), req.user!.id, 'STOCK_OUT', req.body.reference, req.body.remarks, req.body.warehouseId);
+    const txn = await applyStockChange(req.user!.companyId, req.body.productId, -Math.abs(req.body.qty), req.user!.id, 'STOCK_OUT', req.body.reference, req.body.remarks, req.body.warehouseId);
     await writeAudit(req, 'CREATE', 'inventory.stock_out', txn.id, undefined, txn);
     created(res, txn);
   })
@@ -155,7 +156,7 @@ router.post(
   [body('productId').isInt(), body('qty').isFloat().custom((v) => Number(v) !== 0).withMessage('Adjustment quantity cannot be zero')],
   validate,
   asyncHandler(async (req, res) => {
-    const txn = await applyStockChange(req.body.productId, req.body.qty, req.user!.id, 'ADJUSTMENT', req.body.reference, req.body.remarks || 'Manual stock adjustment');
+    const txn = await applyStockChange(req.user!.companyId, req.body.productId, req.body.qty, req.user!.id, 'ADJUSTMENT', req.body.reference, req.body.remarks || 'Manual stock adjustment');
     await writeAudit(req, 'CREATE', 'inventory.adjustment', txn.id, undefined, txn);
     created(res, txn);
   })
@@ -174,6 +175,7 @@ router.post(
     const [out, inn] = await prisma.$transaction([
       prisma.stockTransaction.create({
         data: {
+          companyId: req.user!.companyId,
           productId: req.body.productId,
           warehouseId: req.body.fromWarehouseId,
           type: 'TRANSFER_OUT',
@@ -186,6 +188,7 @@ router.post(
       }),
       prisma.stockTransaction.create({
         data: {
+          companyId: req.user!.companyId,
           productId: req.body.productId,
           warehouseId: req.body.toWarehouseId,
           type: 'TRANSFER_IN',

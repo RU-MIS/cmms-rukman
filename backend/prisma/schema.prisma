@@ -8,18 +8,87 @@ datasource db {
 }
 
 // ============================================================
+// COMPANIES / TENANCY
+// ============================================================
+
+model Company {
+  id                 Int      @id @default(autoincrement())
+  name               String
+  legalName          String?
+  tradeName          String?
+  gstin              String?
+  pan                String?
+  businessType       String?
+  address            String?
+  state              String?
+  district           String?
+  pincode            String?
+  financialYearStart Int      @default(4)
+  currency           String   @default("INR")
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  memberships CompanyUser[]
+  roles       Role[]
+  settings    Settings?
+
+  customers         Customer[]
+  vendors           Vendor[]
+  productCategories ProductCategory[]
+  units             Unit[]
+  warehouses        Warehouse[]
+  products          Product[]
+  sales             Sale[]
+  purchases         Purchase[]
+  saleReturns       SaleReturn[]
+  purchaseReturns   PurchaseReturn[]
+  salesOrders       SalesOrder[]
+  purchaseOrders    PurchaseOrder[]
+  payments          Payment[]
+  accounts          Account[]
+  fundTransfers     FundTransfer[]
+  stockTxns         StockTransaction[]
+  bomItems          BomItem[]
+  productionPlans   ProductionPlan[]
+  expenses          Expense[]
+  emailLogs         EmailLog[]
+  auditLogs         AuditLog[]
+}
+
+model CompanyUser {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId    Int
+  role      Role     @relation(fields: [roleId], references: [id])
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, userId])
+  @@index([userId])
+}
+
+// ============================================================
 // AUTH / RBAC
 // ============================================================
 
 model Role {
   id          Int              @id @default(autoincrement())
-  name        String           @unique
+  companyId   Int
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
   description String?
   isSystem    Boolean          @default(false)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
-  users       User[]
+  memberships CompanyUser[]
   permissions RolePermission[]
+
+  @@unique([companyId, name])
 }
 
 model Permission {
@@ -41,28 +110,28 @@ model RolePermission {
 }
 
 model User {
-  id             Int       @id @default(autoincrement())
-  username       String    @unique
-  name           String
-  email          String?   @unique
-  phone          String?
-  passwordHash   String
-  roleId         Int
-  role           Role      @relation(fields: [roleId], references: [id])
-  active         Boolean   @default(true)
-  lastLoginAt    DateTime?
-  resetTokenHash String?
+  id               Int       @id @default(autoincrement())
+  username         String    @unique
+  name             String
+  email            String?   @unique
+  phone            String?
+  passwordHash     String
+  isSuperAdmin     Boolean   @default(false)
+  active           Boolean   @default(true)
+  lastLoginAt      DateTime?
+  resetTokenHash   String?
   resetTokenExpiry DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  auditLogs      AuditLog[]
-  stockTxns      StockTransaction[]
-  sales          Sale[]
-  purchases      Purchase[]
-  payments       Payment[]
+  memberships     CompanyUser[]
+  auditLogs       AuditLog[]
+  stockTxns       StockTransaction[]
+  sales           Sale[]
+  purchases       Purchase[]
+  payments        Payment[]
   productionPlans ProductionPlan[]
-  fundTransfers  FundTransfer[]
+  fundTransfers   FundTransfer[]
 }
 
 // ============================================================
@@ -70,87 +139,107 @@ model User {
 // ============================================================
 
 model Customer {
-  id            Int      @id @default(autoincrement())
-  code          String   @unique
-  name          String
-  companyName   String?
-  mobile        String?
-  altMobile     String?
-  email         String?
-  address       String?
-  city          String?
-  state         String?
-  pincode       String?
-  gstin         String?
-  openingBalance Decimal @default(0) @db.Decimal(14, 2)
-  creditLimit   Decimal  @default(0) @db.Decimal(14, 2)
-  paymentTerms  String?
-  notes         String?
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  companyId      Int
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  companyName    String?
+  mobile         String?
+  altMobile      String?
+  email          String?
+  address        String?
+  city           String?
+  state          String?
+  pincode        String?
+  gstin          String?
+  openingBalance Decimal  @default(0) @db.Decimal(14, 2)
+  creditLimit    Decimal  @default(0) @db.Decimal(14, 2)
+  paymentTerms   String?
+  notes          String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  sales         Sale[]
-  saleReturns   SaleReturn[]
-  salesOrders   SalesOrder[]
-  payments      Payment[]
+  sales       Sale[]
+  saleReturns SaleReturn[]
+  salesOrders SalesOrder[]
+  payments    Payment[]
 
-  @@index([name])
+  @@unique([companyId, code])
+  @@index([companyId, name])
 }
 
 model Vendor {
-  id            Int      @id @default(autoincrement())
-  code          String   @unique
-  name          String
-  companyName   String?
-  mobile        String?
-  altMobile     String?
-  email         String?
-  address       String?
-  city          String?
-  state         String?
-  pincode       String?
-  gstin         String?
-  openingBalance Decimal @default(0) @db.Decimal(14, 2)
-  paymentTerms  String?
-  notes         String?
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  companyId      Int
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  companyName    String?
+  mobile         String?
+  altMobile      String?
+  email          String?
+  address        String?
+  city           String?
+  state          String?
+  pincode        String?
+  gstin          String?
+  openingBalance Decimal  @default(0) @db.Decimal(14, 2)
+  paymentTerms   String?
+  notes          String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   purchases       Purchase[]
   purchaseReturns PurchaseReturn[]
   purchaseOrders  PurchaseOrder[]
   payments        Payment[]
 
-  @@index([name])
+  @@unique([companyId, code])
+  @@index([companyId, name])
 }
 
 model ProductCategory {
-  id       Int       @id @default(autoincrement())
-  name     String    @unique
-  active   Boolean   @default(true)
-  products Product[]
+  id        Int       @id @default(autoincrement())
+  companyId Int
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  active    Boolean   @default(true)
+  products  Product[]
+
+  @@unique([companyId, name])
 }
 
 model Unit {
-  id       Int       @id @default(autoincrement())
-  name     String    @unique
+  id        Int       @id @default(autoincrement())
+  companyId Int
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
   shortName String
-  products Product[]
+  products  Product[]
+
+  @@unique([companyId, name])
 }
 
 model Warehouse {
-  id       Int      @id @default(autoincrement())
-  name     String   @unique
-  address  String?
-  active   Boolean  @default(true)
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  address   String?
+  active    Boolean  @default(true)
   stockTxns StockTransaction[]
+
+  @@unique([companyId, name])
 }
 
 model Product {
   id            Int      @id @default(autoincrement())
-  sku           String   @unique
+  companyId     Int
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sku           String
   name          String
   categoryId    Int?
   category      ProductCategory? @relation(fields: [categoryId], references: [id])
@@ -168,18 +257,19 @@ model Product {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  saleItems         SaleItem[]
-  saleReturnItems   SaleReturnItem[]
-  purchaseItems     PurchaseItem[]
+  saleItems           SaleItem[]
+  saleReturnItems     SaleReturnItem[]
+  purchaseItems       PurchaseItem[]
   purchaseReturnItems PurchaseReturnItem[]
-  salesOrderItems   SalesOrderItem[]
-  purchaseOrderItems PurchaseOrderItem[]
-  stockTxns         StockTransaction[]
-  bomAsFinished     BomItem[]        @relation("FinishedProduct")
-  bomAsComponent    BomItem[]        @relation("ComponentProduct")
-  productionPlans   ProductionPlan[]
+  salesOrderItems     SalesOrderItem[]
+  purchaseOrderItems  PurchaseOrderItem[]
+  stockTxns           StockTransaction[]
+  bomAsFinished       BomItem[]        @relation("FinishedProduct")
+  bomAsComponent      BomItem[]        @relation("ComponentProduct")
+  productionPlans     ProductionPlan[]
 
-  @@index([name])
+  @@unique([companyId, sku])
+  @@index([companyId, name])
 }
 
 // ============================================================
@@ -187,8 +277,11 @@ model Product {
 // ============================================================
 
 model DocumentCounter {
-  prefix       String @id
-  nextNumber   Int    @default(1)
+  companyId  Int
+  prefix     String
+  nextNumber Int    @default(1)
+
+  @@id([companyId, prefix])
 }
 
 // ============================================================
@@ -201,32 +294,35 @@ enum SaleStatus {
 }
 
 model Sale {
-  id            Int      @id @default(autoincrement())
-  invoiceNo     String   @unique
-  date          DateTime @default(now())
-  customerId    Int
-  customer      Customer @relation(fields: [customerId], references: [id])
-  warehouseId   Int?
-  subtotal      Decimal  @db.Decimal(14, 2)
-  discount      Decimal  @default(0) @db.Decimal(14, 2)
-  taxAmount     Decimal  @default(0) @db.Decimal(14, 2)
-  grandTotal    Decimal  @db.Decimal(14, 2)
-  paidAmount    Decimal  @default(0) @db.Decimal(14, 2)
-  status        SaleStatus @default(CONFIRMED)
-  salesOrderId  Int?
-  salesOrder    SalesOrder? @relation(fields: [salesOrderId], references: [id])
-  remarks       String?
-  createdById   Int?
-  createdBy     User?    @relation(fields: [createdById], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  companyId    Int
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoiceNo    String
+  date         DateTime @default(now())
+  customerId   Int
+  customer     Customer @relation(fields: [customerId], references: [id])
+  warehouseId  Int?
+  subtotal     Decimal  @db.Decimal(14, 2)
+  discount     Decimal  @default(0) @db.Decimal(14, 2)
+  taxAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  grandTotal   Decimal  @db.Decimal(14, 2)
+  paidAmount   Decimal  @default(0) @db.Decimal(14, 2)
+  status       SaleStatus @default(CONFIRMED)
+  salesOrderId Int?
+  salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
+  remarks      String?
+  createdById  Int?
+  createdBy    User?    @relation(fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  items         SaleItem[]
-  returns       SaleReturn[]
+  items              SaleItem[]
+  returns            SaleReturn[]
   paymentAllocations PaymentAllocation[]
 
-  @@index([date])
-  @@index([customerId])
+  @@unique([companyId, invoiceNo])
+  @@index([companyId, date])
+  @@index([companyId, customerId])
 }
 
 model SaleItem {
@@ -244,18 +340,22 @@ model SaleItem {
 }
 
 model SaleReturn {
-  id         Int      @id @default(autoincrement())
-  returnNo   String   @unique
-  date       DateTime @default(now())
-  saleId     Int
-  sale       Sale     @relation(fields: [saleId], references: [id])
-  customerId Int
-  customer   Customer @relation(fields: [customerId], references: [id])
-  totalAmount Decimal @db.Decimal(14, 2)
-  remarks    String?
-  createdAt  DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  returnNo    String
+  date        DateTime @default(now())
+  saleId      Int
+  sale        Sale     @relation(fields: [saleId], references: [id])
+  customerId  Int
+  customer    Customer @relation(fields: [customerId], references: [id])
+  totalAmount Decimal  @db.Decimal(14, 2)
+  remarks     String?
+  createdAt   DateTime @default(now())
 
-  items      SaleReturnItem[]
+  items SaleReturnItem[]
+
+  @@unique([companyId, returnNo])
 }
 
 model SaleReturnItem {
@@ -280,7 +380,9 @@ enum PurchaseStatus {
 
 model Purchase {
   id              Int      @id @default(autoincrement())
-  billNo          String   @unique
+  companyId       Int
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  billNo          String
   vendorBillNo    String?
   vendorBillDate  DateTime?
   date            DateTime @default(now())
@@ -300,12 +402,13 @@ model Purchase {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  items           PurchaseItem[]
-  returns         PurchaseReturn[]
+  items              PurchaseItem[]
+  returns            PurchaseReturn[]
   paymentAllocations PaymentAllocation[]
 
-  @@index([date])
-  @@index([vendorId])
+  @@unique([companyId, billNo])
+  @@index([companyId, date])
+  @@index([companyId, vendorId])
 }
 
 model PurchaseItem {
@@ -323,18 +426,22 @@ model PurchaseItem {
 }
 
 model PurchaseReturn {
-  id         Int      @id @default(autoincrement())
-  returnNo   String   @unique
-  date       DateTime @default(now())
-  purchaseId Int
-  purchase   Purchase @relation(fields: [purchaseId], references: [id])
-  vendorId   Int
-  vendor     Vendor   @relation(fields: [vendorId], references: [id])
-  totalAmount Decimal @db.Decimal(14, 2)
-  remarks    String?
-  createdAt  DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  returnNo    String
+  date        DateTime @default(now())
+  purchaseId  Int
+  purchase    Purchase @relation(fields: [purchaseId], references: [id])
+  vendorId    Int
+  vendor      Vendor   @relation(fields: [vendorId], references: [id])
+  totalAmount Decimal  @db.Decimal(14, 2)
+  remarks     String?
+  createdAt   DateTime @default(now())
 
-  items      PurchaseReturnItem[]
+  items PurchaseReturnItem[]
+
+  @@unique([companyId, returnNo])
 }
 
 model PurchaseReturnItem {
@@ -361,7 +468,9 @@ enum OrderStatus {
 
 model SalesOrder {
   id         Int         @id @default(autoincrement())
-  orderNo    String      @unique
+  companyId  Int
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  orderNo    String
   date       DateTime    @default(now())
   dueDate    DateTime?
   customerId Int
@@ -375,30 +484,33 @@ model SalesOrder {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
-  items      SalesOrderItem[]
-  sales      Sale[]
+  items SalesOrderItem[]
+  sales Sale[]
 
-  @@index([status])
+  @@unique([companyId, orderNo])
+  @@index([companyId, status])
 }
 
 model SalesOrderItem {
-  id            Int        @id @default(autoincrement())
-  salesOrderId  Int
-  salesOrder    SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
-  productId     Int
-  product       Product    @relation(fields: [productId], references: [id])
-  orderedQty    Decimal    @db.Decimal(14, 3)
-  deliveredQty  Decimal    @default(0) @db.Decimal(14, 3)
-  rate          Decimal    @db.Decimal(14, 2)
-  discount      Decimal    @default(0) @db.Decimal(14, 2)
-  taxRate       Decimal    @default(0) @db.Decimal(5, 2)
-  taxAmount     Decimal    @default(0) @db.Decimal(14, 2)
-  total         Decimal    @default(0) @db.Decimal(14, 2)
+  id           Int        @id @default(autoincrement())
+  salesOrderId Int
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productId    Int
+  product      Product    @relation(fields: [productId], references: [id])
+  orderedQty   Decimal    @db.Decimal(14, 3)
+  deliveredQty Decimal    @default(0) @db.Decimal(14, 3)
+  rate         Decimal    @db.Decimal(14, 2)
+  discount     Decimal    @default(0) @db.Decimal(14, 2)
+  taxRate      Decimal    @default(0) @db.Decimal(5, 2)
+  taxAmount    Decimal    @default(0) @db.Decimal(14, 2)
+  total        Decimal    @default(0) @db.Decimal(14, 2)
 }
 
 model PurchaseOrder {
   id         Int         @id @default(autoincrement())
-  orderNo    String      @unique
+  companyId  Int
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  orderNo    String
   date       DateTime    @default(now())
   dueDate    DateTime?
   vendorId   Int
@@ -412,10 +524,11 @@ model PurchaseOrder {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
-  items      PurchaseOrderItem[]
-  purchases  Purchase[]
+  items     PurchaseOrderItem[]
+  purchases Purchase[]
 
-  @@index([status])
+  @@unique([companyId, orderNo])
+  @@index([companyId, status])
 }
 
 model PurchaseOrderItem {
@@ -456,42 +569,45 @@ enum PaymentDirection {
 }
 
 model Payment {
-  id           Int              @id @default(autoincrement())
-  paymentNo    String           @unique
-  date         DateTime         @default(now())
-  partyType    PartyType
-  customerId   Int?
-  customer     Customer?        @relation(fields: [customerId], references: [id])
-  vendorId     Int?
-  vendor       Vendor?          @relation(fields: [vendorId], references: [id])
-  direction    PaymentDirection
-  amount       Decimal          @db.Decimal(14, 2)
-  mode         PaymentMode
-  accountId    Int?
-  account      Account?         @relation(fields: [accountId], references: [id])
-  refNo        String?
-  remarks      String?
-  createdById  Int?
-  createdBy    User?            @relation(fields: [createdById], references: [id])
-  createdAt    DateTime         @default(now())
+  id          Int              @id @default(autoincrement())
+  companyId   Int
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  paymentNo   String
+  date        DateTime         @default(now())
+  partyType   PartyType
+  customerId  Int?
+  customer    Customer?        @relation(fields: [customerId], references: [id])
+  vendorId    Int?
+  vendor      Vendor?          @relation(fields: [vendorId], references: [id])
+  direction   PaymentDirection
+  amount      Decimal          @db.Decimal(14, 2)
+  mode        PaymentMode
+  accountId   Int?
+  account     Account?         @relation(fields: [accountId], references: [id])
+  refNo       String?
+  remarks     String?
+  createdById Int?
+  createdBy   User?            @relation(fields: [createdById], references: [id])
+  createdAt   DateTime         @default(now())
 
-  allocations  PaymentAllocation[]
+  allocations PaymentAllocation[]
 
-  @@index([date])
+  @@unique([companyId, paymentNo])
+  @@index([companyId, date])
   @@index([customerId])
   @@index([vendorId])
   @@index([accountId])
 }
 
 model PaymentAllocation {
-  id         Int      @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
   paymentId  Int
-  payment    Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payment    Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   saleId     Int?
-  sale       Sale?    @relation(fields: [saleId], references: [id])
+  sale       Sale?     @relation(fields: [saleId], references: [id])
   purchaseId Int?
   purchase   Purchase? @relation(fields: [purchaseId], references: [id])
-  amount     Decimal  @db.Decimal(14, 2)
+  amount     Decimal   @db.Decimal(14, 2)
 }
 
 // ============================================================
@@ -505,7 +621,9 @@ enum AccountType {
 
 model Account {
   id             Int         @id @default(autoincrement())
-  name           String      @unique
+  companyId      Int
+  company        Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name           String
   type           AccountType
   bankName       String?
   accountNumber  String?
@@ -514,14 +632,18 @@ model Account {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  payments       Payment[]
-  transfersOut   FundTransfer[] @relation("TransferFrom")
-  transfersIn    FundTransfer[] @relation("TransferTo")
+  payments     Payment[]
+  transfersOut FundTransfer[] @relation("TransferFrom")
+  transfersIn  FundTransfer[] @relation("TransferTo")
+
+  @@unique([companyId, name])
 }
 
 model FundTransfer {
   id            Int      @id @default(autoincrement())
-  transferNo    String   @unique
+  companyId     Int
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  transferNo    String
   date          DateTime @default(now())
   fromAccountId Int
   fromAccount   Account  @relation("TransferFrom", fields: [fromAccountId], references: [id])
@@ -533,7 +655,8 @@ model FundTransfer {
   createdBy     User?    @relation(fields: [createdById], references: [id])
   createdAt     DateTime @default(now())
 
-  @@index([date])
+  @@unique([companyId, transferNo])
+  @@index([companyId, date])
 }
 
 // ============================================================
@@ -556,25 +679,27 @@ enum StockTxnType {
 }
 
 model StockTransaction {
-  id          Int          @id @default(autoincrement())
-  date        DateTime     @default(now())
-  productId   Int
-  product     Product      @relation(fields: [productId], references: [id])
-  warehouseId Int?
-  warehouse   Warehouse?   @relation(fields: [warehouseId], references: [id])
-  type        StockTxnType
-  qtyIn       Decimal      @default(0) @db.Decimal(14, 3)
-  qtyOut      Decimal      @default(0) @db.Decimal(14, 3)
-  balanceAfter Decimal     @db.Decimal(14, 3)
-  rate        Decimal?     @db.Decimal(14, 2)
-  reference   String?
-  remarks     String?
-  createdById Int?
-  createdBy   User?        @relation(fields: [createdById], references: [id])
-  createdAt   DateTime     @default(now())
+  id           Int          @id @default(autoincrement())
+  companyId    Int
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  date         DateTime     @default(now())
+  productId    Int
+  product      Product      @relation(fields: [productId], references: [id])
+  warehouseId  Int?
+  warehouse    Warehouse?   @relation(fields: [warehouseId], references: [id])
+  type         StockTxnType
+  qtyIn        Decimal      @default(0) @db.Decimal(14, 3)
+  qtyOut       Decimal      @default(0) @db.Decimal(14, 3)
+  balanceAfter Decimal      @db.Decimal(14, 3)
+  rate         Decimal?     @db.Decimal(14, 2)
+  reference    String?
+  remarks      String?
+  createdById  Int?
+  createdBy    User?        @relation(fields: [createdById], references: [id])
+  createdAt    DateTime     @default(now())
 
-  @@index([productId, date])
-  @@index([type])
+  @@index([companyId, productId, date])
+  @@index([companyId, type])
 }
 
 // ============================================================
@@ -591,6 +716,8 @@ enum ProductionStatus {
 
 model BomItem {
   id                Int     @id @default(autoincrement())
+  companyId         Int
+  company           Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   finishedProductId Int
   finishedProduct   Product @relation("FinishedProduct", fields: [finishedProductId], references: [id])
   componentId       Int
@@ -598,23 +725,28 @@ model BomItem {
   qtyPerUnit        Decimal @db.Decimal(14, 4)
 
   @@unique([finishedProductId, componentId])
+  @@index([companyId])
 }
 
 model ProductionPlan {
-  id             Int              @id @default(autoincrement())
-  planNo         String           @unique
-  date           DateTime         @default(now())
-  dueDate        DateTime?
-  productId      Int
-  product        Product          @relation(fields: [productId], references: [id])
-  plannedQty     Decimal          @db.Decimal(14, 3)
-  completedQty   Decimal          @default(0) @db.Decimal(14, 3)
-  status         ProductionStatus @default(PLANNED)
-  remarks        String?
-  createdById    Int?
-  createdBy      User?            @relation(fields: [createdById], references: [id])
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id           Int              @id @default(autoincrement())
+  companyId    Int
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  planNo       String
+  date         DateTime         @default(now())
+  dueDate      DateTime?
+  productId    Int
+  product      Product          @relation(fields: [productId], references: [id])
+  plannedQty   Decimal          @db.Decimal(14, 3)
+  completedQty Decimal          @default(0) @db.Decimal(14, 3)
+  status       ProductionStatus @default(PLANNED)
+  remarks      String?
+  createdById  Int?
+  createdBy    User?            @relation(fields: [createdById], references: [id])
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([companyId, planNo])
 }
 
 // ============================================================
@@ -623,11 +755,15 @@ model ProductionPlan {
 
 model Expense {
   id          Int      @id @default(autoincrement())
+  companyId   Int
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   date        DateTime @default(now())
   category    String
   amount      Decimal  @db.Decimal(14, 2)
   description String?
   createdAt   DateTime @default(now())
+
+  @@index([companyId, date])
 }
 
 enum EmailStatus {
@@ -636,49 +772,56 @@ enum EmailStatus {
 }
 
 model EmailLog {
-  id          Int         @id @default(autoincrement())
-  recipient   String
-  subject     String
+  id           Int         @id @default(autoincrement())
+  companyId    Int?
+  company      Company?    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  recipient    String
+  subject      String
   documentType String
-  documentRef String?
-  status      EmailStatus
-  error       String?
-  sentAt      DateTime    @default(now())
+  documentRef  String?
+  status       EmailStatus
+  error        String?
+  sentAt       DateTime    @default(now())
+
+  @@index([companyId])
 }
 
 model AuditLog {
-  id         Int      @id @default(autoincrement())
-  userId     Int?
-  user       User?    @relation(fields: [userId], references: [id])
-  action     String // LOGIN, LOGOUT, CREATE, UPDATE, DELETE, etc.
-  module     String
-  recordId   String?
-  before     Json?
-  after      Json?
-  ipAddress  String?
-  createdAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  companyId Int?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String // LOGIN, LOGOUT, CREATE, UPDATE, DELETE, etc.
+  module    String
+  recordId  String?
+  before    Json?
+  after     Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
 
-  @@index([module])
-  @@index([createdAt])
+  @@index([companyId, module])
+  @@index([companyId, createdAt])
 }
 
 model Settings {
-  id            Int     @id @default(1)
-  businessName  String  @default("My Business")
-  logoUrl       String?
-  address       String?
-  phone         String?
-  email         String?
-  gstin         String?
-  invoicePrefix String  @default("INV")
-  poPrefix      String  @default("PO")
-  soPrefix      String  @default("SO")
-  paymentPrefix String  @default("PAY")
-  currency      String  @default("INR")
-  defaultTaxRate Decimal @default(0) @db.Decimal(5, 2)
-  pdfFooter     String?
-  pdfFont       String  @default("Helvetica")
-  pdfScale      Int     @default(100)
+  companyId       Int      @id
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  businessName    String   @default("My Business")
+  logoUrl         String?
+  address         String?
+  phone           String?
+  email           String?
+  gstin           String?
+  invoicePrefix   String   @default("INV")
+  poPrefix        String   @default("PO")
+  soPrefix        String   @default("SO")
+  paymentPrefix   String   @default("PAY")
+  currency        String   @default("INR")
+  defaultTaxRate  Decimal  @default(0) @db.Decimal(5, 2)
+  pdfFooter       String?
+  pdfFont         String   @default("Helvetica")
+  pdfScale        Int      @default(100)
   termsConditions String?
-  updatedAt     DateTime @updatedAt
+  updatedAt       DateTime @updatedAt
 }

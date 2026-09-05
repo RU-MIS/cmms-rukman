@@ -47,6 +47,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const account = await prisma.account.create({
       data: {
+        companyId: req.user!.companyId,
         name: req.body.name,
         type: req.body.type,
         bankName: req.body.bankName,
@@ -165,9 +166,10 @@ router.post(
     }
 
     const transfer = await prisma.$transaction(async (tx) => {
-      const transferNo = await nextDocNumber(tx, 'TRF');
+      const transferNo = await nextDocNumber(tx, req.user!.companyId, 'TRF');
       return tx.fundTransfer.create({
         data: {
+          companyId: req.user!.companyId,
           transferNo,
           date: req.body.date ? new Date(req.body.date) : new Date(),
           fromAccountId,

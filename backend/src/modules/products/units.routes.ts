@@ -26,7 +26,7 @@ router.post(
   [body('name').notEmpty(), body('shortName').notEmpty()],
   validate,
   asyncHandler(async (req, res) => {
-    const unit = await prisma.unit.create({ data: { name: req.body.name, shortName: req.body.shortName } });
+    const unit = await prisma.unit.create({ data: { companyId: req.user!.companyId, name: req.body.name, shortName: req.body.shortName } });
     await writeAudit(req, 'CREATE', 'units', unit.id, undefined, unit);
     created(res, unit);
   })

@@ -3,20 +3,42 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ChevronDown, LogOut, KeyRound, AlertTriangle } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, KeyRound, AlertTriangle, Building2, Plus, Check } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/authStore';
-import { api } from '@/lib/api';
+import { api, apiErrorMessage } from '@/lib/api';
 import { GlobalSearch } from './GlobalSearch';
 import Link from 'next/link';
 
 export function Header() {
   const user = useAuthStore((s) => s.user);
+  const activeCompany = useAuthStore((s) => s.activeCompany);
+  const companies = useAuthStore((s) => s.companies);
+  const setActiveCompany = useAuthStore((s) => s.setActiveCompany);
   const logout = useAuthStore((s) => s.logout);
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [companyMenuOpen, setCompanyMenuOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+  const companyMenuRef = useRef<HTMLDivElement>(null);
+
+  async function handleSwitchCompany(companyId: number) {
+    if (companyId === activeCompany?.id) return setCompanyMenuOpen(false);
+    setSwitching(true);
+    try {
+      const res = await api.post('/auth/switch-company', { companyId });
+      setActiveCompany(res.data.data.token, res.data.data.activeCompany);
+      // Full reload: react-query caches aren't keyed by company, so a hard
+      // navigation is the simplest way to guarantee no stale cross-company data.
+      window.location.href = '/dashboard';
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+      setSwitching(false);
+    }
+  }
 
   const { data: lowStock } = useQuery({
     queryKey: ['low-stock-notifications'],
@@ -28,6 +50,7 @@ export function Header() {
     function onClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+      if (companyMenuRef.current && !companyMenuRef.current.contains(e.target as Node)) setCompanyMenuOpen(false);
     }
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
@@ -49,6 +72,43 @@ export function Header() {
       <div className="flex items-center gap-3 shrink-0">
         <div className="hidden md:block">
           <GlobalSearch />
+        </div>
+
+        <div className="relative" ref={companyMenuRef}>
+          <button
+            onClick={() => setCompanyMenuOpen((v) => !v)}
+            disabled={switching}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium text-ink hover:bg-brand-50 border border-card-border"
+          >
+            <Building2 size={14} className="text-brand-600" />
+            <span className="hidden sm:inline max-w-[140px] truncate">{activeCompany?.name ?? 'Select company'}</span>
+            <ChevronDown size={13} className="text-ink-muted" />
+          </button>
+          {companyMenuOpen && (
+            <div className="absolute right-0 mt-1 w-64 card p-1 z-40">
+              <p className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Your companies</p>
+              {companies.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => handleSwitchCompany(c.id)}
+                  className="flex items-center gap-2 w-full px-2.5 py-2 text-sm rounded hover:bg-brand-50 text-ink text-left"
+                >
+                  <span className="flex-1 truncate">{c.name}</span>
+                  <span className="text-[10px] text-ink-faint">{c.role}</span>
+                  {c.id === activeCompany?.id && <Check size={13} className="text-brand-600 shrink-0" />}
+                </button>
+              ))}
+              <div className="border-t border-card-border mt-1 pt-1">
+                <Link
+                  href="/companies"
+                  onClick={() => setCompanyMenuOpen(false)}
+                  className="flex items-center gap-2 px-2.5 py-2 text-sm rounded hover:bg-brand-50 text-brand-600"
+                >
+                  <Plus size={14} /> Create New Company
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="relative" ref={notifRef}>
@@ -92,7 +152,7 @@ export function Header() {
             </div>
             <div className="hidden sm:block text-left">
               <p className="text-xs font-medium text-ink leading-tight">{user?.name}</p>
-              <p className="text-[10px] text-ink-muted leading-tight">{user?.role}</p>
+              <p className="text-[10px] text-ink-muted leading-tight">{activeCompany?.role}</p>
             </div>
             <ChevronDown size={14} className="text-ink-muted" />
           </button>

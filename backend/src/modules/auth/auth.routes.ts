@@ -10,6 +10,7 @@ import { signToken, requireAuth } from '../../middleware/auth';
 import { writeAudit } from '../../middleware/audit';
 import { validate } from '../../middleware/validate';
 import { sendPlainEmail } from '../email/email.service';
+import { runWithCompany } from '../../lib/tenantContext';
 
 const router = Router();
 
@@ -25,25 +26,60 @@ router.post(
   validate,
   asyncHandler(async (req, res) => {
     const { username, password } = req.body;
-    const user = await prisma.user.findUnique({
-      where: { username },
-      include: { role: true },
-    });
+    const user = await prisma.user.findUnique({ where: { username } });
     if (!user || !user.active) throw new ApiError(401, 'Invalid username or password');
 
     const match = await comparePassword(password, user.passwordHash);
     if (!match) throw new ApiError(401, 'Invalid username or password');
 
-    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-    const token = signToken(user.id);
+    const memberships = await prisma.companyUser.findMany({
+      where: { userId: user.id },
+      include: { company: true, role: true },
+      orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+    });
+    const activeMemberships = memberships.filter((m) => m.company.active);
+    if (activeMemberships.length === 0) throw new ApiError(403, 'This account is not linked to any company.');
+    const active = activeMemberships[0];
 
-    req.user = { id: user.id, username: user.username, name: user.name, roleId: user.roleId, roleName: user.role.name };
-    await writeAudit(req, 'LOGIN', 'auth', user.id);
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    const token = signToken(user.id, active.companyId);
+
+    req.user = {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      companyId: active.companyId,
+      roleId: active.roleId,
+      roleName: active.role.name,
+      isSuperAdmin: user.isSuperAdmin,
+    };
+    await runWithCompany(active.companyId, () => writeAudit(req, 'LOGIN', 'auth', user.id));
 
     ok(res, {
       token,
-      user: { id: user.id, username: user.username, name: user.name, email: user.email, role: user.role.name },
+      user: { id: user.id, username: user.username, name: user.name, email: user.email, isSuperAdmin: user.isSuperAdmin },
+      activeCompany: { id: active.companyId, name: active.company.name, role: active.role.name },
+      companies: activeMemberships.map((m) => ({ id: m.companyId, name: m.company.name, role: m.role.name })),
     });
+  })
+);
+
+router.post(
+  '/switch-company',
+  requireAuth,
+  [body('companyId').isInt()],
+  validate,
+  asyncHandler(async (req, res) => {
+    const companyId = Number(req.body.companyId);
+    const membership = await prisma.companyUser.findUnique({
+      where: { companyId_userId: { companyId, userId: req.user!.id } },
+      include: { company: true, role: true },
+    });
+    if (!membership || !membership.company.active) throw new ApiError(403, 'You do not have access to that company.');
+
+    const token = signToken(req.user!.id, companyId);
+    await runWithCompany(companyId, () => writeAudit(req, 'SWITCH_COMPANY', 'auth', req.user!.id));
+    ok(res, { token, activeCompany: { id: companyId, name: membership.company.name, role: membership.role.name } });
   })
 );
 
@@ -62,9 +98,19 @@ router.get(
   asyncHandler(async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      select: { id: true, username: true, name: true, email: true, phone: true, role: { select: { name: true } } },
+      select: { id: true, username: true, name: true, email: true, phone: true, isSuperAdmin: true },
     });
-    ok(res, user);
+    const memberships = await prisma.companyUser.findMany({
+      where: { userId: req.user!.id },
+      include: { company: true, role: true },
+      orderBy: [{ isDefault: 'desc' }, { id: 'asc' }],
+    });
+    ok(res, {
+      ...user,
+      role: req.user!.roleName,
+      activeCompany: { id: req.user!.companyId, name: memberships.find((m) => m.companyId === req.user!.companyId)?.company.name, role: req.user!.roleName },
+      companies: memberships.filter((m) => m.company.active).map((m) => ({ id: m.companyId, name: m.company.name, role: m.role.name })),
+    });
   })
 );
 

@@ -18,8 +18,8 @@ router.use(requireAuth);
 router.get(
   '/',
   requirePermission('settings', 'view'),
-  asyncHandler(async (_req, res) => {
-    ok(res, await getSettings());
+  asyncHandler(async (req, res) => {
+    ok(res, await getSettings(req.user!.companyId));
   })
 );
 
@@ -29,9 +29,9 @@ router.put(
   [body('pdfScale').optional({ values: 'null' }).isInt({ min: 50, max: 150 })],
   validate,
   asyncHandler(async (req, res) => {
-    const before = await getSettings();
+    const before = await getSettings(req.user!.companyId);
     const settings = await prisma.settings.update({
-      where: { id: 1 },
+      where: { companyId: req.user!.companyId },
       data: {
         businessName: req.body.businessName,
         logoUrl: req.body.logoUrl,
@@ -51,7 +51,7 @@ router.put(
         termsConditions: req.body.termsConditions,
       },
     });
-    await writeAudit(req, 'UPDATE', 'settings', 1, before, settings);
+    await writeAudit(req, 'UPDATE', 'settings', req.user!.companyId, before, settings);
     ok(res, settings);
   })
 );
@@ -62,10 +62,10 @@ router.post(
   upload.single('logo'),
   asyncHandler(async (req, res) => {
     if (!req.file) throw new ApiError(400, 'No file uploaded');
-    const before = await getSettings();
+    const before = await getSettings(req.user!.companyId);
     const logoUrl = `/uploads/${req.file.filename}`;
-    const settings = await prisma.settings.update({ where: { id: 1 }, data: { logoUrl } });
-    await writeAudit(req, 'UPDATE', 'settings.logo', 1, { logoUrl: before.logoUrl }, { logoUrl });
+    const settings = await prisma.settings.update({ where: { companyId: req.user!.companyId }, data: { logoUrl } });
+    await writeAudit(req, 'UPDATE', 'settings.logo', req.user!.companyId, { logoUrl: before.logoUrl }, { logoUrl });
     ok(res, settings);
   })
 );

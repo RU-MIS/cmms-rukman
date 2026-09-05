@@ -26,7 +26,7 @@ router.post(
   [body('name').notEmpty()],
   validate,
   asyncHandler(async (req, res) => {
-    const warehouse = await prisma.warehouse.create({ data: { name: req.body.name, address: req.body.address } });
+    const warehouse = await prisma.warehouse.create({ data: { companyId: req.user!.companyId, name: req.body.name, address: req.body.address } });
     await writeAudit(req, 'CREATE', 'warehouses', warehouse.id, undefined, warehouse);
     created(res, warehouse);
   })

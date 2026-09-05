@@ -17,7 +17,7 @@ router.get(
   asyncHandler(async (_req, res) => {
     const roles = await prisma.role.findMany({
       orderBy: { name: 'asc' },
-      include: { permissions: { include: { permission: true } }, _count: { select: { users: true } } },
+      include: { permissions: { include: { permission: true } }, _count: { select: { memberships: true } } },
     });
     ok(res, roles);
   })
@@ -38,7 +38,7 @@ router.post(
   [body('name').notEmpty()],
   validate,
   asyncHandler(async (req, res) => {
-    const role = await prisma.role.create({ data: { name: req.body.name, description: req.body.description } });
+    const role = await prisma.role.create({ data: { companyId: req.user!.companyId, name: req.body.name, description: req.body.description } });
     await writeAudit(req, 'CREATE', 'roles', role.id, undefined, role);
     created(res, role);
   })
@@ -86,10 +86,10 @@ router.delete(
   requirePermission('roles', 'delete'),
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
-    const role = await prisma.role.findUnique({ where: { id }, include: { _count: { select: { users: true } } } });
+    const role = await prisma.role.findUnique({ where: { id }, include: { _count: { select: { memberships: true } } } });
     if (!role) throw new ApiError(404, 'Role not found');
     if (role.isSystem) throw new ApiError(400, 'System roles cannot be deleted.');
-    if (role._count.users > 0) throw new ApiError(400, 'Cannot delete a role that has users assigned.');
+    if (role._count.memberships > 0) throw new ApiError(400, 'Cannot delete a role that has users assigned.');
     await prisma.role.delete({ where: { id } });
     await writeAudit(req, 'DELETE', 'roles', id);
     ok(res, { deleted: true });

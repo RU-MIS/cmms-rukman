@@ -106,12 +106,13 @@ router.post(
     const paidAmount = D(req.body.paidAmount ?? 0);
     if (paidAmount.gt(grandTotal)) throw new ApiError(400, 'Paid amount cannot exceed the grand total');
 
-    const settings = await getSettings();
+    const settings = await getSettings(req.user!.companyId);
 
     const purchase = await prisma.$transaction(async (tx) => {
-      const billNo = await nextDocNumber(tx, 'PB');
+      const billNo = await nextDocNumber(tx, req.user!.companyId, 'PB');
       const createdPurchase = await tx.purchase.create({
         data: {
+          companyId: req.user!.companyId,
           billNo,
           vendorBillNo: req.body.vendorBillNo,
           vendorBillDate: req.body.vendorBillDate ? new Date(req.body.vendorBillDate) : null,
@@ -136,6 +137,7 @@ router.post(
         await tx.product.update({ where: { id: item.productId }, data: { currentStock: newStock, purchaseRate: item.rate } });
         await tx.stockTransaction.create({
           data: {
+            companyId: req.user!.companyId,
             productId: item.productId,
             type: 'PURCHASE',
             qtyIn: item.qty,
@@ -159,9 +161,10 @@ router.post(
       }
 
       if (paidAmount.gt(0)) {
-        const paymentNo = await nextDocNumber(tx, settings.paymentPrefix);
+        const paymentNo = await nextDocNumber(tx, req.user!.companyId, settings.paymentPrefix);
         const payment = await tx.payment.create({
           data: {
+            companyId: req.user!.companyId,
             paymentNo,
             partyType: 'VENDOR',
             vendorId: req.body.vendorId,
@@ -202,6 +205,7 @@ router.post(
         await tx.product.update({ where: { id: item.productId }, data: { currentStock: newStock } });
         await tx.stockTransaction.create({
           data: {
+            companyId: req.user!.companyId,
             productId: item.productId,
             type: 'ADJUSTMENT',
             qtyOut: item.qty,
