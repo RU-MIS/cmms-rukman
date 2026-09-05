@@ -1,10 +1,18 @@
 # BusinessFlow ERP
 
-A complete, self-hosted mini ERP for small manufacturers, traders, distributors
-and retail/wholesale businesses: customers, vendors, products, sales,
-purchases, inventory, sales/purchase orders, payments & outstanding,
+A complete, self-hosted, multi-company ERP for small manufacturers, traders,
+distributors and retail/wholesale businesses: customers, vendors, products,
+sales, purchases, inventory, sales/purchase orders, payments & outstanding,
 production planning, reports, PDF documents, email, Excel import/export,
 users/roles/permissions, and an audit log.
+
+One deployment can host any number of independent company workspaces (each
+with fully isolated data — its own customers, stock, invoices, invoice
+numbering, GST profile and settings) that a single login can create and
+switch between from the header. GSTIN fields are validated everywhere they
+appear; a "Fetch GST Details" placeholder is ready for a paid GST lookup
+API to be plugged in later without any redesign — see `GST_API_*` in
+`.env.example`.
 
 This README assumes **zero coding experience**. Follow it top to bottom.
 
@@ -63,6 +71,10 @@ Open `backend/.env` in any text editor and fill in:
 - `JWT_SECRET` — any long random string (used to secure logins)
 - `SMTP_*` — only needed if you want to email PDFs (Gmail works with an
   "App Password": https://myaccount.google.com/apppasswords)
+- `GST_API_*` — optional, leave blank until you subscribe to a GST
+  verification API. Set once here and every company benefits — the
+  "Fetch GST Details" button otherwise shows a clear "not configured" state
+  instead of failing or fetching fake data.
 
 ```bash
 cp frontend/.env.example frontend/.env.local
@@ -107,6 +119,12 @@ Open http://localhost:3000 in your browser and log in.
 
 ## 5. Everyday use
 
+- **Companies**: the seed script creates one demo company (with the default
+  `admin` login as its Admin). For a real customer, either rename this
+  company (Companies → the pencil icon → GST profile) or create a fresh one
+  from Companies → "Create New Company" — optionally cloning another
+  company's settings/ledgers via "Make a Copy" (never its transactions).
+  Switch between companies any time from the dropdown in the top header.
 - **Master Data**: add your Customers, Vendors, Products, Categories, Units
   and Warehouses first.
 - **Sales / Purchases**: record every sale/purchase here — stock and
