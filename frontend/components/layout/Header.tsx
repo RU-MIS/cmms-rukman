@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ChevronDown, LogOut, KeyRound, AlertTriangle, Building2, Plus, Check } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, KeyRound, AlertTriangle, Building2, Plus, Check, Menu } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store/authStore';
 import { api, apiErrorMessage } from '@/lib/api';
 import { GlobalSearch } from './GlobalSearch';
 import Link from 'next/link';
 
-export function Header() {
+export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
   const companies = useAuthStore((s) => s.companies);
@@ -61,16 +61,22 @@ export function Header() {
   const alertCount = lowStock?.length ?? 0;
 
   return (
-    <header className="h-14 sticky top-0 z-30 bg-white border-b border-card-border flex items-center justify-between px-4 gap-4">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-ink truncate">
-          {greeting}, {user?.name ?? ''}
-        </p>
-        <p className="text-[11px] text-ink-muted -mt-0.5">Here's what's happening with your business today.</p>
+    <header className="h-14 sticky top-0 z-30 bg-white border-b border-card-border flex items-center justify-between px-3 md:px-4 gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <button onClick={onMenuClick} className="lg:hidden -ml-1 w-9 h-9 rounded-full flex items-center justify-center text-ink-muted hover:bg-brand-50 shrink-0">
+          <Menu size={19} />
+        </button>
+        <span className="lg:hidden font-semibold text-sm text-ink shrink-0">BusinessFlow ERP</span>
+        <div className="min-w-0 hidden lg:block">
+          <p className="text-sm font-medium text-ink truncate">
+            {greeting}, {user?.name ?? ''}
+          </p>
+          <p className="text-[11px] text-ink-muted -mt-0.5 truncate">Here's what's happening with your business today.</p>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 shrink-0">
-        <div className="hidden md:block">
+        <div className="hidden lg:block">
           <GlobalSearch />
         </div>
 

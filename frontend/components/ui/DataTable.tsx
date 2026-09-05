@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 
 export interface Column<T> {
   key: string;
@@ -60,7 +61,7 @@ export function DataTable<T extends Record<string, any>>({
                 <tr
                   key={String(row[keyField])}
                   onClick={() => onRowClick?.(row)}
-                  className={onRowClick ? 'cursor-pointer hover:bg-brand-50/50' : ''}
+                  className={cn('transition-colors', onRowClick ? 'cursor-pointer hover:bg-brand-50/50' : 'hover:bg-app-bg/70')}
                 >
                   {columns.map((col) => (
                     <td key={col.key} className={`td ${ALIGN_CLASS[col.align ?? 'left']} ${col.className ?? ''}`}>
