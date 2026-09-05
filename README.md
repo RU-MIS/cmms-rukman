@@ -183,6 +183,48 @@ instructions use Oracle Cloud's Always Free tier as a concrete example,
 but the backend has no cloud-specific code — the same steps work on any
 Ubuntu VPS).
 
+**Full deployment runbook, in order** — every step below is documented
+somewhere in this README; this is the checklist to follow top to bottom
+for a first deployment (jump to the linked section for the exact
+commands):
+
+1. **Server requirements** — a small VM is enough: 1 vCPU / 1–2 GB RAM
+   (e.g. Oracle Cloud's Always Free Ampere A1 tier), 20+ GB disk, Ubuntu
+   22.04 LTS or newer. MySQL can run on the same VM or as a separate
+   managed database (see step 3).
+2. **Node.js and package installation** — Node.js LTS (18 or 20) and the
+   MySQL client tools (`mysql`, `mysqldump`) on the VM — see step 2 just
+   below in this section.
+3. **MySQL setup** — either a MySQL server on the same VM, or a managed
+   instance (e.g. Oracle MySQL HeatWave Always Free) — see step 1 below
+   and §1 "Install prerequisites" above.
+4. **Environment variables** — `backend/.env` with production values;
+   `NEXT_PUBLIC_API_URL` set in the frontend host's build settings — see
+   §2 "Configure environment variables" and §9.3 "Production environment
+   validation" above.
+5. **Prisma migration** — `npm run prisma:deploy` — see step 3 below.
+6. **Seeding or clean initialization** — `npm run seed` on first deploy
+   only, then retire the demo company before a real buyer logs in — see
+   "Setting up the buyer's first real company" under §9.2 above.
+7. **Backend startup** — PM2 (`pm2 start dist/src/server.js --name
+   erp-api`) — see step 4 below.
+8. **Frontend deployment** — Cloudflare Pages static export — see the
+   "Frontend: Cloudflare Pages" part below.
+9. **HTTPS / reverse proxy** — Nginx + Certbot in front of the backend —
+   see step 5 below.
+10. **CORS** — `CORS_ORIGIN` set to the exact frontend URL — see the last
+    step of "Frontend: Cloudflare Pages" below and §9.3 above.
+11. **Health check** — `GET /health` — see §9.4 "Backup and recovery"
+    above.
+12. **Logs** — `pm2 logs erp-api` — see §9.4 above.
+13. **Restart procedure** — `pm2 restart erp-api` — see §9.4 above.
+14. **Backup** — `npm run backup` — see §9.4 above.
+15. **Restore** — `npm run restore -- <file>` — see §9.4 above.
+16. **Rollback** — `git checkout <previous commit>` + rebuild + redeploy —
+    see §9.4 above.
+17. **Updating the application** — see "Deploying an update" under §9.4
+    above.
+
 ### Backend: Node/Express on a VM
 
 1. Provision a VM (e.g. an Oracle Cloud "Always Free" Ampere A1 compute
@@ -208,19 +250,21 @@ Ubuntu VPS).
    npm run prisma:deploy  # applies migrations
    npm run seed           # first deploy only
    ```
-4. Start it with PM2 and have it survive reboots:
+4. Start it with PM2 and have it survive reboots — a ready-made process
+   definition is included at `backend/ecosystem.config.js`:
    ```bash
-   pm2 start dist/src/server.js --name erp-api
+   pm2 start ecosystem.config.js
    pm2 save
    pm2 startup   # follow the printed instructions once, so PM2 itself survives a reboot
    ```
-5. Put Nginx in front as a reverse proxy to `localhost:4000`, and use
-   `certbot` for a free HTTPS certificate (Let's Encrypt) once you've
-   pointed a domain's DNS at the VM's public IP. Keep `UPLOAD_DIR` (logos
-   etc.) as an absolute path outside your deploy folder if you plan to
-   redeploy by replacing the whole directory, so uploads survive a
-   redeploy; a plain `git pull`-in-place setup can leave it as the default
-   relative `uploads/`.
+5. Put Nginx in front as a reverse proxy to `localhost:4000` — a starting
+   template is included at `backend/deploy/nginx.erp-api.conf.example`
+   (copy it, replace the domain, then run `certbot --nginx` for a free
+   HTTPS certificate from Let's Encrypt once you've pointed a domain's DNS
+   at the VM's public IP). Keep `UPLOAD_DIR` (logos etc.) as an absolute
+   path outside your deploy folder if you plan to redeploy by replacing the
+   whole directory, so uploads survive a redeploy; a plain `git
+   pull`-in-place setup can leave it as the default relative `uploads/`.
 
 ### Frontend: Cloudflare Pages
 
@@ -306,6 +350,36 @@ npm run cleanup:demo -- --confirm --delete  # permanently deletes it and all its
   so you can decide — leave it for the buyer's first login (it already
   forces a password change) or deactivate it once real users exist.
 
+#### Setting up the buyer's first real company
+
+**Recommended procedure** — do this rather than renaming the demo company
+in place, because renaming it does not remove its demo customers, vendors,
+products, or the sample sale/purchase it was seeded with:
+
+1. Log in as `admin` / `Admin@1234`. You're forced straight to Change
+   Password before anything else works — set a real password now.
+2. Go to **Companies → Create New Company** and enter the buyer's real
+   business name/GSTIN/address. This is a brand-new, completely blank
+   workspace — no demo customers, products, or transactions carry over.
+3. Switch into the new company from the header dropdown.
+4. (Recommended) Under **Administration → Users**, create a real named
+   login for the business owner/admin (their own name, a real username,
+   a temporary password) instead of continuing to use the generic `admin`
+   login day to day — it will also be forced to change its password on
+   first login.
+5. From the server, retire the original demo company:
+   ```bash
+   cd backend
+   npm run cleanup:demo -- --confirm          # recommended: deactivate (safe, reversible)
+   # or, for a fully clean database with no demo remnants at all:
+   npm run cleanup:demo -- --confirm --delete
+   ```
+
+Only rename the demo company in place (Companies → pencil icon) if you
+separately go through and delete its demo customers/vendors/products
+yourself first — for a real handover, creating a fresh company is simpler
+and guaranteed clean.
+
 ### 9.3 Production environment validation
 
 Before starting the backend with `NODE_ENV=production`, confirm every
@@ -326,7 +400,18 @@ the full annotated list):
 The backend fails to start with a clear error message if `JWT_SECRET` or
 `CORS_ORIGIN` are missing or invalid in production — this is intentional,
 so a misconfiguration is caught at deploy time, not discovered later as a
-security incident or a broken login.
+security incident or a broken login. To check this **before** actually
+starting the server (no port bound, safe to run repeatedly), run:
+
+```bash
+cd backend
+NODE_ENV=production npm run verify:env
+```
+
+This prints exactly what's configured and exits non-zero with a clear
+message if anything is missing or unsafe — put it in your deploy script
+before `pm2 restart`/`npm run start`, so a bad config fails your deploy
+step, not your running process.
 
 **No secret is ever exposed to the frontend.** The only backend-derived
 value the frontend build ever sees is `NEXT_PUBLIC_API_URL` (the API's
@@ -334,39 +419,128 @@ public base URL) — never `JWT_SECRET`, `DATABASE_URL`, SMTP credentials, or
 the GST API key, all of which stay server-side only (`backend/.env`,
 never committed — see `.gitignore`).
 
-### 9.4 Backup and deployment readiness
+### 9.4 Backup and recovery
 
-- **Backup**: `npm run backup` (from `backend/`) runs `mysqldump` and
-  writes a timestamped `.sql` file to `backend/backups/`. Run this on a
-  schedule (e.g. a daily cron job) once real data exists, and copy backups
-  off the VM (they're not safe sitting only on the same disk).
-- **Restore**: `npm run restore -- backend/backups/<filename>.sql`.
-- **Migrations**: always use `npm run prisma:deploy` (`prisma migrate
-  deploy`) in production — never `prisma:migrate` (`migrate dev`), which is
-  for local development only and can prompt interactively or reset data.
-- **Deploying an update**:
-  1. `git pull` (or copy the new `backend/` and `frontend/` folders over).
-  2. `cd backend && npm install && npm run build && npm run prisma:deploy`.
-  3. `pm2 restart erp-api`.
-  4. `cd ../frontend && npm install && npm run build`, then redeploy the
-     `frontend/out/` static export (e.g. push to the branch Cloudflare
-     Pages watches, or re-upload the `out/` folder).
-  5. Verify: `curl https://api.yourdomain.com/health` should return
-     `{"status":"ok",...}`, then log in and spot-check a page.
-- **Rollback**: `git checkout <previous-tag-or-commit>` in `backend/`, then
-  repeat the build + `prisma:deploy` + `pm2 restart` steps above. Prisma
-  migrations are additive (new tables/columns), so rolling back the app
-  code while ahead-of-it migrations remain applied is safe as long as you
-  haven't rolled back past a breaking schema change — take a fresh backup
-  before any migration you're unsure about.
-- **Health check**: `GET /health` (no auth required) returns
-  `{"status":"ok","app":"BusinessFlow ERP"}` — use it for your process
-  manager/uptime monitor, and check it manually after every deploy.
-- **Environment separation**: keep separate `backend/.env` files per
-  environment (development on your machine, staging/production on their
-  own VMs or `.env` files) — never point a local dev backend at the
-  production `DATABASE_URL`, and never reuse a production `JWT_SECRET`
-  anywhere else (every environment should have its own).
+**Backup** (from `backend/`):
+```bash
+npm run backup
+```
+Runs `mysqldump --single-transaction --routines --triggers` and writes a
+timestamped `.sql` file to `backend/backups/` (e.g.
+`backup_2026-01-15_020000.sql`).
+
+**Restore** (from `backend/`):
+```bash
+npm run restore -- backend/backups/<filename>.sql
+```
+This replaces the current database contents with the backup's — only run
+it against the database you actually intend to overwrite.
+
+**Where to store backups**: `backend/backups/` on the VM is a *working*
+copy, not a real backup — if that disk is lost, so is every backup on it.
+Copy every backup off the VM to at least one other location: a small cron
+job that `scp`/`rclone`s the file to another machine or object storage
+(S3/Backblaze/Google Drive/etc.) right after `npm run backup` completes.
+Keep at least 7 daily and 4 weekly backups if storage allows — enough to
+recover from a mistake noticed a few weeks later, not just yesterday's.
+
+**How to verify a backup** (do this after setting up the schedule, and
+periodically afterward — a backup you've never restored is unverified):
+```bash
+# 1. Create a throwaway database
+mysql -u root -p -e "CREATE DATABASE businessflow_erp_verify CHARACTER SET utf8mb4;"
+# 2. Restore the backup into it (adjust connection details as needed)
+mysql -u root -p businessflow_erp_verify < backend/backups/<filename>.sql
+# 3. Spot-check it has real tables and rows
+mysql -u root -p businessflow_erp_verify -e "SELECT COUNT(*) FROM Company; SELECT COUNT(*) FROM Sale;"
+# 4. Drop the throwaway database
+mysql -u root -p -e "DROP DATABASE businessflow_erp_verify;"
+```
+A backup that fails to restore, or restores with unexpectedly empty
+tables, means the backup schedule is broken — fix it before you need it.
+
+**Backup checklist** (a small production server, realistically):
+- [ ] `npm run backup` runs on a schedule (e.g. a daily cron job) —
+  `0 2 * * * cd /path/to/backend && npm run backup >> backup.log 2>&1`.
+- [ ] Backups are copied off the VM automatically, not left only in
+  `backend/backups/`.
+- [ ] Old backups are pruned on a schedule (e.g. keep 7 daily + 4 weekly)
+  so disk usage doesn't grow unbounded.
+- [ ] You have actually restored a backup once, following the steps above,
+  and it worked.
+- [ ] You know, in writing somewhere you'll actually find it, which
+  `DATABASE_URL`/server each backup came from — this matters once you
+  have more than one buyer/environment.
+
+**Migrations**: always use `npm run prisma:deploy` (`prisma migrate
+deploy`) in production — never `prisma:migrate` (`migrate dev`), which is
+for local development only and can prompt interactively or reset data.
+
+**Migration rollback precautions**: Prisma's migration history is
+append-only and forward-only by design — there is no `prisma migrate
+rollback` command. Practical precautions:
+- **Take a backup immediately before running any migration you haven't
+  already tested** against a copy of production data (or the same
+  scenario in staging).
+- If a migration goes wrong, the safe recovery path is to restore the
+  pre-migration backup, not to hand-edit the `_prisma_migrations` table or
+  try to write a reverse migration under pressure.
+- Test every migration against a fresh copy of the production database
+  first when the change is anything beyond an additive new
+  table/column — dropping or renaming a column, changing a type, or adding
+  a new required (`NOT NULL`, no default) column to a table that already
+  has rows.
+
+**Deploying an update**:
+1. `git pull` (or copy the new `backend/` and `frontend/` folders over).
+2. `cd backend && npm install && npm run build`.
+3. `NODE_ENV=production npm run verify:env` — confirm config is still
+   valid before touching the running process.
+4. `npm run prisma:deploy`.
+5. `pm2 restart erp-api` (see "Restart procedure" below).
+6. `cd ../frontend && npm install && npm run build`, then redeploy the
+   `frontend/out/` static export (e.g. push to the branch Cloudflare
+   Pages watches, or re-upload the `out/` folder).
+7. Verify: `curl https://api.yourdomain.com/health` should return
+   `{"status":"ok",...}`, then log in and spot-check a page.
+
+**Restart procedure**:
+```bash
+pm2 restart erp-api        # zero-downtime-ish restart of the backend process
+pm2 logs erp-api --lines 50  # confirm it came back up cleanly
+```
+Never `pm2 delete` + `pm2 start` for a routine restart — that drops the
+process's saved metadata; `pm2 restart` is enough, including after an
+`.env` change (PM2 restarts the process, which re-reads `.env` on boot).
+
+**Logs**:
+```bash
+pm2 logs erp-api              # live tail
+pm2 logs erp-api --lines 200  # recent history
+```
+PM2 keeps rotated log files under `~/.pm2/logs/erp-api-out.log` and
+`~/.pm2/logs/erp-api-error.log` by default. In production, Express logs
+requests via `morgan` in `combined` format (method, path, status, response
+time) — sufficient for diagnosing an outage; it does not log request
+bodies, so it won't ever contain passwords or tokens.
+
+**Rollback**: `git checkout <previous-tag-or-commit>` in `backend/`, then
+repeat the build + `prisma:deploy` + `pm2 restart` steps above. Migrations
+are additive (new tables/columns) in every release so far, so rolling back
+app code while a newer migration remains applied is safe — but always take
+a fresh backup first (see above) before rolling back anything you're
+unsure about, since a rollback that also needs the schema to go backward
+requires restoring from that backup, not a migration rollback.
+
+**Health check**: `GET /health` (no auth required, not rate-limited)
+returns `{"status":"ok","app":"BusinessFlow ERP"}` — use it for your
+process manager/uptime monitor, and check it manually after every deploy.
+
+**Environment separation**: keep separate `backend/.env` files per
+environment (development on your machine, staging/production on their
+own VMs or `.env` files) — never point a local dev backend at the
+production `DATABASE_URL`, and never reuse a production `JWT_SECRET`
+anywhere else (every environment should have its own).
 
 ### 9.5 Automated tests
 

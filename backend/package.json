@@ -19,6 +19,7 @@
     "backup": "ts-node scripts/backup.ts",
     "restore": "ts-node scripts/restore.ts",
     "cleanup:demo": "ts-node scripts/cleanupDemoData.ts",
+    "verify:env": "ts-node scripts/verifyEnv.ts",
     "test": "jest --runInBand"
   },
   "dependencies": {
