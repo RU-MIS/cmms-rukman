@@ -3,12 +3,19 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+// 'inventory' = IMS, 'production' = PMS, 'fms' = FMS (module names kept aligned
+// with the existing requirePermission(module, action) checks already used by
+// the inventory/production routes, so IMS/PMS reuse those permission rows
+// instead of creating a duplicate dimension).
 const MODULES = [
   'customers', 'vendors', 'products', 'sales', 'purchases', 'orders',
-  'payments', 'accounts', 'inventory', 'production', 'reports', 'documents', 'email',
-  'excel', 'users', 'roles', 'audit', 'settings', 'backup',
+  'payments', 'accounts', 'inventory', 'production', 'fms', 'departments',
+  'reports', 'documents', 'email', 'excel', 'users', 'roles', 'audit', 'settings', 'backup',
 ];
 const ACTIONS = ['view', 'create', 'edit', 'delete', 'export', 'print'];
+
+// Core manufacturing modules every operational role needs day-to-day.
+const CORE_MFG_MODULES = ['fms', 'inventory', 'production', 'products', 'departments'];
 
 const ROLE_GRANTS: Record<string, { modules: string[]; actions: string[] }[]> = {
   Manager: [{ modules: MODULES, actions: ['view', 'create', 'edit', 'export', 'print'] }],
@@ -29,6 +36,23 @@ const ROLE_GRANTS: Record<string, { modules: string[]; actions: string[] }[]> = 
     { modules: ['products', 'inventory', 'reports'], actions: ['view'] },
   ],
   Viewer: [{ modules: MODULES, actions: ['view'] }],
+  // ---- Manufacturing ERP roles (FMS / IMS / PMS) ----
+  Owner: [{ modules: MODULES, actions: ACTIONS }],
+  CEO: [
+    { modules: [...CORE_MFG_MODULES, 'reports', 'documents', 'audit'], actions: ['view', 'create', 'edit', 'export', 'print'] },
+    { modules: ['users', 'roles', 'settings'], actions: ['view'] },
+  ],
+  'Department Head': [
+    { modules: CORE_MFG_MODULES, actions: ['view', 'create', 'edit', 'export', 'print'] },
+    { modules: ['reports', 'documents'], actions: ['view', 'export', 'print'] },
+  ],
+  Supervisor: [
+    { modules: ['fms', 'inventory', 'production', 'products'], actions: ['view', 'create', 'edit'] },
+    { modules: ['reports'], actions: ['view'] },
+  ],
+  Operator: [
+    { modules: ['fms', 'inventory', 'production'], actions: ['view', 'create'] },
+  ],
 };
 
 async function main() {
@@ -98,6 +122,25 @@ async function main() {
     },
   });
 
+  console.log('Seeding departments...');
+  const departmentDefs = [
+    { code: 'STORES', name: 'Stores', description: 'Raw material & consumable stores' },
+    { code: 'PRODUCTION', name: 'Production', description: 'Primary production/machining floor' },
+    { code: 'PAINTING', name: 'Painting', description: 'Paint shop' },
+    { code: 'ASSEMBLY', name: 'Assembly', description: 'Assembly line' },
+    { code: 'QUALITY', name: 'Quality', description: 'Quality checking / QC lab' },
+    { code: 'FG', name: 'Finished Goods', description: 'Finished goods warehouse' },
+    { code: 'DISPATCH', name: 'Dispatch', description: 'Dispatch preparation area' },
+  ];
+  const departments = await Promise.all(
+    departmentDefs.map((d) => prisma.department.upsert({ where: { code: d.code }, update: {}, create: d }))
+  );
+  const findDept = (code: string) => departments.find((d) => d.code === code)!;
+
+  console.log('Backfilling item types on existing products...');
+  await prisma.product.updateMany({ where: { itemType: 'OTHER', isRawMaterial: true }, data: { itemType: 'RAW_MATERIAL' } });
+  await prisma.product.updateMany({ where: { itemType: 'OTHER', isRawMaterial: false }, data: { itemType: 'FINISHED_GOODS' } });
+
   console.log('Seeding demo master data...');
   const unitDefs = [
     { name: 'Pieces', shortName: 'Pcs' },
@@ -116,9 +159,40 @@ async function main() {
   );
 
   await Promise.all([
-    prisma.warehouse.upsert({ where: { name: 'Main Warehouse' }, update: {}, create: { name: 'Main Warehouse', address: 'Factory Gate, Pune' } }),
-    prisma.warehouse.upsert({ where: { name: 'Production Floor' }, update: {}, create: { name: 'Production Floor', address: 'Shop Floor 1' } }),
+    prisma.warehouse.upsert({ where: { name: 'Main Warehouse' }, update: {}, create: { name: 'Main Warehouse', address: 'Factory Gate, Pune', departmentId: findDept('STORES').id } }),
+    prisma.warehouse.upsert({ where: { name: 'Production Floor' }, update: {}, create: { name: 'Production Floor', address: 'Shop Floor 1', departmentId: findDept('PRODUCTION').id } }),
+    prisma.warehouse.upsert({ where: { name: 'Painting Shop' }, update: {}, create: { name: 'Painting Shop', address: 'Shop Floor 2', departmentId: findDept('PAINTING').id } }),
+    prisma.warehouse.upsert({ where: { name: 'Assembly Line' }, update: {}, create: { name: 'Assembly Line', address: 'Shop Floor 3', departmentId: findDept('ASSEMBLY').id } }),
+    prisma.warehouse.upsert({ where: { name: 'Quality Lab' }, update: {}, create: { name: 'Quality Lab', address: 'QC Room', departmentId: findDept('QUALITY').id } }),
+    prisma.warehouse.upsert({ where: { name: 'Finished Goods Store' }, update: {}, create: { name: 'Finished Goods Store', address: 'FG Warehouse', departmentId: findDept('FG').id } }),
   ]);
+
+  console.log('Seeding process master (FMS)...');
+  const processDefs: { code: string; name: string; deptCode: string; sequence: number; prevCode?: string; expectedCompletionMinutes: number }[] = [
+    { code: 'PROC-RM', name: 'Raw Material Received', deptCode: 'STORES', sequence: 1, expectedCompletionMinutes: 60 },
+    { code: 'PROC-PROD', name: 'Production', deptCode: 'PRODUCTION', sequence: 2, prevCode: 'PROC-RM', expectedCompletionMinutes: 480 },
+    { code: 'PROC-PAINT', name: 'Painting', deptCode: 'PAINTING', sequence: 3, prevCode: 'PROC-PROD', expectedCompletionMinutes: 240 },
+    { code: 'PROC-ASSY', name: 'Assembly', deptCode: 'ASSEMBLY', sequence: 4, prevCode: 'PROC-PAINT', expectedCompletionMinutes: 240 },
+    { code: 'PROC-QC', name: 'Quality Checking', deptCode: 'QUALITY', sequence: 5, prevCode: 'PROC-ASSY', expectedCompletionMinutes: 120 },
+    { code: 'PROC-FG', name: 'Finished Goods', deptCode: 'FG', sequence: 6, prevCode: 'PROC-QC', expectedCompletionMinutes: 60 },
+    { code: 'PROC-DISPATCH', name: 'Dispatch Preparation', deptCode: 'DISPATCH', sequence: 7, prevCode: 'PROC-FG', expectedCompletionMinutes: 60 },
+  ];
+  const processByCode = new Map<string, { id: number }>();
+  for (const p of processDefs) {
+    const created = await prisma.process.upsert({
+      where: { code: p.code },
+      update: {},
+      create: {
+        code: p.code,
+        name: p.name,
+        departmentId: findDept(p.deptCode).id,
+        sequence: p.sequence,
+        previousProcessId: p.prevCode ? processByCode.get(p.prevCode)?.id : undefined,
+        expectedCompletionMinutes: p.expectedCompletionMinutes,
+      },
+    });
+    processByCode.set(p.code, created);
+  }
 
   const findUnit = (short: string) => units.find((u) => u.shortName === short)!;
   const findCategory = (name: string) => categories.find((c) => c.name === name)!;
@@ -147,16 +221,16 @@ async function main() {
   const productCount = await prisma.product.count();
   if (productCount === 0) {
     const rawSteel = await prisma.product.create({
-      data: { sku: 'PRD-00001', name: 'Demo — Steel Sheet 2mm', categoryId: findCategory('Raw Material').id, unitId: findUnit('Kg').id, purchaseRate: 65, saleRate: 0, taxRate: 18, openingStock: 500, currentStock: 500, reorderLevel: 100, isRawMaterial: true },
+      data: { sku: 'PRD-00001', name: 'Demo — Steel Sheet 2mm', categoryId: findCategory('Raw Material').id, unitId: findUnit('Kg').id, purchaseRate: 65, saleRate: 0, taxRate: 18, openingStock: 500, currentStock: 500, reorderLevel: 100, minStockLevel: 100, maxStockLevel: 2000, isRawMaterial: true, itemType: 'RAW_MATERIAL', batchTracked: true },
     });
     const rawBolt = await prisma.product.create({
-      data: { sku: 'PRD-00002', name: 'Demo — Steel Bolt M8', categoryId: findCategory('Raw Material').id, unitId: findUnit('Pcs').id, purchaseRate: 2, saleRate: 0, taxRate: 18, openingStock: 2000, currentStock: 2000, reorderLevel: 500, isRawMaterial: true },
+      data: { sku: 'PRD-00002', name: 'Demo — Steel Bolt M8', categoryId: findCategory('Raw Material').id, unitId: findUnit('Pcs').id, purchaseRate: 2, saleRate: 0, taxRate: 18, openingStock: 2000, currentStock: 2000, reorderLevel: 500, minStockLevel: 500, maxStockLevel: 10000, isRawMaterial: true, itemType: 'RAW_MATERIAL' },
     });
     const packaging = await prisma.product.create({
-      data: { sku: 'PRD-00003', name: 'Demo — Corrugated Box (L)', categoryId: findCategory('Packaging').id, unitId: findUnit('Pcs').id, purchaseRate: 15, saleRate: 0, taxRate: 12, openingStock: 300, currentStock: 300, reorderLevel: 50, isRawMaterial: true },
+      data: { sku: 'PRD-00003', name: 'Demo — Corrugated Box (L)', categoryId: findCategory('Packaging').id, unitId: findUnit('Pcs').id, purchaseRate: 15, saleRate: 0, taxRate: 12, openingStock: 300, currentStock: 300, reorderLevel: 50, minStockLevel: 50, maxStockLevel: 1000, isRawMaterial: true, itemType: 'CONSUMABLE' },
     });
     const finishedBracket = await prisma.product.create({
-      data: { sku: 'PRD-00004', name: 'Demo — Steel Mounting Bracket', categoryId: findCategory('Finished Goods').id, unitId: findUnit('Pcs').id, purchaseRate: 0, saleRate: 180, taxRate: 18, openingStock: 40, currentStock: 40, reorderLevel: 20 },
+      data: { sku: 'PRD-00004', name: 'Demo — Steel Mounting Bracket', categoryId: findCategory('Finished Goods').id, unitId: findUnit('Pcs').id, purchaseRate: 0, saleRate: 180, taxRate: 18, openingStock: 40, currentStock: 40, reorderLevel: 20, minStockLevel: 20, maxStockLevel: 500, itemType: 'FINISHED_GOODS', batchTracked: true },
     });
     await prisma.product.create({
       data: { sku: 'PRD-00005', name: 'Demo — Trading Item: Cable Ties (100pk)', categoryId: findCategory('Trading Goods').id, unitId: findUnit('Box').id, purchaseRate: 45, saleRate: 75, taxRate: 12, openingStock: 60, currentStock: 60, reorderLevel: 15 },
