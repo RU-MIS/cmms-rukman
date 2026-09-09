@@ -20,19 +20,24 @@ Decoded Value
     ↓
 Google Apps Script (saveScan)
     ↓
-Google Sheet ("Scans" tab)
+Google Sheet (first worksheet/tab)
 ```
 
 This project is wired to one specific spreadsheet: `Code.gs` has
 `SPREADSHEET_ID` hardcoded to
-`18c39NeNfjPv5PF6xhLzYLGZ4RK2upkjapqlDa_wRwcE`, and always writes to its
-`Scans` tab.
+`18c39NeNfjPv5PF6xhLzYLGZ4RK2upkjapqlDa_wRwcY`, and always writes to its
+**first worksheet/tab** (whatever that tab is named) — it never creates or
+touches any other sheet.
 
 ## Files
 
 - **`Code.gs`** — server-side script. `doGet()` serves the web app;
-  `saveScan(value)` validates and appends a row to the `Scans` sheet (of
-  the spreadsheet identified by `SPREADSHEET_ID`) via `SpreadsheetApp`.
+  `saveScan(value)` validates and appends `[new Date(), value]` as a new
+  row to the first worksheet of the spreadsheet identified by
+  `SPREADSHEET_ID`, via `SpreadsheetApp`. The scanned-value cell is forced
+  to plain-text format before writing so numeric-looking codes (leading
+  zeros, long EAN/UPC digit strings) are stored exactly as scanned instead
+  of Sheets auto-converting them to a Number.
 - **`Index.html`** — the entire frontend: camera preview, Start/Stop
   buttons, latest scanned value, and a success/error message. Scanning
   uses [html5-qrcode](https://github.com/mebjas/html5-qrcode) (loaded from
@@ -46,10 +51,11 @@ by running any build step.
 ## 1. Prepare the Google Sheet
 
 1. Open the spreadsheet at
-   `https://docs.google.com/spreadsheets/d/18c39NeNfjPv5PF6xhLzYLGZ4RK2upkjapqlDa_wRwcE/edit`.
-2. That's it for this step — `Code.gs` creates a `Scans` tab with the
-   header row (`Timestamp` in A1, `Scanned Value` in B1) automatically
-   the first time it runs, if that tab doesn't already exist.
+   `https://docs.google.com/spreadsheets/d/18c39NeNfjPv5PF6xhLzYLGZ4RK2upkjapqlDa_wRwcY/edit`.
+2. Make sure its **first tab** has the header row: `Timestamp` in A1,
+   `Scanned Value` in B1. The script always writes to whichever tab is
+   first (left-most) — it does not create a tab for you or look for one
+   by name.
 
 ## 2. Create the Apps Script project
 
@@ -101,8 +107,8 @@ private if that matters to you.
 2. Tap **Start Scanner** and allow camera access when prompted.
 3. Point the camera at a QR code or barcode. On a successful scan:
    - The decoded value appears under "Last scanned".
-   - It's automatically sent to `saveScan()` and appended to the `Scans`
-     tab as a new row: `[Timestamp, Scanned Value]`.
+   - It's automatically sent to `saveScan()` and appended to the first
+     worksheet as a new row: `[Timestamp, Scanned Value]`.
    - You'll see "Saved successfully", then scanning automatically resumes
      for the next code.
 4. Tap **Stop Scanner** to turn off the camera when you're done.

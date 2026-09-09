@@ -4,8 +4,7 @@
  * full step-by-step setup and deployment guide.
  */
 
-const SHEET_NAME = 'Scans';
-const SPREADSHEET_ID = '18c39NeNfjPv5PF6xhLzYLGZ4RK2upkjapqlDa_wRwcE';
+const SPREADSHEET_ID = '18c39NeNfjPv5PF6xhLzYLGZ4RK2upkjapqlDa_wRwcY';
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
@@ -13,23 +12,13 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
 }
 
-function getSpreadsheet_() {
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
-}
-
-function getSheet_() {
-  const ss = getSpreadsheet_();
-  let sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAME);
-    sheet.appendRow(['Timestamp', 'Scanned Value']);
-  }
-  return sheet;
+function getFirstSheet_() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()[0];
 }
 
 /**
- * Called from Index.html via google.script.run. Appends a
- * [Timestamp, Scanned Value] row to the "Scans" sheet.
+ * Called from Index.html via google.script.run. Appends
+ * [new Date(), value] as a new row to the first worksheet.
  */
 function saveScan(value) {
   try {
@@ -37,13 +26,18 @@ function saveScan(value) {
       return { success: false, error: 'Scanned value is empty' };
     }
 
-    const sheet = getSheet_();
-    const timestamp = Utilities.formatDate(
-      new Date(),
-      Session.getScriptTimeZone(),
-      'yyyy-MM-dd HH:mm:ss'
-    );
-    sheet.appendRow([timestamp, value.trim()]);
+    const scannedValue = value.trim();
+    const sheet = getFirstSheet_();
+    const row = sheet.getLastRow() + 1;
+
+    sheet.getRange(row, 1).setValue(new Date());
+
+    // Force column B to plain-text format before writing, so numeric-looking
+    // codes (leading zeros, long EAN/UPC digit strings) are stored exactly
+    // as scanned instead of Sheets auto-converting them to a Number.
+    const valueCell = sheet.getRange(row, 2);
+    valueCell.setNumberFormat('@');
+    valueCell.setValue(scannedValue);
 
     return { success: true };
   } catch (err) {
