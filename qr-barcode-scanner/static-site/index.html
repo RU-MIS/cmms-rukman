@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <base target="_top">
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>QR & Barcode Scanner</title>
@@ -94,6 +93,10 @@
     </div>
 
     <script>
+      // Set this to your deployed Apps Script Web App URL (ends in /exec).
+      // See README.md — "Deploy the Apps Script API" step.
+      const APPS_SCRIPT_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+
       const RESUME_DELAY_MS = 1500;
       const DUPLICATE_WINDOW_MS = 3000;
 
@@ -128,26 +131,31 @@
         lastValueBox.style.display = 'block';
         setStatus('saving', 'Saving…');
 
-        google.script.run
-          .withSuccessHandler(function (response) {
+        // Content-Type "text/plain" (not "application/json") keeps this a
+        // CORS "simple request" so the browser doesn't send a preflight
+        // OPTIONS request — Apps Script Web Apps don't handle doOptions().
+        fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ value: decodedText })
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (response) {
             if (response && response.success) {
               setStatus('success', 'Saved successfully');
             } else {
               setStatus('error', (response && response.error) || 'Failed to save');
             }
-            setTimeout(function () {
-              busy = false;
-              setStatus('scanning', 'Scanning…');
-            }, RESUME_DELAY_MS);
           })
-          .withFailureHandler(function () {
+          .catch(function () {
             setStatus('error', 'Failed to save — try again');
+          })
+          .finally(function () {
             setTimeout(function () {
               busy = false;
               setStatus('scanning', 'Scanning…');
             }, RESUME_DELAY_MS);
-          })
-          .saveScan(decodedText);
+          });
       }
 
       function onScanFailure() {
@@ -171,7 +179,7 @@
           case 'TrackStartError':
             return 'Camera is already in use by another app or browser tab. Close it and try again.';
           case 'SecurityError':
-            return 'Camera blocked for security reasons. Open this app’s deployed HTTPS web app URL directly, not an embedded preview.';
+            return 'Camera blocked for security reasons. Make sure this page is served over HTTPS.';
           case 'OverconstrainedError':
             return 'No camera on this device supports the requested settings.';
           default:
@@ -222,11 +230,9 @@
       startBtn.addEventListener('click', async function () {
         startBtn.disabled = true;
 
-        // Requirement: only ask for camera access once the user has
-        // clicked Start, never on page load.
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           startBtn.disabled = false;
-          setStatus('error', 'Camera API not available in this browser context. Open this app’s deployed HTTPS web app URL directly in your phone’s browser, not an embedded preview.');
+          setStatus('error', 'Camera API not available in this browser. Make sure this page is served over HTTPS.');
           return;
         }
 
@@ -234,11 +240,6 @@
 
         let permissionStream;
         try {
-          // Explicitly request the camera ourselves first. This is what
-          // actually triggers the browser's permission prompt and lets us
-          // read the real DOMException — relying on the scanner library's
-          // own internal camera lookup was swallowing the real error and
-          // always reporting the same generic message.
           permissionStream = await navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS);
         } catch (err) {
           startBtn.disabled = false;
@@ -250,7 +251,6 @@
         // the scanner library can open its own stream for the live preview.
         stopAllTracks(permissionStream);
 
-        // The scanner library only starts now, after permission is confirmed.
         await startScanner();
       });
 
@@ -264,8 +264,6 @@
           // Fall through and force-release the camera below regardless.
         }
 
-        // Belt-and-suspenders: make sure the underlying camera track(s)
-        // are actually released even if stop() above left one open.
         const videoEl = document.querySelector('#reader video');
         if (videoEl && videoEl.srcObject) {
           stopAllTracks(videoEl.srcObject);
