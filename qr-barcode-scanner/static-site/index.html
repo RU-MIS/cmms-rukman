@@ -162,7 +162,14 @@
         // Called continuously while no code is detected in the current frame — ignore.
       }
 
-      const CAMERA_CONSTRAINTS = { video: { facingMode: 'environment' } };
+      // Shape required by navigator.mediaDevices.getUserMedia (MediaStreamConstraints).
+      const PERMISSION_PROBE_CONSTRAINTS = { video: { facingMode: 'environment' } };
+      // Shape required by html5-qrcode's start() cameraIdOrConfig argument —
+      // NOT the same shape as MediaStreamConstraints. Passing the wrapped
+      // { video: {...} } object here made html5-qrcode's own internal
+      // getUserMedia call malformed, so it failed even after our probe
+      // above had already been granted permission.
+      const SCANNER_CAMERA_CONFIG = { facingMode: 'environment' };
 
       // Maps getUserMedia's DOMException.name to a specific, actionable
       // message, instead of one generic "denied or unavailable" catch-all.
@@ -214,7 +221,7 @@
 
         try {
           await html5QrCode.start(
-            CAMERA_CONSTRAINTS,
+            SCANNER_CAMERA_CONFIG,
             { fps: 10, qrbox: { width: 250, height: 250 } },
             onScanSuccess,
             onScanFailure
@@ -240,7 +247,7 @@
 
         let permissionStream;
         try {
-          permissionStream = await navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS);
+          permissionStream = await navigator.mediaDevices.getUserMedia(PERMISSION_PROBE_CONSTRAINTS);
         } catch (err) {
           startBtn.disabled = false;
           setStatus('error', describeCameraError(err));
