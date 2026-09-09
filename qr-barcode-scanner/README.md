@@ -120,9 +120,27 @@ Version: New version → Deploy**
 
 ## Troubleshooting
 
-- **"Camera access denied or unavailable"** — check your phone browser's
-  site permissions for camera access, and make sure you opened the
-  `.../exec` URL (not the script editor URL).
+Tapping **Start Scanner** now requests camera access directly via
+`navigator.mediaDevices.getUserMedia`, so the browser's permission prompt
+should always appear. If it doesn't, or scanning still fails, the status
+message tells you the specific reason:
+
+- **"Camera permission denied..."** — you (or a previous visit) denied
+  camera access for this page. Use the site/lock icon next to the address
+  bar → Permissions/Site settings → allow Camera, then reload.
+- **"No camera found on this device."** — the browser found no camera at
+  all (e.g. testing on a desktop with no webcam).
+- **"Camera is already in use by another app or browser tab."** — close
+  whatever else has the camera open (another tab, a video call app) and
+  try again.
+- **"Camera blocked for security reasons..."** / **"Camera API not
+  available in this browser context..."** — you're not on the real
+  deployed web app URL. Make sure you opened the `.../exec` link directly
+  (it must be `https://`), not a preview link inside the Apps Script
+  editor, and not this page embedded inside another site's iframe.
+- **"Permission granted, but the scanner could not start..."** — camera
+  access was granted, so this is a `html5-qrcode` startup error unrelated
+  to permissions; the message includes the underlying error detail.
 - **Nothing happens after scanning / "Failed to save"** — open
   **Executions** in the left sidebar of the Apps Script editor to see the
   actual error from `saveScan`. The most common cause is `SPREADSHEET_ID`

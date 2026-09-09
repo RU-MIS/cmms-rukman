@@ -154,7 +154,39 @@
         // Called continuously while no code is detected in the current frame — ignore.
       }
 
-      startBtn.addEventListener('click', function () {
+      const CAMERA_CONSTRAINTS = { video: { facingMode: 'environment' } };
+
+      // Maps getUserMedia's DOMException.name to a specific, actionable
+      // message, instead of one generic "denied or unavailable" catch-all.
+      function describeCameraError(err) {
+        const name = err && err.name;
+        switch (name) {
+          case 'NotAllowedError':
+          case 'PermissionDeniedError':
+            return 'Camera permission denied. Tap the site/lock icon next to the address bar → Permissions (or Site settings) → allow Camera, then reload this page.';
+          case 'NotFoundError':
+          case 'DevicesNotFoundError':
+            return 'No camera found on this device.';
+          case 'NotReadableError':
+          case 'TrackStartError':
+            return 'Camera is already in use by another app or browser tab. Close it and try again.';
+          case 'SecurityError':
+            return 'Camera blocked for security reasons. Open this app’s deployed HTTPS web app URL directly, not an embedded preview.';
+          case 'OverconstrainedError':
+            return 'No camera on this device supports the requested settings.';
+          default:
+            return 'Could not access the camera' + (err && err.message ? ': ' + err.message : '.');
+        }
+      }
+
+      function stopAllTracks(stream) {
+        if (!stream) return;
+        stream.getTracks().forEach(function (track) {
+          try { track.stop(); } catch (e) { /* already stopped */ }
+        });
+      }
+
+      async function startScanner() {
         html5QrCode = new Html5Qrcode('reader', {
           formatsToSupport: [
             Html5QrcodeSupportedFormats.QR_CODE,
@@ -170,42 +202,82 @@
           verbose: false
         });
 
-        startBtn.disabled = true;
         setStatus('', 'Starting camera…');
 
-        html5QrCode
-          .start(
-            { facingMode: 'environment' },
+        try {
+          await html5QrCode.start(
+            CAMERA_CONSTRAINTS,
             { fps: 10, qrbox: { width: 250, height: 250 } },
             onScanSuccess,
             onScanFailure
-          )
-          .then(function () {
-            stopBtn.disabled = false;
-            setStatus('scanning', 'Scanning…');
-          })
-          .catch(function () {
-            startBtn.disabled = false;
-            setStatus('error', 'Camera access denied or unavailable');
-          });
+          );
+          stopBtn.disabled = false;
+          setStatus('scanning', 'Scanning…');
+        } catch (err) {
+          startBtn.disabled = false;
+          setStatus('error', 'Permission granted, but the scanner could not start' + (err && err.message ? ': ' + err.message : '.'));
+        }
+      }
+
+      startBtn.addEventListener('click', async function () {
+        startBtn.disabled = true;
+
+        // Requirement: only ask for camera access once the user has
+        // clicked Start, never on page load.
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          startBtn.disabled = false;
+          setStatus('error', 'Camera API not available in this browser context. Open this app’s deployed HTTPS web app URL directly in your phone’s browser, not an embedded preview.');
+          return;
+        }
+
+        setStatus('', 'Requesting camera permission…');
+
+        let permissionStream;
+        try {
+          // Explicitly request the camera ourselves first. This is what
+          // actually triggers the browser's permission prompt and lets us
+          // read the real DOMException — relying on the scanner library's
+          // own internal camera lookup was swallowing the real error and
+          // always reporting the same generic message.
+          permissionStream = await navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS);
+        } catch (err) {
+          startBtn.disabled = false;
+          setStatus('error', describeCameraError(err));
+          return;
+        }
+
+        // Permission granted — release this probe stream immediately so
+        // the scanner library can open its own stream for the live preview.
+        stopAllTracks(permissionStream);
+
+        // The scanner library only starts now, after permission is confirmed.
+        await startScanner();
       });
 
-      stopBtn.addEventListener('click', function () {
+      stopBtn.addEventListener('click', async function () {
         if (!html5QrCode) return;
-        html5QrCode
-          .stop()
-          .then(function () {
-            return html5QrCode.clear();
-          })
-          .then(function () {
-            stopBtn.disabled = true;
-            startBtn.disabled = false;
-            setStatus('', 'Stopped. Press Start Scanner to resume.');
-          })
-          .catch(function () {
-            stopBtn.disabled = true;
-            startBtn.disabled = false;
-          });
+        stopBtn.disabled = true;
+
+        try {
+          await html5QrCode.stop();
+        } catch (e) {
+          // Fall through and force-release the camera below regardless.
+        }
+
+        // Belt-and-suspenders: make sure the underlying camera track(s)
+        // are actually released even if stop() above left one open.
+        const videoEl = document.querySelector('#reader video');
+        if (videoEl && videoEl.srcObject) {
+          stopAllTracks(videoEl.srcObject);
+          videoEl.srcObject = null;
+        }
+
+        try {
+          await html5QrCode.clear();
+        } catch (e) { /* ignore */ }
+
+        startBtn.disabled = false;
+        setStatus('', 'Stopped. Press Start Scanner to resume.');
       });
     </script>
   </body>
