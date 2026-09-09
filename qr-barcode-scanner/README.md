@@ -23,11 +23,16 @@ Google Apps Script (saveScan)
 Google Sheet ("Scans" tab)
 ```
 
+This project is wired to one specific spreadsheet: `Code.gs` has
+`SPREADSHEET_ID` hardcoded to
+`18c39NeNfjPv5PF6xhLzYLGZ4RK2upkjapqlDa_wRwcE`, and always writes to its
+`Scans` tab.
+
 ## Files
 
 - **`Code.gs`** — server-side script. `doGet()` serves the web app;
-  `saveScan(value)` validates and appends a row to the `Scans` sheet via
-  `SpreadsheetApp`.
+  `saveScan(value)` validates and appends a row to the `Scans` sheet (of
+  the spreadsheet identified by `SPREADSHEET_ID`) via `SpreadsheetApp`.
 - **`Index.html`** — the entire frontend: camera preview, Start/Stop
   buttons, latest scanned value, and a success/error message. Scanning
   uses [html5-qrcode](https://github.com/mebjas/html5-qrcode) (loaded from
@@ -38,19 +43,23 @@ These two files are the actual source of truth — deployment is done by
 copy-pasting their content into the Apps Script editor (steps below), not
 by running any build step.
 
-## 1. Create the Google Sheet
+## 1. Prepare the Google Sheet
 
-1. Create a new Google Sheet (or open an existing one you want to use).
+1. Open the spreadsheet at
+   `https://docs.google.com/spreadsheets/d/18c39NeNfjPv5PF6xhLzYLGZ4RK2upkjapqlDa_wRwcE/edit`.
 2. That's it for this step — `Code.gs` creates a `Scans` tab with the
-   header row (`Timestamp | Scanned Value`) automatically the first time
-   it runs, if it doesn't already exist.
+   header row (`Timestamp` in A1, `Scanned Value` in B1) automatically
+   the first time it runs, if that tab doesn't already exist.
 
-## 2. Create the Apps Script project (bound to that Sheet)
+## 2. Create the Apps Script project
 
-1. In the Sheet, go to **Extensions → Apps Script**. This opens a script
-   project that's automatically "bound" to this spreadsheet — meaning
-   `Code.gs` can use `SpreadsheetApp.getActiveSpreadsheet()` with no
-   configuration needed.
+Since `Code.gs` already targets the spreadsheet above by ID, you can
+create the script either bound to that sheet or as a standalone project —
+both work identically.
+
+**Bound to the sheet (simplest):**
+
+1. In the Sheet from step 1, go to **Extensions → Apps Script**.
 2. Delete the default boilerplate content in the file named `Code.gs`
    (or `myFunction() {...}`), and paste in the contents of this repo's
    **`Code.gs`**.
@@ -60,10 +69,8 @@ by running any build step.
 4. Save the project (**Ctrl/Cmd+S**), and give it a name if prompted
    (e.g. "QR Barcode Scanner").
 
-> If you'd rather run this as a **standalone** script not bound to a
-> specific sheet, create it from https://script.google.com instead, then
-> set `SPREADSHEET_ID` near the top of `Code.gs` to the target sheet's ID
-> (the long string in its URL: `.../spreadsheets/d/`**`THIS_PART`**`/edit`).
+**Standalone (alternative):** create the project from
+https://script.google.com instead, then follow the same steps 2–4 above.
 
 ## 3. Deploy as a web app
 

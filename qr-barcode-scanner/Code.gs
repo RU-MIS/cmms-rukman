@@ -5,11 +5,7 @@
  */
 
 const SHEET_NAME = 'Scans';
-
-// Leave empty to use the spreadsheet this script is bound to (recommended:
-// create the script via Extensions > Apps Script from inside the target
-// Sheet). Only set this if running as a standalone script instead.
-const SPREADSHEET_ID = '';
+const SPREADSHEET_ID = '18c39NeNfjPv5PF6xhLzYLGZ4RK2upkjapqlDa_wRwcE';
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
@@ -18,9 +14,7 @@ function doGet() {
 }
 
 function getSpreadsheet_() {
-  return SPREADSHEET_ID
-    ? SpreadsheetApp.openById(SPREADSHEET_ID)
-    : SpreadsheetApp.getActiveSpreadsheet();
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
 }
 
 function getSheet_() {
