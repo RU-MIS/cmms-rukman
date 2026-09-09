@@ -1,121 +1,124 @@
-# QR & Barcode Scanner → Google Sheets
+# QR & Barcode Scanner → Google Sheets (Google Apps Script)
 
-A minimal mobile web app: open it on your phone, allow the camera, scan a
-QR code or barcode, and the decoded value is automatically appended as a
-new row in a Google Sheet. No typing, no login, no extra screens.
-
-```
-Open app → Allow camera → Scan QR/Barcode → Saved to Google Sheets → "Saved successfully" → ready for next scan
-```
-
-## Tech stack
-
-- **Frontend**: React + Vite, camera scanning via [`@zxing/browser`](https://github.com/zxing-js/browser) (supports QR codes and common 1D barcodes: EAN-13/8, UPC-A/E, Code 128, Code 39, ITF, Codabar)
-- **Backend**: Node.js + Express
-- **Storage**: Google Sheets, via the Google Sheets API and a service account (credentials stay on the backend only — the browser never sees them)
-
-## Project layout
+A minimal mobile web app that scans QR codes and barcodes with your phone's
+camera and automatically saves the decoded value into a Google Sheet. It
+runs **entirely inside Google Apps Script** — no Node.js, no npm install, no
+terminal, no separate server, no database, no login.
 
 ```
-qr-barcode-scanner/
-├── backend/     # Express API — POST /api/scan → appends a row to Google Sheets
-└── frontend/    # React + Vite app — camera preview + scanner
+Google Sheet
+    ↓
+Google Apps Script (Code.gs)
+    ↓
+HTML + CSS + JavaScript Web App (Index.html)
+    ↓
+Mobile Camera
+    ↓
+QR / Barcode Scanner (html5-qrcode, loaded via CDN)
+    ↓
+Decoded Value
+    ↓
+Google Apps Script (saveScan)
+    ↓
+Google Sheet ("Scans" tab)
 ```
 
-## 1. Set up the Google Sheet + service account
+## Files
 
-1. Create (or open) a Google Sheet. Add a header row: `Timestamp | Scanned Value`.
-2. Copy the **spreadsheet ID** from its URL:
-   `https://docs.google.com/spreadsheets/d/`**`THIS_PART`**`/edit`
-3. In [Google Cloud Console](https://console.cloud.google.com/):
-   - Create a project (or use an existing one).
-   - Enable the **Google Sheets API** (APIs & Services → Library).
-   - Go to **APIs & Services → Credentials → Create Credentials → Service account**.
-   - Give it any name, finish creation (no extra roles needed).
-   - Open the new service account → **Keys** tab → **Add Key → Create new key → JSON**. This downloads a JSON file.
-4. From the downloaded JSON, you need two fields:
-   - `client_email` → this is your `GOOGLE_SERVICE_ACCOUNT_EMAIL`
-   - `private_key` → this is your `GOOGLE_PRIVATE_KEY`
-5. **Share the Google Sheet** with the service account's email address (the `client_email` value) and give it **Editor** access — otherwise it can't write rows.
+- **`Code.gs`** — server-side script. `doGet()` serves the web app;
+  `saveScan(value)` validates and appends a row to the `Scans` sheet via
+  `SpreadsheetApp`.
+- **`Index.html`** — the entire frontend: camera preview, Start/Stop
+  buttons, latest scanned value, and a success/error message. Scanning
+  uses [html5-qrcode](https://github.com/mebjas/html5-qrcode) (loaded from
+  a CDN `<script>` tag — nothing to install) and calls the server function
+  via `google.script.run`.
 
-## 2. Backend setup
+These two files are the actual source of truth — deployment is done by
+copy-pasting their content into the Apps Script editor (steps below), not
+by running any build step.
 
-```bash
-cd backend
-cp .env.example .env
-```
+## 1. Create the Google Sheet
 
-Edit `backend/.env`:
+1. Create a new Google Sheet (or open an existing one you want to use).
+2. That's it for this step — `Code.gs` creates a `Scans` tab with the
+   header row (`Timestamp | Scanned Value`) automatically the first time
+   it runs, if it doesn't already exist.
 
-- `GOOGLE_SHEET_ID` — from step 1.2 above
-- `GOOGLE_SHEET_NAME` — the tab name (default `Sheet1`)
-- `GOOGLE_SERVICE_ACCOUNT_EMAIL` — the `client_email` from the JSON key
-- `GOOGLE_PRIVATE_KEY` — the `private_key` from the JSON key, wrapped in quotes exactly as it appears (it contains literal `\n` sequences — leave them as-is)
-- `CORS_ORIGIN` — the URL the frontend will be served from (default `http://localhost:5173` for local dev)
+## 2. Create the Apps Script project (bound to that Sheet)
 
-Install and run:
+1. In the Sheet, go to **Extensions → Apps Script**. This opens a script
+   project that's automatically "bound" to this spreadsheet — meaning
+   `Code.gs` can use `SpreadsheetApp.getActiveSpreadsheet()` with no
+   configuration needed.
+2. Delete the default boilerplate content in the file named `Code.gs`
+   (or `myFunction() {...}`), and paste in the contents of this repo's
+   **`Code.gs`**.
+3. Add the HTML file: click the **+** next to "Files" → **HTML** →
+   name it exactly **`Index`** (Apps Script adds the `.html` extension
+   automatically). Paste in the contents of this repo's **`Index.html`**.
+4. Save the project (**Ctrl/Cmd+S**), and give it a name if prompted
+   (e.g. "QR Barcode Scanner").
 
-```bash
-npm install
-npm run dev
-```
+> If you'd rather run this as a **standalone** script not bound to a
+> specific sheet, create it from https://script.google.com instead, then
+> set `SPREADSHEET_ID` near the top of `Code.gs` to the target sheet's ID
+> (the long string in its URL: `.../spreadsheets/d/`**`THIS_PART`**`/edit`).
 
-The API starts on `http://localhost:4000` (`GET /health` for a quick check).
+## 3. Deploy as a web app
 
-## 3. Frontend setup
+1. In the Apps Script editor, click **Deploy → New deployment**.
+2. Click the gear icon next to "Select type" and choose **Web app**.
+3. Fill in:
+   - **Description**: anything, e.g. "v1"
+   - **Execute as**: **Me**
+   - **Who has access**: **Anyone** (so it opens directly on a phone with
+     no Google sign-in — this app deliberately has no login)
+4. Click **Deploy**. The first time, Google will ask you to **authorize**
+   the script's access to Google Sheets — click through the consent
+   screen (you'll see an "unverified app" warning since this is your own
+   personal script; click **Advanced → Go to [project name] (unsafe)** to
+   proceed — this is expected for scripts you write yourself).
+5. Copy the **Web app URL** it gives you (looks like
+   `https://script.google.com/macros/s/AKfycb.../exec`). This is the URL
+   you open on your phone.
 
-```bash
-cd frontend
-cp .env.example .env
-```
+**Note on access**: since "Execute as: Me" + "Anyone" means anyone with
+this URL can add rows to your sheet without signing in — that's
+intentional, matching the "no login" requirement, but keep the URL
+private if that matters to you.
 
-Edit `frontend/.env` if your backend isn't on `http://localhost:4000`.
+## 4. Use it on your phone
 
-Install and run:
+1. Open the Web app URL on your phone's browser.
+2. Tap **Start Scanner** and allow camera access when prompted.
+3. Point the camera at a QR code or barcode. On a successful scan:
+   - The decoded value appears under "Last scanned".
+   - It's automatically sent to `saveScan()` and appended to the `Scans`
+     tab as a new row: `[Timestamp, Scanned Value]`.
+   - You'll see "Saved successfully", then scanning automatically resumes
+     for the next code.
+4. Tap **Stop Scanner** to turn off the camera when you're done.
 
-```bash
-npm install
-npm run dev
-```
+Scanning the exact same code again within a few seconds is ignored, so a
+single scan can't accidentally get saved twice.
 
-Vite prints a local URL and a **Network** URL (`http://<your-computer-ip>:5173`).
+## Updating the app after making changes
 
-## 4. Testing on a phone
+Editing `Code.gs` or `Index.html` in the script editor does **not**
+automatically update the live URL — you must publish a new version:
 
-Browsers only allow camera access (`getUserMedia`) on a **secure context**:
-`localhost` or `https://`. Two ways to test on a real phone:
-
-- **Same Wi-Fi**: open the **Network** URL Vite printed (e.g. `http://192.168.1.23:5173`) on your phone. This works on some Android browsers without HTTPS, but iOS Safari generally requires HTTPS for camera access — use the tunnel option below if it's blocked.
-- **HTTPS tunnel** (works everywhere): run `npx localtunnel --port 5173` or `ngrok http 5173` and open the printed `https://` URL on your phone. Update `frontend/.env`'s `VITE_API_URL` and the backend's `CORS_ORIGIN` to match if you also tunnel the backend, or tunnel just the frontend and point `VITE_API_URL` at a publicly reachable backend.
-
-On first load, the browser will ask for camera permission — allow it. The
-app automatically prefers the rear ("environment") camera.
-
-## How it works
-
-1. The frontend continuously decodes frames from the live camera preview using ZXing.
-2. On a successful decode, it shows the value, sends `POST /api/scan { value }` to the backend, and pauses accepting new scans.
-3. The backend appends a `[Timestamp, Scanned Value]` row to the configured Google Sheet via the Sheets API, using the service account credentials from its environment variables.
-4. The frontend shows "Saved successfully" (or an error message if the save failed), then automatically resumes scanning after a short delay. Rescanning the exact same code within a few seconds is ignored, to avoid double-saving one scan.
-
-## Building for production
-
-```bash
-cd frontend && npm run build   # outputs static files to frontend/dist/
-```
-
-Serve `frontend/dist/` from any static host (must be HTTPS for camera access
-in production) and deploy `backend/` as a normal Node/Express process,
-setting the same environment variables from `backend/.env.example`. Point
-the frontend's `VITE_API_URL` (set at build time) at the deployed backend's
-URL, and set the backend's `CORS_ORIGIN` to the deployed frontend's URL.
+**Deploy → Manage deployments → (pencil/edit icon on your deployment) →
+Version: New version → Deploy**
 
 ## Troubleshooting
 
-- **"Camera access denied or unavailable"** — check the browser's site
-  permissions, and make sure you're on `localhost` or `https://`.
-- **"Failed to save — try again"** — check the backend logs; usually a
-  wrong `GOOGLE_SHEET_ID`, a private key that wasn't copied correctly, or
-  the sheet not being shared with the service account's email.
-- **CORS errors in the browser console** — make sure `CORS_ORIGIN` in
-  `backend/.env` exactly matches the URL the frontend is served from.
+- **"Camera access denied or unavailable"** — check your phone browser's
+  site permissions for camera access, and make sure you opened the
+  `.../exec` URL (not the script editor URL).
+- **Nothing happens after scanning / "Failed to save"** — open
+  **Executions** in the left sidebar of the Apps Script editor to see the
+  actual error from `saveScan`. The most common cause is `SPREADSHEET_ID`
+  being set incorrectly, or the script not having been authorized yet.
+- **Old behavior after editing the code** — you're still on an old
+  deployment version; see "Updating the app after making changes" above.

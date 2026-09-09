@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>QR & Barcode Scanner</title>
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #111;
+        color: #fff;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 16px;
+        gap: 14px;
+      }
+      h1 { font-size: 1.2rem; margin: 4px 0; text-align: center; }
+      #reader {
+        width: 100%;
+        max-width: 420px;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 2px solid #333;
+        background: #000;
+      }
+      .buttons { display: flex; gap: 10px; width: 100%; max-width: 420px; }
+      button {
+        flex: 1;
+        padding: 12px 20px;
+        font-size: 1rem;
+        font-weight: 600;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      #startBtn { background: #2563eb; color: #fff; }
+      #stopBtn { background: #374151; color: #fff; }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .status {
+        width: 100%;
+        max-width: 420px;
+        font-weight: 600;
+        text-align: center;
+        padding: 10px 16px;
+        border-radius: 8px;
+        background: #2a2a2a;
+        color: #ccc;
+      }
+      .status.scanning { background: #1e3a5f; color: #8ecdf7; }
+      .status.saving { background: #4a3c14; color: #ffd257; }
+      .status.success { background: #14532d; color: #86efac; }
+      .status.error { background: #5c1e1e; color: #fca5a5; }
+      .last-value {
+        width: 100%;
+        max-width: 420px;
+        background: #1c1c1c;
+        border-radius: 8px;
+        padding: 12px 16px;
+        text-align: center;
+        word-break: break-all;
+      }
+      .last-value .label {
+        display: block;
+        font-size: 0.7rem;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 4px;
+      }
+      .last-value .value { font-size: 1.05rem; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>QR & Barcode Scanner</h1>
+
+    <div id="reader"></div>
+
+    <div class="buttons">
+      <button id="startBtn">Start Scanner</button>
+      <button id="stopBtn" disabled>Stop Scanner</button>
+    </div>
+
+    <div id="status" class="status">Press Start Scanner to begin</div>
+
+    <div class="last-value" id="lastValueBox" style="display:none;">
+      <span class="label">Last scanned</span>
+      <span class="value" id="lastValueText"></span>
+    </div>
+
+    <script>
+      const RESUME_DELAY_MS = 1500;
+      const DUPLICATE_WINDOW_MS = 3000;
+
+      let html5QrCode = null;
+      let busy = false;
+      let lastValue = null;
+      let lastValueTime = 0;
+
+      const startBtn = document.getElementById('startBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const statusEl = document.getElementById('status');
+      const lastValueBox = document.getElementById('lastValueBox');
+      const lastValueText = document.getElementById('lastValueText');
+
+      function setStatus(type, message) {
+        statusEl.className = 'status' + (type ? ' ' + type : '');
+        statusEl.textContent = message;
+      }
+
+      function onScanSuccess(decodedText) {
+        if (busy) return;
+
+        const now = Date.now();
+        if (decodedText === lastValue && now - lastValueTime < DUPLICATE_WINDOW_MS) {
+          return;
+        }
+        lastValue = decodedText;
+        lastValueTime = now;
+
+        busy = true;
+        lastValueText.textContent = decodedText;
+        lastValueBox.style.display = 'block';
+        setStatus('saving', 'Saving…');
+
+        google.script.run
+          .withSuccessHandler(function (response) {
+            if (response && response.success) {
+              setStatus('success', 'Saved successfully');
+            } else {
+              setStatus('error', (response && response.error) || 'Failed to save');
+            }
+            setTimeout(function () {
+              busy = false;
+              setStatus('scanning', 'Scanning…');
+            }, RESUME_DELAY_MS);
+          })
+          .withFailureHandler(function () {
+            setStatus('error', 'Failed to save — try again');
+            setTimeout(function () {
+              busy = false;
+              setStatus('scanning', 'Scanning…');
+            }, RESUME_DELAY_MS);
+          })
+          .saveScan(decodedText);
+      }
+
+      function onScanFailure() {
+        // Called continuously while no code is detected in the current frame — ignore.
+      }
+
+      startBtn.addEventListener('click', function () {
+        html5QrCode = new Html5Qrcode('reader', {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.CODABAR,
+            Html5QrcodeSupportedFormats.ITF
+          ],
+          verbose: false
+        });
+
+        startBtn.disabled = true;
+        setStatus('', 'Starting camera…');
+
+        html5QrCode
+          .start(
+            { facingMode: 'environment' },
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            onScanSuccess,
+            onScanFailure
+          )
+          .then(function () {
+            stopBtn.disabled = false;
+            setStatus('scanning', 'Scanning…');
+          })
+          .catch(function () {
+            startBtn.disabled = false;
+            setStatus('error', 'Camera access denied or unavailable');
+          });
+      });
+
+      stopBtn.addEventListener('click', function () {
+        if (!html5QrCode) return;
+        html5QrCode
+          .stop()
+          .then(function () {
+            return html5QrCode.clear();
+          })
+          .then(function () {
+            stopBtn.disabled = true;
+            startBtn.disabled = false;
+            setStatus('', 'Stopped. Press Start Scanner to resume.');
+          })
+          .catch(function () {
+            stopBtn.disabled = true;
+            startBtn.disabled = false;
+          });
+      });
+    </script>
+  </body>
+</html>
