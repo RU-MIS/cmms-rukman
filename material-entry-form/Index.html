@@ -25,6 +25,27 @@
     .btn-remove:hover { background-color: #c82333; }
 
     .sr-no { text-align: center; font-weight: bold; color: #555; }
+
+    .part-search-wrap { position: relative; }
+    .part-suggestions {
+      display: none;
+      background: #fff;
+      border: 1px solid #ccc;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 50;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      border-radius: 4px;
+    }
+    .part-suggestion-item {
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 14px;
+      border-bottom: 1px solid #eee;
+    }
+    .part-suggestion-item:last-child { border-bottom: none; }
+    .part-suggestion-item:hover, .part-suggestion-item.active { background: #eaf2ff; }
+    .part-suggestion-empty { padding: 8px 10px; font-size: 13px; color: #888; }
   </style>
 </head>
 <body>
@@ -92,14 +113,6 @@
     addNewRow();
   }
 
-  function buildItemOptionsHtml() {
-    var html = '<option value="">Select Part</option>';
-    itemOptions.forEach(function(item) {
-      html += '<option value="' + item + '">' + item + '</option>';
-    });
-    return html;
-  }
-
   // Nayi Row add karne ka function
   function addNewRow() {
     var tbody = document.getElementById('tableBody');
@@ -108,12 +121,90 @@
 
     row.innerHTML = `
       <td class="sr-no">${rowCount + 1}</td>
-      <td><select class="part-name" required>${buildItemOptionsHtml()}</select></td>
+      <td class="part-search-wrap">
+        <input type="text" class="part-name" placeholder="Type to search part..." autocomplete="off" required>
+        <div class="part-suggestions"></div>
+      </td>
       <td><input type="number" class="qty" placeholder="0" min="1" required></td>
       <td><input type="text" class="unit" placeholder="Pcs/Kg" required></td>
       <td><button type="button" class="btn btn-remove" onclick="removeRow(this)">X</button></td>
     `;
+
+    setupPartSearch(row.querySelector('.part-name'), row.querySelector('.part-suggestions'));
     updateSrNumbers();
+  }
+
+  // Part Description field ko "contains anywhere" search box banata hai —
+  // typed text jahan bhi kisi part ke naam ke andar milta hai (shuru,
+  // beech, ya end mein), wo suggestion mein dikhega. Sirf Item Master
+  // list wali exact value hi final submit ke liye accept hoti hai.
+  function setupPartSearch(input, suggestionsBox) {
+    function positionBox() {
+      var rect = input.getBoundingClientRect();
+      suggestionsBox.style.position = 'fixed';
+      suggestionsBox.style.left = rect.left + 'px';
+      suggestionsBox.style.top = rect.bottom + 'px';
+      suggestionsBox.style.width = rect.width + 'px';
+    }
+
+    function showMatches() {
+      var term = input.value.trim().toLowerCase();
+      suggestionsBox.innerHTML = '';
+
+      if (!term) {
+        suggestionsBox.style.display = 'none';
+        return;
+      }
+
+      var matches = itemOptions.filter(function (item) {
+        return item.toLowerCase().indexOf(term) !== -1;
+      });
+
+      if (matches.length === 0) {
+        var empty = document.createElement('div');
+        empty.className = 'part-suggestion-empty';
+        empty.textContent = 'No matching part found';
+        suggestionsBox.appendChild(empty);
+      } else {
+        matches.forEach(function (item) {
+          var opt = document.createElement('div');
+          opt.className = 'part-suggestion-item';
+          opt.textContent = item;
+          // mousedown (not click) fires before the input's blur, so the
+          // selection registers before we hide/validate on blur below.
+          opt.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            input.value = item;
+            suggestionsBox.style.display = 'none';
+          });
+          suggestionsBox.appendChild(opt);
+        });
+      }
+
+      positionBox();
+      suggestionsBox.style.display = 'block';
+    }
+
+    input.addEventListener('input', showMatches);
+    input.addEventListener('focus', function () {
+      if (input.value.trim()) showMatches();
+    });
+
+    input.addEventListener('blur', function () {
+      setTimeout(function () {
+        suggestionsBox.style.display = 'none';
+        // Sirf Item Master list wali exact value hi valid maani jayegi —
+        // freeform typed text jo list mein nahi hai, wo clear ho jayegi.
+        if (input.value && itemOptions.indexOf(input.value) === -1) {
+          input.value = '';
+        }
+      }, 150);
+    });
+
+    // position:fixed hone ki wajah se page/table scroll hone par dropdown
+    // misalign ho sakta hai — scroll shuru hote hi ise band kar dete hain.
+    window.addEventListener('scroll', function () { suggestionsBox.style.display = 'none'; }, true);
+    window.addEventListener('resize', function () { suggestionsBox.style.display = 'none'; });
   }
 
   // Row delete karne ka function
