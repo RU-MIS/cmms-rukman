@@ -54,7 +54,7 @@ other sheet.
 1. Open the spreadsheet at
    `https://docs.google.com/spreadsheets/d/18c39NeNfjPv5PF6xhLzYLGZ4RK2upkjapqlDa_wRwcY/edit`.
 2. Make sure its **first tab** has the header row: `Timestamp` in A1,
-   `Scanned Value` in B1.
+   `Scanned Value` in B1, `Scanned By` in C1.
 
 ## 2. Deploy the Apps Script API
 
@@ -108,14 +108,19 @@ Either way, you need an **HTTPS** URL — camera access requires it.
 ## 5. Use it on your phone
 
 1. Open your static page's URL (from step 4) on your phone's browser.
-2. Tap **Start Scanner** and allow camera access when prompted.
-3. Point the camera at a QR code or barcode. On a successful scan:
+2. Type your name or email into the box at the top — this is remembered
+   on that device (`localStorage`) so it isn't asked again next time, and
+   is sent along with every scan. There's no login: this is just a label,
+   not an authenticated identity, so anyone can type anything.
+3. Tap **Start Scanner** and allow camera access when prompted.
+4. Point the camera at a QR code or barcode. On a successful scan:
    - The decoded value appears under "Last scanned".
    - It's sent via `fetch()` to your Apps Script URL, which appends it to
-     the first worksheet as a new row: `[Timestamp, Scanned Value]`.
+     the first worksheet as a new row:
+     `[Timestamp, Scanned Value, Scanned By]`.
    - You'll see "Saved successfully", then scanning automatically resumes
      for the next code.
-4. Tap **Stop Scanner** to turn off the camera when you're done.
+5. Tap **Stop Scanner** to turn off the camera when you're done.
 
 Scanning the exact same code again within a few seconds is ignored, so a
 single scan can't accidentally get saved twice.

@@ -23,7 +23,7 @@ function doGet() {
 function doPost(e) {
   try {
     const body = JSON.parse((e.postData && e.postData.contents) || '{}');
-    return jsonResponse_(saveScan_(body.value));
+    return jsonResponse_(saveScan_(body.value, body.scannedBy));
   } catch (err) {
     return jsonResponse_({ success: false, error: err.message });
   }
@@ -40,14 +40,18 @@ function getFirstSheet_() {
 }
 
 /**
- * Appends [new Date(), value] as a new row to the first worksheet.
+ * Appends [new Date(), value, scannedBy] as a new row to the first worksheet.
  */
-function saveScan_(value) {
+function saveScan_(value, scannedBy) {
   if (!value || typeof value !== 'string' || !value.trim()) {
     return { success: false, error: 'Scanned value is empty' };
   }
 
   const scannedValue = value.trim();
+  const scannedByValue = (typeof scannedBy === 'string' && scannedBy.trim())
+    ? scannedBy.trim()
+    : 'Unknown';
+
   const sheet = getFirstSheet_();
   const row = sheet.getLastRow() + 1;
 
@@ -59,6 +63,8 @@ function saveScan_(value) {
   const valueCell = sheet.getRange(row, 2);
   valueCell.setNumberFormat('@');
   valueCell.setValue(scannedValue);
+
+  sheet.getRange(row, 3).setValue(scannedByValue);
 
   return { success: true };
 }

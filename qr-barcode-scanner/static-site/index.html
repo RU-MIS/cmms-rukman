@@ -20,6 +20,17 @@
         gap: 14px;
       }
       h1 { font-size: 1.2rem; margin: 4px 0; text-align: center; }
+      #scannerName {
+        width: 100%;
+        max-width: 420px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #333;
+        background: #1c1c1c;
+        color: #fff;
+        font-size: 0.95rem;
+      }
+      #scannerName::placeholder { color: #777; }
       #reader {
         width: 100%;
         max-width: 420px;
@@ -78,6 +89,13 @@
   <body>
     <h1>QR & Barcode Scanner</h1>
 
+    <input
+      type="text"
+      id="scannerName"
+      placeholder="Your name or email"
+      autocomplete="name"
+    />
+
     <div id="reader"></div>
 
     <div class="buttons">
@@ -110,11 +128,25 @@
       const statusEl = document.getElementById('status');
       const lastValueBox = document.getElementById('lastValueBox');
       const lastValueText = document.getElementById('lastValueText');
+      const scannerNameInput = document.getElementById('scannerName');
 
       function setStatus(type, message) {
         statusEl.className = 'status' + (type ? ' ' + type : '');
         statusEl.textContent = message;
       }
+
+      // Remember the scanner's name/email on this device so it doesn't
+      // have to be typed again on the next visit — no login involved.
+      try {
+        const savedName = localStorage.getItem('scannerName');
+        if (savedName) scannerNameInput.value = savedName;
+      } catch (e) { /* localStorage unavailable — just leave it blank */ }
+
+      scannerNameInput.addEventListener('input', function () {
+        try {
+          localStorage.setItem('scannerName', scannerNameInput.value.trim());
+        } catch (e) { /* ignore */ }
+      });
 
       function onScanSuccess(decodedText) {
         if (busy) return;
@@ -137,7 +169,10 @@
         fetch(APPS_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ value: decodedText })
+          body: JSON.stringify({
+            value: decodedText,
+            scannedBy: scannerNameInput.value.trim()
+          })
         })
           .then(function (res) { return res.json(); })
           .then(function (response) {
@@ -235,6 +270,12 @@
       }
 
       startBtn.addEventListener('click', async function () {
+        if (!scannerNameInput.value.trim()) {
+          setStatus('error', 'Enter your name or email above first.');
+          scannerNameInput.focus();
+          return;
+        }
+
         startBtn.disabled = true;
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
