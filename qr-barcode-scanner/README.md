@@ -74,17 +74,46 @@ other sheet.
 URL can add rows to your sheet without signing in — intentional (no
 login), but keep the URL reasonably private if that matters to you.
 
-## 3. Wire up the static page
+## 3. Google Sign-In setup
+
+The page identifies who scanned each code via **Sign in with Google** —
+no password to manage; Google verifies the person and hands back their
+real email, the same way Google Forms auto-fills a signed-in respondent's
+email.
+
+1. Go to https://console.cloud.google.com/, create (or pick) a project.
+2. **APIs & Services → OAuth consent screen**: choose **External**, fill
+   in an app name and your support email, save. Leave it in **Testing**
+   status (no Google review needed) and add every teammate's email under
+   **Audience → Test users** — in Testing mode, only listed test users can
+   sign in. (Switch to "In production" later if you want anyone to be
+   able to sign in, which requires Google's verification for some scopes,
+   not needed here.)
+3. **APIs & Services → Credentials → Create Credentials → OAuth client
+   ID** → Application type: **Web application**.
+4. Under **Authorized JavaScript origins**, add the exact URL your static
+   page will be hosted at (e.g. `https://glistening-chebakia-443641.netlify.app`
+   — no trailing slash). You can add more origins later if the URL changes.
+5. Create → copy the **Client ID** (ends in `.apps.googleusercontent.com`).
+
+## 4. Wire up the static page
 
 1. Open `static-site/index.html` in a text editor.
 2. Find this line near the top of the `<script>` block:
    ```js
    const APPS_SCRIPT_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
    ```
-3. Replace the placeholder with the exact Web app URL you copied in step 2.7.
+   Replace the placeholder with the exact Web app URL you copied in step 2.7.
+3. Find this near the top of the `<body>`:
+   ```html
+   <div id="g_id_onload"
+        data-client_id="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+   ```
+   Replace `YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com` with the
+   Client ID from step 3.5.
 4. Save the file.
 
-## 4. Host the static page
+## 5. Host the static page
 
 **Easiest — Netlify Drop (no account needed):**
 
@@ -103,15 +132,17 @@ a plan that supports Pages on private repos), enable Pages under
 `qr-barcode-scanner/static-site` folder, and GitHub gives you a
 `https://<user>.github.io/...` URL instead.
 
-Either way, you need an **HTTPS** URL — camera access requires it.
+Either way, you need an **HTTPS** URL — camera access requires it. If you
+change hosts or the URL otherwise changes, add the new URL under
+**Authorized JavaScript origins** on the OAuth client (step 3.4) too.
 
-## 5. Use it on your phone
+## 6. Use it on your phone
 
-1. Open your static page's URL (from step 4) on your phone's browser.
-2. Type your name or email into the box at the top — this is remembered
-   on that device (`localStorage`) so it isn't asked again next time, and
-   is sent along with every scan. There's no login: this is just a label,
-   not an authenticated identity, so anyone can type anything.
+1. Open your static page's URL (from step 5) on your phone's browser.
+2. Tap **Sign in with Google** and pick the account to scan as (must be
+   one of the test users added in step 3.2, unless the OAuth consent
+   screen is published). This is remembered on that device, so it won't
+   ask again next time unless you tap **Switch account**.
 3. Tap **Start Scanner** and allow camera access when prompted.
 4. Point the camera at a QR code or barcode. On a successful scan:
    - The decoded value appears under "Last scanned".
@@ -137,6 +168,15 @@ single scan can't accidentally get saved twice.
 
 ## Troubleshooting
 
+- **"Sign in with Google" button doesn't appear, or sign-in fails with an
+  origin/redirect error** — the page's URL isn't listed under
+  **Authorized JavaScript origins** on the OAuth client (step 3.4);
+  add it exactly (including `https://`, no trailing slash) and wait a
+  couple of minutes for it to take effect.
+- **"Access blocked: has not completed the Google verification process"
+  / "app is in testing mode"** — the signed-in Google account isn't in
+  the OAuth consent screen's test users list (step 3.2). Add it there,
+  or publish the app if it needs to be open to anyone.
 - **Camera permission prompt never appears, on any device** — make sure
   you're opening the **static page's URL** (Netlify/GitHub Pages), not
   the Apps Script `.../exec` URL directly. The Apps Script URL is an API
