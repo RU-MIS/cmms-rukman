@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; }
+    .form-container { max-width: 850px; background: white; margin: 0 auto; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h2 { text-align: center; color: #1a1a1a; margin-bottom: 25px; border-bottom: 2px solid #eaeaea; padding-bottom: 10px; }
+    .header-field { display: flex; flex-direction: column; margin-bottom: 15px; }
+    .header-field label { font-weight: bold; margin-bottom: 6px; color: #444; }
+    select, input { padding: 10px; border: 1px solid #cccccc; border-radius: 4px; font-size: 14px; width: 100%; box-sizing: border-box; }
+    select:focus, input:focus { border-color: #4A90E2; outline: none; }
+
+    .table-container { overflow-x: auto; margin-top: 25px; }
+    table { width: 100%; border-collapse: collapse; min-width: 550px; }
+    th { background-color: #f5f5f5; color: #333; font-weight: 600; text-align: left; padding: 12px 10px; border: 1px solid #dddddd; }
+    td { padding: 8px; border: 1px solid #dddddd; }
+
+    .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; transition: background 0.2s; }
+    .btn-add { background-color: #007bff; color: white; margin-top: 15px; }
+    .btn-add:hover { background-color: #0056b3; }
+    .btn-submit { background-color: #28a745; color: white; width: 100%; margin-top: 25px; font-size: 16px; padding: 12px; }
+    .btn-submit:hover { background-color: #218838; }
+    .btn-remove { background-color: #dc3545; color: white; padding: 6px 12px; font-size: 12px; }
+    .btn-remove:hover { background-color: #c82333; }
+
+    .sr-no { text-align: center; font-weight: bold; color: #555; }
+  </style>
+</head>
+<body>
+
+<div class="form-container">
+  <h2>Material Entry Web Form</h2>
+
+  <form id="materialForm" onsubmit="handleFormSubmit(event)">
+    <div class="header-field">
+      <label>From Plant No.</label>
+      <select id="fromPlantSelect" required>
+        <option value="">Select From Plant No.</option>
+      </select>
+    </div>
+
+    <div class="header-field">
+      <label>To Warehouse</label>
+      <select id="toWarehouseSelect" required>
+        <option value="">Select To Warehouse</option>
+        <option value="Plant 1 WH">Plant 1 WH</option>
+        <option value="Plant 2 WH">Plant 2 WH</option>
+      </select>
+    </div>
+
+    <div class="table-container">
+      <table id="itemsTable">
+        <thead>
+          <tr>
+            <th style="width: 8%;">Sr. No.</th>
+            <th style="width: 42%;">PART DESCRIPTION</th>
+            <th style="width: 20%;">QTY</th>
+            <th style="width: 20%;">Unit</th>
+            <th style="width: 10%;">Action</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+        </tbody>
+      </table>
+    </div>
+
+    <button type="button" class="btn btn-add" onclick="addNewRow()">+ Add More Rows</button>
+    <button type="submit" class="btn btn-submit" id="submitBtn">Submit Data</button>
+  </form>
+</div>
+
+<script>
+  // Page load par seedhe dropdown data aayega aur ek default row banegi
+  window.onload = function() {
+    google.script.run.withSuccessHandler(populateDropdowns).getMasterData();
+    addNewRow();
+  };
+
+  function populateDropdowns(data) {
+    var fromPlantSelect = document.getElementById('fromPlantSelect');
+    data.plants.forEach(function(plant) {
+      var opt = document.createElement('option');
+      opt.value = plant;
+      opt.innerHTML = plant;
+      fromPlantSelect.appendChild(opt);
+    });
+  }
+
+  // Nayi Row add karne ka function
+  function addNewRow() {
+    var tbody = document.getElementById('tableBody');
+    var rowCount = tbody.rows.length;
+    var row = tbody.insertRow(rowCount);
+
+    row.innerHTML = `
+      <td class="sr-no">${rowCount + 1}</td>
+      <td><input type="text" class="part-name" placeholder="Enter Description" required></td>
+      <td><input type="number" class="qty" placeholder="0" min="1" required></td>
+      <td><input type="text" class="unit" placeholder="Pcs/Kg" required></td>
+      <td><button type="button" class="btn btn-remove" onclick="removeRow(this)">X</button></td>
+    `;
+    updateSrNumbers();
+  }
+
+  // Row delete karne ka function
+  function removeRow(button) {
+    var tbody = document.getElementById('tableBody');
+    if(tbody.rows.length > 1) {
+      var row = button.parentNode.parentNode;
+      row.parentNode.removeChild(row);
+      updateSrNumbers();
+    } else {
+      alert("Kam se kam ek row rehna zaroori hai.");
+    }
+  }
+
+  // Serial Numbers auto-update karne ke liye
+  function updateSrNumbers() {
+    var rows = document.getElementById('tableBody').rows;
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].cells[0].innerHTML = i + 1;
+    }
+  }
+  // DIRECT Google Sheet me save karne ka function
+  function handleFormSubmit(event) {
+    event.preventDefault();
+    var submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = "Sending to Sheet, Please Wait...";
+    var fromPlant = document.getElementById('fromPlantSelect').value;
+    var toWarehouse = document.getElementById('toWarehouseSelect').value;
+    var items = [];
+    var rows = document.getElementById('tableBody').rows;
+    for(var i=0; i<rows.length; i++) {
+      var pName = rows[i].querySelector('.part-name').value.trim();
+      var qty = rows[i].querySelector('.qty').value;
+      var unit = rows[i].querySelector('.unit').value.trim();
+
+      if(pName) {
+        items.push({ partName: pName, qty: qty, unit: unit });
+      }
+    }
+    var payload = {
+      fromPlant: fromPlant,
+      toWarehouse: toWarehouse,
+      items: items
+    };
+    // Google Apps Script function direct call ho raha hai bina local storage ke
+    google.script.run.withSuccessHandler(function(response) {
+      alert(response); // Sheet se aane wala success/duplicate message dikhega
+
+      // Data successfully save hone ke baad form ko saaf aur fresh kar dena
+      document.getElementById('materialForm').reset();
+      document.getElementById('tableBody').innerHTML = '';
+      addNewRow();
+
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = 'Submit Data';
+    }).saveFormData(payload);
+  }
+</script>
+</body>
+</html>
