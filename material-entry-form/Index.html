@@ -71,10 +71,12 @@
 </div>
 
 <script>
-  // Page load par seedhe dropdown data aayega aur ek default row banegi
+  var itemOptions = [];
+
+  // Page load par dropdown data aayega; pehli row items list aane ke
+  // baad hi banti hai, taaki uska Part Description dropdown khaali na ho.
   window.onload = function() {
     google.script.run.withSuccessHandler(populateDropdowns).getMasterData();
-    addNewRow();
   };
 
   function populateDropdowns(data) {
@@ -85,6 +87,17 @@
       opt.innerHTML = plant;
       fromPlantSelect.appendChild(opt);
     });
+
+    itemOptions = data.items || [];
+    addNewRow();
+  }
+
+  function buildItemOptionsHtml() {
+    var html = '<option value="">Select Part</option>';
+    itemOptions.forEach(function(item) {
+      html += '<option value="' + item + '">' + item + '</option>';
+    });
+    return html;
   }
 
   // Nayi Row add karne ka function
@@ -95,7 +108,7 @@
 
     row.innerHTML = `
       <td class="sr-no">${rowCount + 1}</td>
-      <td><input type="text" class="part-name" placeholder="Enter Description" required></td>
+      <td><select class="part-name" required>${buildItemOptionsHtml()}</select></td>
       <td><input type="number" class="qty" placeholder="0" min="1" required></td>
       <td><input type="text" class="unit" placeholder="Pcs/Kg" required></td>
       <td><button type="button" class="btn btn-remove" onclick="removeRow(this)">X</button></td>

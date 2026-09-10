@@ -4,28 +4,41 @@ function doGet() {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-// 1. Master sheet se Dropdown data lane ka function
+// 1. Dropdown data lane ka function
+//    - Plants: "master" sheet, column C, row 2 se neeche
+//    - Items:  "Item Master" sheet, column B, row 3 se neeche
 function getMasterData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var masterSheet = ss.getSheetByName("master");
 
-  if (!masterSheet) {
-    return { plants: ["Master sheet not found"] };
-  }
-
-  var lastRow = masterSheet.getLastRow();
-  if(lastRow < 2) return { plants: [] };
-
-  var plantData = masterSheet.getRange(2, 3, lastRow - 1, 1).getValues();
   var plants = [];
-
-  for (var i = 0; i < plantData.length; i++) {
-    if (plantData[i][0] && plants.indexOf(plantData[i][0]) === -1) {
-      plants.push(plantData[i][0]);
+  var masterSheet = ss.getSheetByName("master");
+  if (masterSheet) {
+    var lastRow = masterSheet.getLastRow();
+    if (lastRow >= 2) {
+      var plantData = masterSheet.getRange(2, 3, lastRow - 1, 1).getValues();
+      for (var i = 0; i < plantData.length; i++) {
+        if (plantData[i][0] && plants.indexOf(plantData[i][0]) === -1) {
+          plants.push(plantData[i][0]);
+        }
+      }
     }
   }
 
-  return { plants: plants };
+  var items = [];
+  var itemMasterSheet = ss.getSheetByName("Item Master");
+  if (itemMasterSheet) {
+    var lastRow2 = itemMasterSheet.getLastRow();
+    if (lastRow2 >= 3) {
+      var itemData = itemMasterSheet.getRange(3, 2, lastRow2 - 2, 1).getValues();
+      for (var j = 0; j < itemData.length; j++) {
+        if (itemData[j][0] && items.indexOf(itemData[j][0]) === -1) {
+          items.push(itemData[j][0]);
+        }
+      }
+    }
+  }
+
+  return { plants: plants, items: items };
 }
 
 // Helper function: Date ko dd-mmm-yyyy format me badalne ke liye
@@ -39,13 +52,14 @@ function formatDateToDdMmmYyyy(date) {
 }
 
 // 2. Form submit hone par data "FG In Data" sheet me last 50 rows check karke DIRECT save karne ka function
+// Column layout: A=Date, B=From Plant No., C=(blank), D=PART DESCRIPTION, E=QTY, F=Unit, G=To Warehouse
 function saveFormData(entry) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var targetSheet = ss.getSheetByName("FG In Data");
 
   if (!targetSheet) {
     targetSheet = ss.insertSheet("FG In Data");
-    targetSheet.appendRow(["Date", "From Plant No.", "To Warehouse", "PART DESCRIPTION", "QTY", "Unit"]);
+    targetSheet.appendRow(["Date", "From Plant No.", "", "PART DESCRIPTION", "QTY", "Unit", "To Warehouse"]);
   }
 
   var today = new Date();
@@ -58,9 +72,9 @@ function saveFormData(entry) {
   // Agar sheet me 50 se zyada rows hain, toh sirf pichli 50 rows hi read karenge speed ke liye
   if (lastRow > 50) {
     startRow = lastRow - 49;
-    existingData = targetSheet.getRange(startRow, 1, 50, 4).getValues(); // Date, From Plant, To Warehouse, Part Description columns
+    existingData = targetSheet.getRange(startRow, 1, 50, 7).getValues(); // A:G poora
   } else if (lastRow > 1) {
-    existingData = targetSheet.getRange(2, 1, lastRow - 1, 4).getValues();
+    existingData = targetSheet.getRange(2, 1, lastRow - 1, 7).getValues();
   }
 
   var savedCount = 0;
@@ -83,9 +97,9 @@ function saveFormData(entry) {
           rowDate = existingData[i][0].toString().trim();
         }
 
-        var rowFromPlant = existingData[i][1].toString().trim();
-        var rowToWarehouse = existingData[i][2].toString().trim();
-        var rowPartName = existingData[i][3].toString().trim();
+        var rowFromPlant = existingData[i][1].toString().trim();     // Column B
+        var rowPartName = existingData[i][3].toString().trim();      // Column D
+        var rowToWarehouse = existingData[i][6].toString().trim();   // Column G
 
         // Match conditions
         if (rowDate === formattedDate &&
@@ -98,7 +112,7 @@ function saveFormData(entry) {
       }
 
       if (!isDuplicate) {
-        targetSheet.appendRow([formattedDate, fromPlant, toWarehouse, item.partName, item.qty, item.unit]);
+        targetSheet.appendRow([formattedDate, fromPlant, "", item.partName, item.qty, item.unit, toWarehouse]);
         savedCount++;
       } else {
         duplicateCount++;
