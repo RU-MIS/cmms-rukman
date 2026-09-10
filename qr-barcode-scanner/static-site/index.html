@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>QR & Barcode Scanner</title>
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       * { box-sizing: border-box; }
       html, body { margin: 0; padding: 0; }
@@ -21,16 +20,17 @@
         gap: 14px;
       }
       h1 { font-size: 1.2rem; margin: 4px 0; text-align: center; }
-      #signInSection { display: flex; justify-content: center; }
-      #switchAccountBtn {
-        padding: 6px 14px;
-        font-size: 0.8rem;
-        border: none;
-        border-radius: 6px;
-        background: #374151;
+      #scannerName {
+        width: 100%;
+        max-width: 420px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #333;
+        background: #1c1c1c;
         color: #fff;
-        cursor: pointer;
+        font-size: 0.95rem;
       }
+      #scannerName::placeholder { color: #777; }
       #reader {
         width: 100%;
         max-width: 420px;
@@ -89,34 +89,17 @@
   <body>
     <h1>QR & Barcode Scanner</h1>
 
-    <div id="signInSection">
-      <!-- Replace YOUR_GOOGLE_CLIENT_ID below with the OAuth Client ID
-           from Google Cloud Console — see README.md "Google Sign-In setup". -->
-      <div id="g_id_onload"
-           data-client_id="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
-           data-callback="handleGoogleSignIn"
-           data-auto_select="true">
-      </div>
-      <div class="g_id_signin"
-           data-type="standard"
-           data-size="large"
-           data-theme="filled_blue"
-           data-width="280">
-      </div>
-    </div>
-
-    <div class="last-value" id="signedInBox" style="display:none;">
-      <span class="label">Signed in as</span>
-      <span class="value" id="signedInEmail"></span>
-      <div style="margin-top: 10px;">
-        <button id="switchAccountBtn">Switch account</button>
-      </div>
-    </div>
+    <input
+      type="text"
+      id="scannerName"
+      placeholder="Your name or email"
+      autocomplete="name"
+    />
 
     <div id="reader"></div>
 
     <div class="buttons">
-      <button id="startBtn" disabled>Start Scanner</button>
+      <button id="startBtn">Start Scanner</button>
       <button id="stopBtn" disabled>Stop Scanner</button>
     </div>
 
@@ -145,67 +128,24 @@
       const statusEl = document.getElementById('status');
       const lastValueBox = document.getElementById('lastValueBox');
       const lastValueText = document.getElementById('lastValueText');
-      const signInSection = document.getElementById('signInSection');
-      const signedInBox = document.getElementById('signedInBox');
-      const signedInEmailEl = document.getElementById('signedInEmail');
-      const switchAccountBtn = document.getElementById('switchAccountBtn');
+      const scannerNameInput = document.getElementById('scannerName');
 
       function setStatus(type, message) {
         statusEl.className = 'status' + (type ? ' ' + type : '');
         statusEl.textContent = message;
       }
 
-      let signedInEmail = null;
-
-      // The ID token Google hands back is a JWT; decoding its payload
-      // (no signature check needed here — this is just attribution, not
-      // an access-control boundary) gives us the verified email directly,
-      // the same way Google Forms auto-fills a signed-in respondent's email.
-      function decodeJwtPayload(token) {
-        const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-        const json = decodeURIComponent(
-          atob(base64)
-            .split('')
-            .map(function (c) { return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); })
-            .join('')
-        );
-        return JSON.parse(json);
-      }
-
-      function showSignedIn(email) {
-        signedInEmail = email;
-        signedInEmailEl.textContent = email;
-        signInSection.style.display = 'none';
-        signedInBox.style.display = 'block';
-        startBtn.disabled = false;
-      }
-
-      // Referenced by name in the data-callback attribute on #g_id_onload —
-      // Google Identity Services calls this after a successful sign-in.
-      function handleGoogleSignIn(response) {
-        const payload = decodeJwtPayload(response.credential);
-        try { localStorage.setItem('signedInEmail', payload.email); } catch (e) { /* ignore */ }
-        showSignedIn(payload.email);
-        setStatus('', 'Signed in. Press Start Scanner to begin.');
-      }
-
-      // Show a cached sign-in immediately on reload without waiting for
-      // Google's script to load — Google Identity Services' own
-      // data-auto_select will still confirm/refresh this in the background.
+      // Remember the scanner's name/email on this device so it doesn't
+      // have to be typed again on the next visit — no login involved.
       try {
-        const cachedEmail = localStorage.getItem('signedInEmail');
-        if (cachedEmail) showSignedIn(cachedEmail);
-      } catch (e) { /* ignore */ }
+        const savedName = localStorage.getItem('scannerName');
+        if (savedName) scannerNameInput.value = savedName;
+      } catch (e) { /* localStorage unavailable — just leave it blank */ }
 
-      switchAccountBtn.addEventListener('click', function () {
-        try { localStorage.removeItem('signedInEmail'); } catch (e) { /* ignore */ }
-        signedInEmail = null;
-        signedInBox.style.display = 'none';
-        signInSection.style.display = 'flex';
-        startBtn.disabled = true;
-        if (window.google && google.accounts && google.accounts.id) {
-          google.accounts.id.disableAutoSelect();
-        }
+      scannerNameInput.addEventListener('input', function () {
+        try {
+          localStorage.setItem('scannerName', scannerNameInput.value.trim());
+        } catch (e) { /* ignore */ }
       });
 
       function onScanSuccess(decodedText) {
@@ -231,7 +171,7 @@
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             value: decodedText,
-            scannedBy: signedInEmail
+            scannedBy: scannerNameInput.value.trim()
           })
         })
           .then(function (res) { return res.json(); })
@@ -330,8 +270,9 @@
       }
 
       startBtn.addEventListener('click', async function () {
-        if (!signedInEmail) {
-          setStatus('error', 'Please sign in with Google first.');
+        if (!scannerNameInput.value.trim()) {
+          setStatus('error', 'Enter your name or email above first.');
+          scannerNameInput.focus();
           return;
         }
 
