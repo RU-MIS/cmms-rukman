@@ -1,0 +1,22 @@
+-- AlterTable
+ALTER TABLE `Customer` ADD COLUMN `addressLine2` VARCHAR(191) NULL,
+    ADD COLUMN `country` VARCHAR(191) NULL,
+    ADD COLUMN `shipAddressLine1` VARCHAR(191) NULL,
+    ADD COLUMN `shipAddressLine2` VARCHAR(191) NULL,
+    ADD COLUMN `shipCity` VARCHAR(191) NULL,
+    ADD COLUMN `shipCountry` VARCHAR(191) NULL,
+    ADD COLUMN `shipGstin` VARCHAR(191) NULL,
+    ADD COLUMN `shipPincode` VARCHAR(191) NULL,
+    ADD COLUMN `shipState` VARCHAR(191) NULL;
+
+-- AlterTable
+ALTER TABLE `Vendor` ADD COLUMN `addressLine2` VARCHAR(191) NULL,
+    ADD COLUMN `country` VARCHAR(191) NULL,
+    ADD COLUMN `shipAddressLine1` VARCHAR(191) NULL,
+    ADD COLUMN `shipAddressLine2` VARCHAR(191) NULL,
+    ADD COLUMN `shipCity` VARCHAR(191) NULL,
+    ADD COLUMN `shipCountry` VARCHAR(191) NULL,
+    ADD COLUMN `shipGstin` VARCHAR(191) NULL,
+    ADD COLUMN `shipPincode` VARCHAR(191) NULL,
+    ADD COLUMN `shipState` VARCHAR(191) NULL;
+

@@ -155,11 +155,20 @@ model Customer {
   mobile         String?
   altMobile      String?
   email          String?
-  address        String?
-  city           String?
-  state          String?
-  pincode        String?
-  gstin          String?
+  address        String? // Bill To - Address Line 1
+  addressLine2   String? // Bill To - Address Line 2
+  city           String? // Bill To - City
+  state          String? // Bill To - State
+  pincode        String? // Bill To - Pincode
+  country        String? // Bill To - Country
+  gstin          String? // Bill To - GSTIN
+  shipAddressLine1 String? // Ship To - Address Line 1
+  shipAddressLine2 String? // Ship To - Address Line 2
+  shipCity         String? // Ship To - City
+  shipState        String? // Ship To - State
+  shipPincode      String? // Ship To - Pincode
+  shipCountry      String? // Ship To - Country
+  shipGstin        String? // Ship To - GSTIN
   openingBalance Decimal  @default(0) @db.Decimal(14, 2)
   creditLimit    Decimal  @default(0) @db.Decimal(14, 2)
   paymentTerms   String?
@@ -187,11 +196,20 @@ model Vendor {
   mobile         String?
   altMobile      String?
   email          String?
-  address        String?
-  city           String?
-  state          String?
-  pincode        String?
-  gstin          String?
+  address        String? // Bill To - Address Line 1
+  addressLine2   String? // Bill To - Address Line 2
+  city           String? // Bill To - City
+  state          String? // Bill To - State
+  pincode        String? // Bill To - Pincode
+  country        String? // Bill To - Country
+  gstin          String? // Bill To - GSTIN
+  shipAddressLine1 String? // Ship To - Address Line 1
+  shipAddressLine2 String? // Ship To - Address Line 2
+  shipCity         String? // Ship To - City
+  shipState        String? // Ship To - State
+  shipPincode      String? // Ship To - Pincode
+  shipCountry      String? // Ship To - Country
+  shipGstin        String? // Ship To - GSTIN
   openingBalance Decimal  @default(0) @db.Decimal(14, 2)
   paymentTerms   String?
   notes          String?

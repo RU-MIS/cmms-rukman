@@ -35,14 +35,33 @@ export async function generateDocument(type: DocumentType, id: number, companyId
     case 'invoice': {
       const sale = await prisma.sale.findUnique({ where: { id }, include: { customer: true, items: { include: { product: { include: { unit: true } } } } } });
       if (!sale) throw new ApiError(404, 'Sale not found');
-      const address = [sale.customer.address, sale.customer.city, sale.customer.state, sale.customer.pincode].filter(Boolean).join(', ');
-      const party = {
+      const billAddress = [sale.customer.address, sale.customer.addressLine2, sale.customer.city, sale.customer.state, sale.customer.pincode, sale.customer.country]
+        .filter(Boolean)
+        .join(', ');
+      const billTo = {
         name: sale.customer.name,
-        address: address || undefined,
+        address: billAddress || undefined,
         gstin: sale.customer.gstin ?? undefined,
         phone: sale.customer.mobile ?? undefined,
         email: sale.customer.email ?? undefined,
       };
+      // Ship To fields are only populated once a customer's form is saved with
+      // this feature (or "Same as Bill To" copies Bill To into them at save
+      // time) -- older/unedited customers have them NULL, so fall back to the
+      // Bill To address rather than printing a blank Ship To block.
+      const hasShipAddress = sale.customer.shipAddressLine1 || sale.customer.shipCity || sale.customer.shipState || sale.customer.shipPincode;
+      const shipAddress = [sale.customer.shipAddressLine1, sale.customer.shipAddressLine2, sale.customer.shipCity, sale.customer.shipState, sale.customer.shipPincode, sale.customer.shipCountry]
+        .filter(Boolean)
+        .join(', ');
+      const shipTo = hasShipAddress
+        ? {
+            name: sale.customer.name,
+            address: shipAddress || undefined,
+            gstin: sale.customer.shipGstin ?? sale.customer.gstin ?? undefined,
+            phone: sale.customer.mobile ?? undefined,
+            email: sale.customer.email ?? undefined,
+          }
+        : billTo;
       const buffer = await buildTaxInvoicePdf({
         logoPath: brand.logoPath,
         fontFamily: brand.fontFamily,
@@ -57,8 +76,8 @@ export async function generateDocument(type: DocumentType, id: number, companyId
           { label: 'Invoice No.', value: sale.invoiceNo },
           { label: 'Customer ID', value: sale.customer.code },
         ],
-        billTo: party,
-        shipTo: party,
+        billTo,
+        shipTo,
         items: sale.items.map((i) => ({
           name: i.product.name,
           qty: i.qty.toString(),

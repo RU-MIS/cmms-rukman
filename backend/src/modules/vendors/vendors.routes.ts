@@ -67,6 +67,25 @@ const vendorValidators = [
   gstinValidator,
 ];
 
+function addressFields(body: any) {
+  return {
+    address: body.address,
+    addressLine2: body.addressLine2,
+    city: body.city,
+    state: body.state,
+    pincode: body.pincode,
+    country: body.country,
+    gstin: body.gstin,
+    shipAddressLine1: body.shipAddressLine1,
+    shipAddressLine2: body.shipAddressLine2,
+    shipCity: body.shipCity,
+    shipState: body.shipState,
+    shipPincode: body.shipPincode,
+    shipCountry: body.shipCountry,
+    shipGstin: body.shipGstin,
+  };
+}
+
 router.post(
   '/',
   requirePermission('vendors', 'create'),
@@ -83,11 +102,7 @@ router.post(
         mobile: req.body.mobile,
         altMobile: req.body.altMobile,
         email: req.body.email || null,
-        address: req.body.address,
-        city: req.body.city,
-        state: req.body.state,
-        pincode: req.body.pincode,
-        gstin: req.body.gstin,
+        ...addressFields(req.body),
         openingBalance: req.body.openingBalance ?? 0,
         paymentTerms: req.body.paymentTerms,
         notes: req.body.notes,
@@ -116,11 +131,7 @@ router.put(
         mobile: req.body.mobile,
         altMobile: req.body.altMobile,
         email: req.body.email || null,
-        address: req.body.address,
-        city: req.body.city,
-        state: req.body.state,
-        pincode: req.body.pincode,
-        gstin: req.body.gstin,
+        ...addressFields(req.body),
         openingBalance: req.body.openingBalance,
         paymentTerms: req.body.paymentTerms,
         notes: req.body.notes,

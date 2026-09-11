@@ -46,10 +46,22 @@ router.post(
           companyName: r.companyName ?? r.company ?? undefined,
           mobile: r.mobile ? String(r.mobile) : undefined,
           email: email || undefined,
+          // Bill To (existing columns, unchanged)
           address: r.address ?? undefined,
+          addressLine2: r.addressLine2 ?? undefined,
           city: r.city ?? undefined,
           state: r.state ?? undefined,
+          pincode: r.pincode ?? undefined,
+          country: r.country ?? undefined,
           gstin: r.gstin ?? undefined,
+          // Ship To (new, optional columns -- older spreadsheets without them import fine)
+          shipAddressLine1: r.shipAddressLine1 ?? undefined,
+          shipAddressLine2: r.shipAddressLine2 ?? undefined,
+          shipCity: r.shipCity ?? undefined,
+          shipState: r.shipState ?? undefined,
+          shipPincode: r.shipPincode ?? undefined,
+          shipCountry: r.shipCountry ?? undefined,
+          shipGstin: r.shipGstin ?? undefined,
           openingBalance: Number(r.openingBalance ?? 0) || 0,
         });
       });

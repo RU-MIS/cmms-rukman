@@ -10,11 +10,12 @@ interface GstinInputProps {
   value: string;
   onChange: (value: string) => void;
   label?: string;
+  disabled?: boolean;
   /** Called with the fetched taxpayer details once a real GST API is connected. Unused today. */
   onFetched?: (details: Record<string, unknown>) => void;
 }
 
-export function GstinInput({ value, onChange, label = 'GSTIN', onFetched }: GstinInputProps) {
+export function GstinInput({ value, onChange, label = 'GSTIN', disabled = false, onFetched }: GstinInputProps) {
   const [fetching, setFetching] = useState(false);
   const trimmed = (value || '').trim().toUpperCase();
   const showError = trimmed.length > 0 && !isValidGSTIN(trimmed);
@@ -46,11 +47,12 @@ export function GstinInput({ value, onChange, label = 'GSTIN', onFetched }: Gsti
           onChange={(e) => onChange(e.target.value.toUpperCase())}
           maxLength={15}
           placeholder="22AAAAA0000A1Z5"
+          disabled={disabled}
         />
         <button
           type="button"
           onClick={handleFetch}
-          disabled={fetching}
+          disabled={fetching || disabled}
           className="btn-secondary shrink-0 whitespace-nowrap"
           title="GST API not configured yet — enter details manually for now"
         >
