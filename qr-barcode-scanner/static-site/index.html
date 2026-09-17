@@ -257,7 +257,12 @@
         try {
           await html5QrCode.start(
             SCANNER_CAMERA_CONFIG,
-            { fps: 10, qrbox: { width: 250, height: 250 } },
+            // No qrbox: some devices miscalculate the crop region when the
+            // video's aspect ratio doesn't match a fixed qrbox size, and end
+            // up scanning a blank/wrong slice of the frame forever — the
+            // preview looks fine but nothing ever decodes. Scanning the full
+            // frame avoids that entirely.
+            { fps: 10 },
             onScanSuccess,
             onScanFailure
           );
