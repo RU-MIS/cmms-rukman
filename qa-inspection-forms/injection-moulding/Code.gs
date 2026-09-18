@@ -122,6 +122,20 @@ function buildHeaders_(sheet) {
   sheet.setFrozenColumns(4);
 }
 
+/**
+ * Sheets silently converts a date-looking string (e.g. "2026-09-18") into a
+ * real Date value when it's written to a cell, so reading it back gives a
+ * Date object, not the original string. Normalize both sides to the same
+ * "yyyy-MM-dd" text before comparing, otherwise two sessions on the same
+ * day never match.
+ */
+function normalizeDate_(value) {
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return String(value).trim();
+}
+
 /** Rows already created for this Date + M/C No + Part Name, keyed by Check Point label. */
 function findSessionRows_(sheet, dateStr, machineNo, partName) {
   var lastRow = sheet.getLastRow();
@@ -130,7 +144,7 @@ function findSessionRows_(sheet, dateStr, machineNo, partName) {
   var data = sheet.getRange(3, 1, lastRow - 2, 5).getValues();
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
-    if (String(row[1]) === String(dateStr) &&
+    if (normalizeDate_(row[1]) === normalizeDate_(dateStr) &&
         String(row[2]).trim() === String(machineNo).trim() &&
         String(row[3]).trim() === String(partName).trim()) {
       map[row[4]] = i + 3; // 1-based sheet row
