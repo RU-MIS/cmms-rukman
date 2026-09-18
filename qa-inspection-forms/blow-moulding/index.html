@@ -139,7 +139,7 @@
           inputHtml = '<select data-key="' + cp.key + '" id="cp_' + cp.key + '">' +
             '<option value="">Select</option>' +
             '<option value="OK">OK</option>' +
-            '<option value="NG">NG (Not Good)</option>' +
+            '<option value="Not OK">Not OK</option>' +
             '</select>';
         }
         div.innerHTML = '<label>' + cp.label + '</label><p class="spec">' + specText + '</p>' + inputHtml;
@@ -177,7 +177,7 @@
       var slotArea = document.getElementById('slotArea');
       if (!next) {
         currentSlot = null;
-        slotArea.innerHTML = '<div class="done-banner">All time slots for this Date / M.C. / Part are already filled.</div>';
+        slotArea.innerHTML = '<div class="done-banner">All time slots are filled, or this report has already been finalized (Report Generated). No further entries allowed for this Date / M.C. No. / Part Name.</div>';
         document.getElementById('checkpointsCard').classList.add('hidden');
         return;
       }

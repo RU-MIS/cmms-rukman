@@ -169,7 +169,9 @@ function createSessionRows_(sheet, dateStr, machineNo, partName, timestamp) {
 
 /**
  * Returns the next unfilled {shift, slot} for the given Date + Machine No + Part Name,
- * or null if every slot for that day has already been filled.
+ * or null if every slot for that day has already been filled, or if this
+ * session's Status is already "Report Generated" (finalized - no further
+ * entries allowed even if slots remain).
  */
 function getNextSlot(dateStr, machineNo, partName) {
   var sheet = getSheet_();
@@ -180,6 +182,9 @@ function getNextSlot(dateStr, machineNo, partName) {
   }
   var anyRow = map[CHECKPOINTS[0].label];
   var rowValues = sheet.getRange(anyRow, 1, 1, totalCols_()).getValues()[0];
+  if (rowValues[statusCol_() - 1] === 'Report Generated') {
+    return null;
+  }
   for (var i = 0; i < all.length; i++) {
     if (!rowValues[slotValueCol_(i) - 1]) {
       return all[i];
@@ -253,7 +258,7 @@ function submitInspection(payload, finalize) {
     var sheet = getSheet_();
     var next = getNextSlot(payload.date, payload.machineNo, payload.partName);
     if (!next || next.shift !== payload.shift || next.slot !== payload.slot) {
-      throw new Error('This time slot is not the next one due. Please refresh and try again.');
+      throw new Error('This time slot is not the next one due, or this report has already been finalized (Report Generated). Please refresh and try again.');
     }
 
     var now = new Date();
