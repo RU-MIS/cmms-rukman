@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0;
+      background: #f2f3f5;
+      color: #1c1c1c;
+    }
+    header {
+      background: #111; color: #fff; padding: 14px 16px; text-align: center;
+    }
+    header h1 { font-size: 15px; margin: 0 0 2px; letter-spacing: 0.5px; }
+    header p { font-size: 12px; margin: 0; opacity: 0.8; }
+    .wrap { max-width: 560px; margin: 0 auto; padding: 12px; }
+    .card {
+      background: #fff; border-radius: 10px; padding: 14px; margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+    label:first-child { margin-top: 0; }
+    input[type=text], input[type=date], input[type=number], select, textarea {
+      width: 100%; padding: 10px; font-size: 15px; border: 1px solid #ccc;
+      border-radius: 8px; background: #fff;
+    }
+    textarea { resize: vertical; min-height: 50px; }
+    .btn {
+      width: 100%; padding: 13px; font-size: 15px; font-weight: 600; border: none;
+      border-radius: 8px; margin-top: 8px; cursor: pointer;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-secondary { background: #059669; color: #fff; }
+    .btn-outline { background: #fff; color: #2563eb; border: 1px solid #2563eb; }
+    .btn:disabled { opacity: 0.5; }
+    .checkpoint { border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px; }
+    .checkpoint:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+    .checkpoint .spec { font-size: 12px; color: #666; margin: 0 0 6px; }
+    .slot-banner {
+      background: #eef4ff; border: 1px solid #bcd4ff; color: #1d4ed8;
+      padding: 10px 12px; border-radius: 8px; font-size: 14px; font-weight: 600;
+      text-align: center;
+    }
+    .done-banner {
+      background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857;
+      padding: 12px; border-radius: 8px; text-align: center; font-weight: 600;
+    }
+    .error-banner {
+      background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+      padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 8px;
+    }
+    .hidden { display: none; }
+    .muted { color: #666; font-size: 12px; }
+    #overlay {
+      position: fixed; inset: 0; background: rgba(255,255,255,0.7);
+      display: flex; align-items: center; justify-content: center; font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="formTitle">RUKMAN UDYOG</h1>
+    <p id="formSubtitle">Loading form...</p>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+      <label for="date">Date</label>
+      <input type="date" id="date">
+
+      <label for="machineNo">M/C No.</label>
+      <input type="text" id="machineNo" placeholder="e.g. BM-01">
+
+      <label for="partName">Part Name</label>
+      <input type="text" id="partName" placeholder="Part name">
+
+      <button class="btn btn-outline" id="checkSlotBtn" type="button">Check Next Time Slot</button>
+      <div id="slotArea"></div>
+    </div>
+
+    <div class="card hidden" id="checkpointsCard">
+      <div id="checkpointsList"></div>
+
+      <label for="remarks">Remarks</label>
+      <textarea id="remarks" placeholder="Any remarks (optional)"></textarea>
+
+      <label for="inspectorSign">QA Inspector Sign (Name)</label>
+      <input type="text" id="inspectorSign" placeholder="Inspector name">
+
+      <button class="btn btn-primary" id="submitBtn" type="button">Submit</button>
+      <button class="btn btn-secondary" id="submitReportBtn" type="button">Submit &amp; Generate Report</button>
+      <p class="muted">Submit just saves this reading. "Submit &amp; Generate Report" saves it and marks it as Report Generated.</p>
+      <div id="submitError"></div>
+    </div>
+  </div>
+
+  <div id="overlay" class="hidden">Working...</div>
+
+  <script>
+    var CONFIG = null;
+    var currentSlot = null; // {shift, slot}
+
+    function showOverlay(show) {
+      document.getElementById('overlay').classList.toggle('hidden', !show);
+    }
+
+    function todayStr() {
+      var d = new Date();
+      var m = ('0' + (d.getMonth() + 1)).slice(-2);
+      var day = ('0' + d.getDate()).slice(-2);
+      return d.getFullYear() + '-' + m + '-' + day;
+    }
+
+    function init(config) {
+      CONFIG = config;
+      document.getElementById('formTitle').textContent = 'RUKMAN UDYOG';
+      document.getElementById('formSubtitle').textContent = config.title;
+      document.getElementById('date').value = todayStr();
+    }
+
+    function renderCheckpoints() {
+      var list = document.getElementById('checkpointsList');
+      list.innerHTML = '';
+      CONFIG.checkpoints.forEach(function (cp) {
+        var div = document.createElement('div');
+        div.className = 'checkpoint';
+        var specText = cp.spec + ' (' + cp.mode + ')';
+        var inputHtml;
+        if (cp.type === 'number') {
+          inputHtml = '<input type="number" step="any" data-key="' + cp.key + '" id="cp_' + cp.key + '">';
+        } else {
+          inputHtml = '<select data-key="' + cp.key + '" id="cp_' + cp.key + '">' +
+            '<option value="">Select</option>' +
+            '<option value="OK">OK</option>' +
+            '<option value="NG">NG (Not Good)</option>' +
+            '</select>';
+        }
+        div.innerHTML = '<label>' + cp.label + '</label><p class="spec">' + specText + '</p>' + inputHtml;
+        list.appendChild(div);
+      });
+    }
+
+    function checkSlot() {
+      var date = document.getElementById('date').value;
+      var machineNo = document.getElementById('machineNo').value.trim();
+      var partName = document.getElementById('partName').value.trim();
+      var slotArea = document.getElementById('slotArea');
+      slotArea.innerHTML = '';
+      document.getElementById('checkpointsCard').classList.add('hidden');
+
+      if (!date || !machineNo || !partName) {
+        slotArea.innerHTML = '<div class="error-banner">Please fill Date, M/C No. and Part Name first.</div>';
+        return;
+      }
+
+      showOverlay(true);
+      google.script.run
+        .withSuccessHandler(function (next) {
+          showOverlay(false);
+          onSlotResult(next);
+        })
+        .withFailureHandler(function (err) {
+          showOverlay(false);
+          slotArea.innerHTML = '<div class="error-banner">' + err.message + '</div>';
+        })
+        .getNextSlot(date, machineNo, partName);
+    }
+
+    function onSlotResult(next) {
+      var slotArea = document.getElementById('slotArea');
+      if (!next) {
+        currentSlot = null;
+        slotArea.innerHTML = '<div class="done-banner">All time slots for this Date / M.C. / Part are already filled.</div>';
+        document.getElementById('checkpointsCard').classList.add('hidden');
+        return;
+      }
+      currentSlot = next;
+      slotArea.innerHTML = '<div class="slot-banner">Next slot to fill: ' + next.shift + ' &mdash; ' + next.slot + '</div>';
+      renderCheckpoints();
+      document.getElementById('checkpointsCard').classList.remove('hidden');
+      document.getElementById('submitError').innerHTML = '';
+    }
+
+    function collectPayload() {
+      var values = {};
+      var missing = [];
+      CONFIG.checkpoints.forEach(function (cp) {
+        var el = document.getElementById('cp_' + cp.key);
+        var val = el.value;
+        if (!val && cp.required !== false) { missing.push(cp.label); }
+        values[cp.key] = val;
+      });
+      return {
+        payload: {
+          date: document.getElementById('date').value,
+          machineNo: document.getElementById('machineNo').value.trim(),
+          partName: document.getElementById('partName').value.trim(),
+          shift: currentSlot.shift,
+          slot: currentSlot.slot,
+          values: values,
+          remarks: document.getElementById('remarks').value,
+          inspectorSign: document.getElementById('inspectorSign').value.trim()
+        },
+        missing: missing
+      };
+    }
+
+    function doSubmit(finalize) {
+      var errorDiv = document.getElementById('submitError');
+      errorDiv.innerHTML = '';
+      if (!currentSlot) { return; }
+
+      var result = collectPayload();
+      if (result.missing.length) {
+        errorDiv.innerHTML = '<div class="error-banner">Please fill: ' + result.missing.join(', ') + '</div>';
+        return;
+      }
+      if (!result.payload.inspectorSign) {
+        errorDiv.innerHTML = '<div class="error-banner">Please enter QA Inspector name.</div>';
+        return;
+      }
+
+      showOverlay(true);
+      google.script.run
+        .withSuccessHandler(function (res) {
+          showOverlay(false);
+          document.getElementById('remarks').value = '';
+          document.getElementById('inspectorSign').value = '';
+          onSlotResult(res.nextSlot);
+          var slotArea = document.getElementById('slotArea');
+          var msg = finalize ? 'Saved. Marked as Report Generated.' : 'Saved. Marked as Submitted.';
+          slotArea.innerHTML = '<div class="done-banner">' + msg + '</div>' + slotArea.innerHTML;
+        })
+        .withFailureHandler(function (err) {
+          showOverlay(false);
+          errorDiv.innerHTML = '<div class="error-banner">' + err.message + '</div>';
+        })
+        .submitInspection(result.payload, finalize);
+    }
+
+    document.getElementById('checkSlotBtn').addEventListener('click', checkSlot);
+    document.getElementById('submitBtn').addEventListener('click', function () { doSubmit(false); });
+    document.getElementById('submitReportBtn').addEventListener('click', function () { doSubmit(true); });
+
+    google.script.run.withSuccessHandler(init).getFormConfig();
+  </script>
+</body>
+</html>
