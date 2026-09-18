@@ -70,11 +70,27 @@ the same.
 ## Where the data ends up
 
 Each form creates one tab in its Sheet the first time it runs:
-"Blow Moulding Log" or "Injection Moulding Log". Every submission is a new
-row with all check-point values plus a `Status` column
-(`Submitted` / `Report Generated`) - nothing is ever overwritten, so the
-sheet is a full audit trail you can filter, pivot, or export from Google
-Sheets directly.
+"Blow Moulding Log" or "Injection Moulding Log". The layout mirrors the
+paper form:
+
+- Each **Check Point is a row** (Appearance, Weight, Air Problem, ...) -
+  these rows are created once, the first time a Date + M/C No + Part Name
+  combination is filled.
+- Each **time slot is a pair of columns** (the reading + QA Inspector Sign),
+  grouped DAY / NIGHT across the top, in the same order as the paper form.
+- `Remarks`, `Status` (`Submitted` / `Report Generated`) and
+  `Last Submitted` are the last three columns, updated on every submission
+  for that Date + M/C No + Part Name.
+
+Submitting a time slot only fills in that slot's two columns across all the
+Check Point rows for that Date + M/C No + Part Name - nothing else is
+touched, so you always see the full history for the day building up
+left to right exactly like the paper sheet.
+
+If you already tested with an older version of the script, delete the
+"Blow Moulding Log" / "Injection Moulding Log" tab it created (Sheet tab
+right-click > Delete) before redeploying this version, so it can build the
+new layout from scratch.
 
 ## Files
 
