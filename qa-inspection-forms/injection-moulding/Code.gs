@@ -194,51 +194,36 @@ function getNextSlot(dateStr, machineNo, partName) {
 }
 
 /**
- * Builds a standalone spreadsheet containing just this session's header rows
- * and Check Point rows, exports it to PDF, emails it to REPORT_EMAIL, then
- * deletes the temporary file.
+ * Exports just this session's rows straight from the live sheet as a PDF
+ * (no temp file, no Drive permission needed) and emails it to REPORT_EMAIL.
+ * r1/r2/c1/c2 select the Check Point row range; fzr=true reprints the
+ * frozen header rows (1-2) at the top of the export automatically.
  */
 function emailFinalReport_(sheet, map, dateStr, machineNo, partName) {
   var totalCols = totalCols_();
-  var headerRows = sheet.getRange(1, 1, 2, totalCols).getValues();
   var rowNums = CHECKPOINTS.map(function (cp) { return map[cp.label]; }).filter(function (r) { return !!r; });
   var minRow = Math.min.apply(null, rowNums);
   var maxRow = Math.max.apply(null, rowNums);
-  var dataRows = sheet.getRange(minRow, 1, maxRow - minRow + 1, totalCols).getValues();
 
   var reportName = FORM_TITLE + ' - ' + partName + ' - ' + machineNo + ' - ' + dateStr;
-  var tempSs = SpreadsheetApp.create(reportName);
-  try {
-    var tempSheet = tempSs.getSheets()[0];
-    tempSheet.getRange(1, 1, 2, totalCols).setValues(headerRows);
-    tempSheet.getRange(3, 1, dataRows.length, totalCols).setValues(dataRows);
-    allSlotsInOrder_().forEach(function (s, i) {
-      tempSheet.getRange(1, slotValueCol_(i), 1, 2).merge().setHorizontalAlignment('center');
-    });
-    tempSheet.getRange(1, 1, 2, totalCols).setFontWeight('bold');
-    tempSheet.setFrozenRows(2);
-    tempSheet.autoResizeColumns(1, totalCols);
-    SpreadsheetApp.flush();
+  var url = 'https://docs.google.com/spreadsheets/d/' + sheet.getParent().getId() + '/export' +
+    '?format=pdf&gid=' + sheet.getSheetId() +
+    '&size=A3&portrait=false&fitw=true&gridlines=true' +
+    '&printtitle=false&sheetnames=false&pagenum=UNDEFINED' +
+    '&fzr=true' +
+    '&r1=' + (minRow - 1) + '&r2=' + maxRow + '&c1=0&c2=' + totalCols;
+  var response = UrlFetchApp.fetch(url, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+  });
+  var pdfBlob = response.getBlob().setName(reportName + '.pdf');
 
-    var url = 'https://docs.google.com/spreadsheets/d/' + tempSs.getId() + '/export' +
-      '?format=pdf&gid=' + tempSheet.getSheetId() +
-      '&size=A3&portrait=false&fitw=true&gridlines=true' +
-      '&printtitle=false&sheetnames=false&pagenum=UNDEFINED';
-    var response = UrlFetchApp.fetch(url, {
-      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
-    });
-    var pdfBlob = response.getBlob().setName(reportName + '.pdf');
-
-    MailApp.sendEmail({
-      to: REPORT_EMAIL,
-      subject: reportName,
-      body: 'Attached: ' + FORM_TITLE + ' report.\n\n' +
-        'Date: ' + dateStr + '\nM/C No.: ' + machineNo + '\nPart Name: ' + partName,
-      attachments: [pdfBlob]
-    });
-  } finally {
-    DriveApp.getFileById(tempSs.getId()).setTrashed(true);
-  }
+  MailApp.sendEmail({
+    to: REPORT_EMAIL,
+    subject: reportName,
+    body: 'Attached: ' + FORM_TITLE + ' report.\n\n' +
+      'Date: ' + dateStr + '\nM/C No.: ' + machineNo + '\nPart Name: ' + partName,
+    attachments: [pdfBlob]
+  });
 }
 
 /**
