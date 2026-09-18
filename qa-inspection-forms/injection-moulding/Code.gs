@@ -9,6 +9,7 @@
 var FORM_TITLE = 'In-Process Inspection - Injection Moulding';
 var SHEET_NAME = 'Injection Moulding Log';
 var CHECKING_FREQ = 'Every Two Hours';
+var REPORT_EMAIL = 'qms1@rukmanudyog.com';
 
 // Time slots, in order, for one shift. Both shifts use the same 6 slots.
 var SLOTS = ['9 to 11', '11 to 1', '1 to 3', '3 to 5', '5 to 7', '7 to 9'];
@@ -188,10 +189,59 @@ function getNextSlot(dateStr, machineNo, partName) {
 }
 
 /**
+ * Builds a standalone spreadsheet containing just this session's header rows
+ * and Check Point rows, exports it to PDF, emails it to REPORT_EMAIL, then
+ * deletes the temporary file.
+ */
+function emailFinalReport_(sheet, map, dateStr, machineNo, partName) {
+  var totalCols = totalCols_();
+  var headerRows = sheet.getRange(1, 1, 2, totalCols).getValues();
+  var rowNums = CHECKPOINTS.map(function (cp) { return map[cp.label]; }).filter(function (r) { return !!r; });
+  var minRow = Math.min.apply(null, rowNums);
+  var maxRow = Math.max.apply(null, rowNums);
+  var dataRows = sheet.getRange(minRow, 1, maxRow - minRow + 1, totalCols).getValues();
+
+  var reportName = FORM_TITLE + ' - ' + partName + ' - ' + machineNo + ' - ' + dateStr;
+  var tempSs = SpreadsheetApp.create(reportName);
+  try {
+    var tempSheet = tempSs.getSheets()[0];
+    tempSheet.getRange(1, 1, 2, totalCols).setValues(headerRows);
+    tempSheet.getRange(3, 1, dataRows.length, totalCols).setValues(dataRows);
+    allSlotsInOrder_().forEach(function (s, i) {
+      tempSheet.getRange(1, slotValueCol_(i), 1, 2).merge().setHorizontalAlignment('center');
+    });
+    tempSheet.getRange(1, 1, 2, totalCols).setFontWeight('bold');
+    tempSheet.setFrozenRows(2);
+    tempSheet.autoResizeColumns(1, totalCols);
+    SpreadsheetApp.flush();
+
+    var url = 'https://docs.google.com/spreadsheets/d/' + tempSs.getId() + '/export' +
+      '?format=pdf&gid=' + tempSheet.getSheetId() +
+      '&size=A3&portrait=false&fitw=true&gridlines=true' +
+      '&printtitle=false&sheetnames=false&pagenum=UNDEFINED';
+    var response = UrlFetchApp.fetch(url, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+    });
+    var pdfBlob = response.getBlob().setName(reportName + '.pdf');
+
+    MailApp.sendEmail({
+      to: REPORT_EMAIL,
+      subject: reportName,
+      body: 'Attached: ' + FORM_TITLE + ' report.\n\n' +
+        'Date: ' + dateStr + '\nM/C No.: ' + machineNo + '\nPart Name: ' + partName,
+      attachments: [pdfBlob]
+    });
+  } finally {
+    DriveApp.getFileById(tempSs.getId()).setTrashed(true);
+  }
+}
+
+/**
  * Saves one time-slot's readings into the existing Check Point rows for this
  * Date + M/C No + Part Name (creating those rows first if this is the first
- * slot of the day). finalize=true writes Status "Report Generated",
- * otherwise "Submitted". Re-validates the slot is still the correct next one.
+ * slot of the day). finalize=true writes Status "Report Generated", emails a
+ * PDF of the report to REPORT_EMAIL, and otherwise writes "Submitted".
+ * Re-validates the slot is still the correct next one.
  */
 function submitInspection(payload, finalize) {
   var lock = LockService.getScriptLock();
@@ -236,7 +286,23 @@ function submitInspection(payload, finalize) {
       sheet.getRange(row, lsCol).setValue(now);
     });
 
-    return { ok: true, nextSlot: getNextSlot(payload.date, payload.machineNo, payload.partName) };
+    var emailSent = false;
+    var emailError = '';
+    if (finalize) {
+      try {
+        emailFinalReport_(sheet, map, payload.date, payload.machineNo, payload.partName);
+        emailSent = true;
+      } catch (e) {
+        emailError = e.message;
+      }
+    }
+
+    return {
+      ok: true,
+      nextSlot: getNextSlot(payload.date, payload.machineNo, payload.partName),
+      emailSent: emailSent,
+      emailError: emailError
+    };
   } finally {
     lock.releaseLock();
   }

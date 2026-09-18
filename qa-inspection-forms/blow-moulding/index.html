@@ -236,6 +236,11 @@
           onSlotResult(res.nextSlot);
           var slotArea = document.getElementById('slotArea');
           var msg = finalize ? 'Saved. Marked as Report Generated.' : 'Saved. Marked as Submitted.';
+          if (finalize) {
+            msg += res.emailSent
+              ? ' PDF emailed to qms1@rukmanudyog.com.'
+              : ' (Could not email PDF: ' + (res.emailError || 'unknown error') + ')';
+          }
           slotArea.innerHTML = '<div class="done-banner">' + msg + '</div>' + slotArea.innerHTML;
         })
         .withFailureHandler(function (err) {
