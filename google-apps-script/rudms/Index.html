@@ -17,7 +17,7 @@
       theme: {
         extend: {
           fontFamily: { sans: ['Inter', 'sans-serif'] },
-          colors: { brand: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' } }
+          colors: { brand: { 50: '#f0f4f6', 100: '#dde5ea', 500: '#295a78', 600: '#0c4466', 700: '#0a3652' } }
         }
       }
     };
@@ -27,12 +27,12 @@
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    .sidebar-link.active { background: #eef2ff; color: #4338ca; font-weight: 600; }
+    .sidebar-link.active { background: #dde5ea; color: #0a3652; font-weight: 600; }
     .file-card { transition: box-shadow .15s ease, transform .15s ease; }
     .file-card:hover { box-shadow: 0 8px 24px -8px rgba(0,0,0,0.15); transform: translateY(-2px); }
     .modal-backdrop { background: rgba(15, 23, 42, 0.55); }
-    .drop-zone.drag-over { background: #eef2ff; border-color: #6366f1; }
-    .spinner { border: 3px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; width: 28px; height: 28px; animation: spin 0.7s linear infinite; }
+    .drop-zone.drag-over { background: #f0f4f6; border-color: #0c4466; }
+    .spinner { border: 3px solid #e2e8f0; border-top-color: #0c4466; border-radius: 50%; width: 28px; height: 28px; animation: spin 0.7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .toast { animation: slideIn .2s ease-out; }
     @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -916,7 +916,7 @@
     var light2 = new THREE.DirectionalLight(0xffffff, 0.4); light2.position.set(-1, -1, -1); scene.add(light2);
 
     var bytes = Uint8Array.from(atob(base64), function (c) { return c.charCodeAt(0); });
-    var material = new THREE.MeshStandardMaterial({ color: 0x6366f1, metalness: 0.2, roughness: 0.6 });
+    var material = new THREE.MeshStandardMaterial({ color: 0x0c4466, metalness: 0.2, roughness: 0.6 });
     var object;
 
     try {
@@ -983,7 +983,7 @@
     jpeg: ['🖼️', 'bg-purple-50 text-purple-600'], gif: ['🖼️', 'bg-purple-50 text-purple-600'], webp: ['🖼️', 'bg-purple-50 text-purple-600'],
     dwg: ['📐', 'bg-slate-100 text-slate-600'], dxf: ['📐', 'bg-slate-100 text-slate-600'],
     step: ['🧩', 'bg-slate-100 text-slate-600'], stp: ['🧩', 'bg-slate-100 text-slate-600'],
-    stl: ['🧊', 'bg-indigo-50 text-indigo-600'], obj: ['🧊', 'bg-indigo-50 text-indigo-600']
+    stl: ['🧊', 'bg-brand-50 text-brand-600'], obj: ['🧊', 'bg-brand-50 text-brand-600']
   };
 
   function fileIcon(ext, sizeClass) {
