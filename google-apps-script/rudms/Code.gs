@@ -336,6 +336,87 @@ function deleteFile(fileId) {
 }
 
 // ---------------------------------------------------------------------------
+// Folder-level (category) access management
+// ---------------------------------------------------------------------------
+
+function mapUsersToEmails_(users) {
+  return users.map(function (u) { return u.getEmail(); }).filter(Boolean);
+}
+
+/**
+ * Returns current Drive-level sharing for every category folder, so the
+ * "Manage Access" panel can show who already has folder-wide access.
+ * Sharing a folder in Drive automatically grants the same access to every
+ * file inside it (now and any uploaded later).
+ */
+function getCategoryAccessOverview() {
+  try {
+    var rootFolder = getRootFolder_();
+    var categories = listCategoryFolders_(rootFolder);
+    var result = categories.map(function (name) {
+      var folder = getOrCreateCategoryFolder_(rootFolder, name);
+      return {
+        name: name,
+        viewers: mapUsersToEmails_(folder.getViewers()).join(', '),
+        editors: mapUsersToEmails_(folder.getEditors()).join(', ')
+      };
+    });
+    return { success: true, categories: result };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Sets the given viewer/editor emails as the category folder's Drive
+ * sharing list (replacing whatever was there before). When
+ * applyToExistingFiles is true, the same emails are also additively
+ * stamped onto every file already inside the folder (union with whatever
+ * access that file already had) and the index Sheet is refreshed to match,
+ * purely so the file list in the UI displays accurate access - Drive
+ * itself already grants folder viewers/editors access to existing and
+ * future files in the folder regardless of this flag.
+ */
+function updateCategoryAccess(categoryName, viewerEmails, editorEmails, applyToExistingFiles) {
+  try {
+    var rootFolder = getRootFolder_();
+    var folder = getOrCreateCategoryFolder_(rootFolder, categoryName);
+
+    folder.getViewers().forEach(function (u) { try { folder.removeViewer(u); } catch (e) {} });
+    folder.getEditors().forEach(function (u) {
+      if (u.getEmail() !== Session.getActiveUser().getEmail()) {
+        try { folder.removeEditor(u); } catch (e) {}
+      }
+    });
+
+    var newViewers = uniqueEmails_(viewerEmails);
+    var newEditors = uniqueEmails_(editorEmails);
+    var warnings = applyPermissions_(folder, newViewers, newEditors);
+
+    if (applyToExistingFiles) {
+      var sheet = getIndexSheet_();
+      var iter = folder.getFiles();
+      while (iter.hasNext()) {
+        var file = iter.next();
+        warnings = warnings.concat(applyPermissions_(file, newViewers, newEditors));
+
+        var rowIndex = findRowByFileId_(sheet, file.getId());
+        if (rowIndex > 0) {
+          var existingViewers = String(sheet.getRange(rowIndex, 6).getValue() || '').split(',');
+          var existingEditors = String(sheet.getRange(rowIndex, 7).getValue() || '').split(',');
+          sheet.getRange(rowIndex, 6).setValue(uniqueEmails_(existingViewers.concat(newViewers)).join(', '));
+          sheet.getRange(rowIndex, 7).setValue(uniqueEmails_(existingEditors.concat(newEditors)).join(', '));
+        }
+      }
+    }
+
+    return { success: true, warnings: warnings };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // File content retrieval (for in-browser 3D CAD preview)
 // ---------------------------------------------------------------------------
 

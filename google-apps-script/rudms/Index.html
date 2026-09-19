@@ -75,6 +75,10 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
           </button>
         </div>
+        <button id="manageAccessBtn" class="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium px-3.5 py-2 rounded-lg transition" title="Manage who can view or edit each folder and file">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+          <span class="hidden sm:inline">Manage Access</span>
+        </button>
         <button id="uploadBtn" class="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3.5 py-2 rounded-lg shadow-sm transition">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0-12 4 4m-4-4-4 4"/><path d="M20 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg>
           <span class="hidden sm:inline">Upload</span>
@@ -211,6 +215,33 @@
     </div>
   </div>
 
+  <!-- Manage Access Center: folder-wise and file-wise permissions in one place -->
+  <div id="accessModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-2 sm:p-6">
+    <div class="bg-white w-full h-full sm:max-w-3xl sm:h-[85vh] rounded-2xl shadow-xl overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+        <h2 class="font-semibold text-slate-900">Manage Access</h2>
+        <button data-close="accessModal" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+
+      <div class="flex items-center gap-1 px-5 pt-3 shrink-0 border-b border-slate-100">
+        <button data-access-tab="folders" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-brand-600 text-brand-600">By Folder</button>
+        <button data-access-tab="files" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">By File</button>
+      </div>
+
+      <div class="flex-1 min-h-0 overflow-y-auto p-5">
+        <div id="accessFoldersPane">
+          <p class="text-xs text-slate-400 mb-3">Sharing a folder here automatically grants the same access to every file inside it — now and anything uploaded later.</p>
+          <div id="accessFolderList" class="space-y-2"></div>
+        </div>
+
+        <div id="accessFilesPane" class="hidden">
+          <input id="accessFileSearch" type="text" placeholder="Filter files by name…" class="w-full mb-3 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+          <div id="accessFileList" class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Preview Modal -->
   <div id="previewModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-2 sm:p-6">
     <div class="bg-white w-full h-full sm:max-w-4xl sm:h-[85vh] rounded-2xl shadow-xl overflow-hidden flex flex-col">
@@ -250,7 +281,8 @@
     currentCategory: '__all__',
     searchQuery: '',
     viewMode: 'grid',
-    currentUser: ''
+    currentUser: '',
+    categoryAccess: []
   };
 
   var CAD_3D_EXT = ['stl', 'obj'];
@@ -292,13 +324,25 @@
     var list = document.getElementById('categoryList');
     list.innerHTML = state.categories.map(function (cat) {
       var count = state.files.filter(function (f) { return f.category === cat; }).length;
-      return '<button data-category="' + escapeHtml(cat) + '" class="sidebar-link w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50">' +
-        '<span class="flex items-center gap-2 truncate">' + folderIcon() + '<span class="truncate">' + escapeHtml(cat) + '</span></span>' +
-        '<span class="count text-xs bg-slate-100 rounded-full px-2 py-0.5">' + count + '</span></button>';
+      return '<div class="group flex items-center gap-0.5">' +
+        '<button data-category="' + escapeHtml(cat) + '" class="sidebar-link flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50">' +
+          '<span class="flex items-center gap-2 truncate">' + folderIcon() + '<span class="truncate">' + escapeHtml(cat) + '</span></span>' +
+          '<span class="count text-xs bg-slate-100 rounded-full px-2 py-0.5">' + count + '</span>' +
+        '</button>' +
+        '<button data-manage-category="' + escapeHtml(cat) + '" title="Manage who can access this folder" class="shrink-0 p-1.5 rounded-md text-slate-300 hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>' +
+        '</button>' +
+      '</div>';
     }).join('');
 
     list.querySelectorAll('[data-category]').forEach(function (btn) {
       btn.addEventListener('click', function () { selectCategory(btn.getAttribute('data-category')); });
+    });
+    list.querySelectorAll('[data-manage-category]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openAccessCenter('folders', btn.getAttribute('data-manage-category'));
+      });
     });
   }
 
@@ -458,10 +502,12 @@
 
     document.getElementById('uploadBtn').addEventListener('click', function () { openModal('uploadModal'); });
     document.getElementById('addCategoryBtn').addEventListener('click', function () { openModal('categoryModal'); });
+    document.getElementById('manageAccessBtn').addEventListener('click', function () { openAccessCenter('folders'); });
 
     bindUploadModal();
     bindCategoryModal();
     bindShareModal();
+    bindAccessCenter();
   }
 
   function setViewMode(mode) {
@@ -626,6 +672,166 @@
         (res.warnings || []).forEach(function (w) { showToast(w, 'error'); });
       }).catch(function (err) { showToast(String(err), 'error'); });
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Manage Access center (folder-wise + file-wise)
+  // ---------------------------------------------------------------------
+  function bindAccessCenter() {
+    document.querySelectorAll('[data-access-tab]').forEach(function (btn) {
+      btn.addEventListener('click', function () { setAccessTab(btn.getAttribute('data-access-tab')); });
+    });
+    document.getElementById('accessFileSearch').addEventListener('input', function (e) {
+      renderFileAccessList(e.target.value);
+    });
+  }
+
+  function setAccessTab(tab) {
+    document.querySelectorAll('[data-access-tab]').forEach(function (btn) {
+      var active = btn.getAttribute('data-access-tab') === tab;
+      btn.classList.toggle('border-brand-600', active);
+      btn.classList.toggle('text-brand-600', active);
+      btn.classList.toggle('border-transparent', !active);
+      btn.classList.toggle('text-slate-500', !active);
+    });
+    document.getElementById('accessFoldersPane').classList.toggle('hidden', tab !== 'folders');
+    document.getElementById('accessFilesPane').classList.toggle('hidden', tab !== 'files');
+  }
+
+  function openAccessCenter(tab, focusCategory) {
+    openModal('accessModal');
+    setAccessTab(tab || 'folders');
+    document.getElementById('accessFolderList').innerHTML = '<div class="spinner mx-auto"></div>';
+
+    callServer('getCategoryAccessOverview').then(function (res) {
+      if (!res.success) {
+        document.getElementById('accessFolderList').innerHTML = previewError(res.error);
+        return;
+      }
+      state.categoryAccess = res.categories;
+      renderFolderAccessList(focusCategory);
+      renderFileAccessList('');
+    }).catch(function (err) {
+      document.getElementById('accessFolderList').innerHTML = previewError(String(err));
+    });
+  }
+
+  function renderFolderAccessList(focusCategory) {
+    var container = document.getElementById('accessFolderList');
+    container.innerHTML = state.categoryAccess.map(function (cat) {
+      var count = state.files.filter(function (f) { return f.category === cat.name; }).length;
+      return '<div class="border border-slate-200 rounded-xl overflow-hidden" data-folder-row="' + escapeHtml(cat.name) + '">' +
+        '<button data-toggle-folder="' + escapeHtml(cat.name) + '" class="w-full flex items-center justify-between gap-2 px-4 py-3 hover:bg-slate-50 text-left">' +
+          '<span class="flex items-center gap-2 min-w-0">' + folderIcon() +
+            '<span class="text-sm font-medium text-slate-800 truncate">' + escapeHtml(cat.name) + '</span>' +
+            '<span class="text-xs text-slate-400 shrink-0">' + count + (count === 1 ? ' file' : ' files') + '</span>' +
+          '</span>' +
+          '<span class="text-xs text-slate-400 shrink-0">' +
+            (cat.viewers ? cat.viewers.split(',').length + ' viewer(s)' : 'No viewers') + ' · ' +
+            (cat.editors ? cat.editors.split(',').length + ' editor(s)' : 'No editors') +
+          '</span>' +
+        '</button>' +
+        '<div data-folder-editor="' + escapeHtml(cat.name) + '" class="hidden px-4 pb-4 pt-1 space-y-3 bg-slate-50 border-t border-slate-100">' +
+          '<div>' +
+            '<label class="text-xs font-medium text-slate-500 mb-1 block">Viewers (comma-separated emails)</label>' +
+            '<input data-folder-viewers="' + escapeHtml(cat.name) + '" type="text" value="' + escapeHtml(cat.viewers || '') + '" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">' +
+          '</div>' +
+          '<div>' +
+            '<label class="text-xs font-medium text-slate-500 mb-1 block">Editors (comma-separated emails)</label>' +
+            '<input data-folder-editors="' + escapeHtml(cat.name) + '" type="text" value="' + escapeHtml(cat.editors || '') + '" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">' +
+          '</div>' +
+          '<label class="flex items-center gap-2 text-xs text-slate-500">' +
+            '<input data-folder-cascade="' + escapeHtml(cat.name) + '" type="checkbox" checked class="rounded border-slate-300">' +
+            'Also stamp these emails on the ' + count + ' existing file(s) in this folder' +
+          '</label>' +
+          '<div class="flex justify-end">' +
+            '<button data-save-folder="' + escapeHtml(cat.name) + '" class="px-3 py-1.5 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Save Folder Access</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    container.querySelectorAll('[data-toggle-folder]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var name = btn.getAttribute('data-toggle-folder');
+        document.querySelector('[data-folder-editor="' + cssEscape(name) + '"]').classList.toggle('hidden');
+      });
+    });
+    container.querySelectorAll('[data-save-folder]').forEach(function (btn) {
+      btn.addEventListener('click', function () { saveFolderAccess(btn.getAttribute('data-save-folder')); });
+    });
+
+    if (focusCategory) {
+      var editor = document.querySelector('[data-folder-editor="' + cssEscape(focusCategory) + '"]');
+      var row = document.querySelector('[data-folder-row="' + cssEscape(focusCategory) + '"]');
+      if (editor) editor.classList.remove('hidden');
+      if (row) row.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function saveFolderAccess(categoryName) {
+    var viewers = splitEmails(document.querySelector('[data-folder-viewers="' + cssEscape(categoryName) + '"]').value);
+    var editors = splitEmails(document.querySelector('[data-folder-editors="' + cssEscape(categoryName) + '"]').value);
+    var cascade = document.querySelector('[data-folder-cascade="' + cssEscape(categoryName) + '"]').checked;
+    var btn = document.querySelector('[data-save-folder="' + cssEscape(categoryName) + '"]');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    callServer('updateCategoryAccess', categoryName, viewers, editors, cascade).then(function (res) {
+      btn.disabled = false;
+      btn.textContent = 'Save Folder Access';
+      if (!res.success) return showToast(res.error || 'Failed to update folder access', 'error');
+
+      if (cascade) {
+        state.files.forEach(function (f) {
+          if (f.category === categoryName) {
+            f.viewers = splitEmails(f.viewers).concat(viewers).filter(function (v, i, arr) { return arr.indexOf(v) === i; }).join(', ');
+            f.editors = splitEmails(f.editors).concat(editors).filter(function (v, i, arr) { return arr.indexOf(v) === i; }).join(', ');
+          }
+        });
+        renderCurrentView();
+      }
+
+      showToast('Access updated for "' + categoryName + '"', 'success');
+      (res.warnings || []).forEach(function (w) { showToast(w, 'error'); });
+    }).catch(function (err) {
+      btn.disabled = false;
+      btn.textContent = 'Save Folder Access';
+      showToast(String(err), 'error');
+    });
+  }
+
+  function renderFileAccessList(query) {
+    var q = (query || '').trim().toLowerCase();
+    var files = state.files.filter(function (f) { return !q || f.fileName.toLowerCase().indexOf(q) !== -1; });
+    var container = document.getElementById('accessFileList');
+
+    if (!files.length) {
+      container.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">No files match.</p>';
+      return;
+    }
+
+    container.innerHTML = files.map(function (f) {
+      return '<div class="flex items-center gap-3 px-4 py-3">' +
+        fileIcon(f.fileType, 'w-8 h-8 shrink-0') +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-medium text-slate-800 truncate">' + escapeHtml(f.fileName) + '</p>' +
+          '<p class="text-xs text-slate-400 truncate">' + escapeHtml(f.category) + ' · ' +
+            (f.viewers ? escapeHtml(f.viewers) + ' (view)' : 'No viewers') +
+            (f.editors ? ' · ' + escapeHtml(f.editors) + ' (edit)' : '') +
+          '</p>' +
+        '</div>' +
+        '<button data-edit-file-access="' + f.fileId + '" class="text-xs font-medium text-brand-600 hover:underline shrink-0">Edit</button>' +
+      '</div>';
+    }).join('');
+
+    container.querySelectorAll('[data-edit-file-access]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openShareModal(btn.getAttribute('data-edit-file-access')); });
+    });
+  }
+
+  function cssEscape(str) {
+    return String(str).replace(/["\\]/g, '\\$&');
   }
 
   // ---------------------------------------------------------------------

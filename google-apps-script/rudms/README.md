@@ -30,6 +30,23 @@ inside a Google Sites page via `<iframe>`.
   `DriveApp.addViewer()` / `addEditor()` is called for each email you list.
   You can change access later from a file's "Share / Access" menu, which
   fully re-syncs viewers/editors.
+- **Manage Access center**: the header's **Manage Access** button (also
+  reachable via the lock icon that appears on hover over any category in
+  the sidebar) opens a two-tab panel:
+  - **By Folder** — set Drive-level viewer/editor emails on an entire
+    category folder in one go. Google Drive automatically extends that
+    same access to every file inside the folder, including files uploaded
+    later. An optional "also stamp existing files" checkbox additionally
+    writes those emails directly onto each current file (additively, on
+    top of whatever access it already had) and refreshes the index Sheet
+    so the file list displays accurate access.
+  - **By File** — a searchable table of every file with its current
+    viewers/editors and an Edit shortcut into the same per-file Share
+    modal described above.
+
+  Use "By Folder" for broad, category-wide access (e.g. "everyone in
+  Purchasing can view Purchase Orders"); use "By File" for one-off
+  exceptions on a specific document.
 - **Previews**:
   - Images, PDFs, Word/Excel/PowerPoint → shown via Drive's built-in
     `/preview` iframe (requires the viewing user to have access, exactly
