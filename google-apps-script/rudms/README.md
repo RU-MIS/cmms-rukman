@@ -11,6 +11,7 @@ inside a Google Sites page via `<iframe>`.
 | `Code.gs`          | Backend: Drive folder setup, Sheet-based metadata index, upload, permissions, search API |
 | `Index.html`       | Full Tailwind CSS UI, instant client-side search, upload/share/preview modals, Three.js CAD viewer |
 | `appsscript.json`  | Web app manifest (execute as owner, accessible to anyone) |
+| `assets/rukman-udyog-logo.png` | Source copy of the company logo (for reference/reuse only - the app itself embeds it as a base64 data URI directly inside `Index.html`, since Apps Script web apps can't serve separate static files) |
 
 ## How it works
 
