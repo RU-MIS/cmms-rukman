@@ -17,7 +17,10 @@
       theme: {
         extend: {
           fontFamily: { sans: ['Inter', 'sans-serif'] },
-          colors: { brand: { 50: '#f0f4f6', 100: '#dde5ea', 500: '#295a78', 600: '#0c4466', 700: '#0a3652' } }
+          colors: {
+            brand: { 50: '#f0f4f6', 100: '#dde5ea', 500: '#295a78', 600: '#0c4466', 700: '#0a3652', 800: '#082c42' },
+            accent: { 500: '#ef4b4f', 600: '#ed3237', 700: '#c2292d' }
+          }
         }
       }
     };
@@ -51,13 +54,15 @@
   <div id="app" class="h-screen flex flex-col hidden">
 
     <!-- Header -->
-    <header class="h-16 flex items-center gap-4 px-4 border-b border-slate-200 bg-white shrink-0">
-      <button id="mobileSidebarToggle" class="md:hidden p-2 rounded hover:bg-slate-100">
+    <header class="h-16 flex items-center gap-4 px-4 bg-brand-600 shadow-sm shrink-0 relative z-20">
+      <button id="mobileSidebarToggle" class="md:hidden p-2 rounded text-white hover:bg-white/10">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <div class="flex items-center gap-2 shrink-0">
-        <img id="brandLogo" alt="Rukman Udyog" class="h-8 w-auto">
-        <span class="hidden sm:inline-flex items-center text-[11px] font-bold tracking-wide text-brand-600 bg-brand-50 px-2 py-1 rounded-md">RUDMS</span>
+        <div class="bg-white rounded-lg px-2 py-1.5 shadow-sm">
+          <img id="brandLogo" alt="Rukman Udyog" class="h-6 w-auto block">
+        </div>
+        <span class="hidden sm:inline-flex items-center text-[11px] font-bold tracking-wide text-white bg-white/15 px-2 py-1 rounded-md">RUDMS</span>
       </div>
 
       <div class="flex-1 max-w-xl relative">
@@ -68,47 +73,47 @@
       </div>
 
       <div class="ml-auto flex items-center gap-2">
-        <div class="hidden md:flex items-center bg-slate-100 rounded-lg p-0.5 mr-1">
-          <button id="gridViewBtn" class="p-1.5 rounded-md bg-white shadow-sm" title="Grid view">
+        <div class="hidden md:flex items-center bg-white/15 rounded-lg p-0.5 mr-1">
+          <button id="gridViewBtn" class="p-1.5 rounded-md bg-white shadow-sm text-brand-600" title="Grid view">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
           </button>
-          <button id="listViewBtn" class="p-1.5 rounded-md text-slate-500" title="List view">
+          <button id="listViewBtn" class="p-1.5 rounded-md text-white/70" title="List view">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
           </button>
         </div>
-        <button id="manageAccessBtn" class="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium px-3.5 py-2 rounded-lg transition" title="Manage who can view or edit each folder and file">
+        <button id="manageAccessBtn" class="flex items-center gap-1.5 bg-white/10 border border-white/25 hover:bg-white/20 text-white text-sm font-medium px-3.5 py-2 rounded-lg transition" title="Manage who can view or edit each folder and file">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
           <span class="hidden sm:inline">Manage Access</span>
         </button>
-        <button id="uploadBtn" class="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3.5 py-2 rounded-lg shadow-sm transition">
+        <button id="uploadBtn" class="flex items-center gap-1.5 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium px-3.5 py-2 rounded-lg shadow-sm transition">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0-12 4 4m-4-4-4 4"/><path d="M20 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg>
           <span class="hidden sm:inline">Upload</span>
         </button>
-        <div id="userBadge" class="hidden sm:flex items-center gap-2 text-xs text-slate-500 pl-2 border-l border-slate-200 ml-1"></div>
+        <div id="userBadge" class="hidden sm:flex items-center gap-2 text-xs text-white/70 pl-2 border-l border-white/20 ml-1"></div>
       </div>
     </header>
 
     <div class="flex-1 flex min-h-0">
       <!-- Sidebar -->
-      <aside id="sidebar" class="w-60 shrink-0 border-r border-slate-200 bg-white flex flex-col fixed md:static inset-y-0 left-0 top-16 md:top-0 z-40 -translate-x-full md:translate-x-0 transition-transform">
+      <aside id="sidebar" class="w-60 shrink-0 bg-brand-700 flex flex-col fixed md:static inset-y-0 left-0 top-16 md:top-0 z-40 -translate-x-full md:translate-x-0 transition-transform">
         <nav class="flex-1 overflow-y-auto p-3 space-y-0.5">
-          <button data-category="__all__" class="sidebar-link active w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50">
+          <button data-category="__all__" class="sidebar-link active w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-white/80 hover:bg-white/10">
             <span class="flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
               All Files
             </span>
-            <span class="count text-xs bg-slate-100 rounded-full px-2 py-0.5">0</span>
+            <span class="count text-xs bg-black/10 rounded-full px-2 py-0.5">0</span>
           </button>
 
-          <p class="px-3 pt-4 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wide">Categories</p>
+          <p class="px-3 pt-4 pb-1 text-xs font-semibold text-white/40 uppercase tracking-wide">Categories</p>
           <div id="categoryList" class="space-y-0.5"></div>
 
-          <button id="addCategoryBtn" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-brand-600 hover:bg-brand-50 mt-1">
+          <button id="addCategoryBtn" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white hover:bg-white/10 mt-1">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
             Add Category
           </button>
         </nav>
-        <div class="p-3 border-t border-slate-100 text-xs text-slate-400">Rukman Udyog Docs Management System</div>
+        <div class="p-3 border-t border-white/10 text-xs text-white/40">Rukman Udyog Docs Management System</div>
       </aside>
       <div id="sidebarOverlay" class="hidden fixed inset-0 bg-black/30 z-30 md:hidden"></div>
 
@@ -330,11 +335,11 @@
     list.innerHTML = state.categories.map(function (cat) {
       var count = state.files.filter(function (f) { return f.category === cat; }).length;
       return '<div class="group flex items-center gap-0.5">' +
-        '<button data-category="' + escapeHtml(cat) + '" class="sidebar-link flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50">' +
+        '<button data-category="' + escapeHtml(cat) + '" class="sidebar-link flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-white/80 hover:bg-white/10">' +
           '<span class="flex items-center gap-2 truncate">' + folderIcon() + '<span class="truncate">' + escapeHtml(cat) + '</span></span>' +
-          '<span class="count text-xs bg-slate-100 rounded-full px-2 py-0.5">' + count + '</span>' +
+          '<span class="count text-xs bg-black/10 rounded-full px-2 py-0.5">' + count + '</span>' +
         '</button>' +
-        '<button data-manage-category="' + escapeHtml(cat) + '" title="Manage who can access this folder" class="shrink-0 p-1.5 rounded-md text-slate-300 hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition">' +
+        '<button data-manage-category="' + escapeHtml(cat) + '" title="Manage who can access this folder" class="shrink-0 p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>' +
         '</button>' +
       '</div>';
@@ -519,10 +524,12 @@
     state.viewMode = mode;
     document.getElementById('gridViewBtn').classList.toggle('bg-white', mode === 'grid');
     document.getElementById('gridViewBtn').classList.toggle('shadow-sm', mode === 'grid');
-    document.getElementById('gridViewBtn').classList.toggle('text-slate-500', mode !== 'grid');
+    document.getElementById('gridViewBtn').classList.toggle('text-brand-600', mode === 'grid');
+    document.getElementById('gridViewBtn').classList.toggle('text-white/70', mode !== 'grid');
     document.getElementById('listViewBtn').classList.toggle('bg-white', mode === 'list');
     document.getElementById('listViewBtn').classList.toggle('shadow-sm', mode === 'list');
-    document.getElementById('listViewBtn').classList.toggle('text-slate-500', mode !== 'list');
+    document.getElementById('listViewBtn').classList.toggle('text-brand-600', mode === 'list');
+    document.getElementById('listViewBtn').classList.toggle('text-white/70', mode !== 'list');
     renderCurrentView();
   }
 
