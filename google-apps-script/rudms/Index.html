@@ -294,12 +294,31 @@
   // ---------------------------------------------------------------------
   // Server bridge
   // ---------------------------------------------------------------------
+  var SERVER_CALL_TIMEOUT_MS = 4 * 60 * 1000; // Apps Script executions cap out around 6 min anyway
+
   function callServer(fnName) {
     var args = Array.prototype.slice.call(arguments, 1);
     return new Promise(function (resolve, reject) {
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        reject(new Error('No response from the server after ' + (SERVER_CALL_TIMEOUT_MS / 1000) + 's. Check your internet connection and try again.'));
+      }, SERVER_CALL_TIMEOUT_MS);
+
       google.script.run
-        .withSuccessHandler(resolve)
-        .withFailureHandler(function (err) { reject(err); })[fnName].apply(null, args);
+        .withSuccessHandler(function (result) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(result);
+        })
+        .withFailureHandler(function (err) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        })[fnName].apply(null, args);
     });
   }
 
@@ -621,7 +640,13 @@
     document.getElementById('submitUploadBtn').addEventListener('click', submitUpload);
   }
 
+  var MAX_UPLOAD_MB = 25; // google.script.run's message channel gets unreliable well above this
+
   function handleFileSelected(file) {
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      showToast('"' + file.name + '" is ' + formatSize(file.size) + ' - files over ' + MAX_UPLOAD_MB + ' MB are not supported here. Upload it to Drive directly and paste the link instead.', 'error');
+      return;
+    }
     pendingUpload = file;
     document.getElementById('selectedFileName').textContent = file.name + ' (' + formatSize(file.size) + ')';
     document.getElementById('selectedFileName').classList.remove('hidden');
@@ -633,6 +658,12 @@
     var reader = new FileReader();
     document.getElementById('uploadProgress').classList.remove('hidden');
     document.getElementById('submitUploadBtn').disabled = true;
+
+    reader.onerror = function () {
+      document.getElementById('uploadProgress').classList.add('hidden');
+      document.getElementById('submitUploadBtn').disabled = false;
+      showToast('Could not read "' + pendingUpload.name + '" from disk. Try again or pick a different file.', 'error');
+    };
 
     reader.onload = function () {
       var base64 = reader.result.split(',')[1];
