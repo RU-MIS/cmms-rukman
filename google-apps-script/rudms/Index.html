@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RUDMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] },
+          colors: { brand: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' } }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-link.active { background: #eef2ff; color: #4338ca; font-weight: 600; }
+    .file-card { transition: box-shadow .15s ease, transform .15s ease; }
+    .file-card:hover { box-shadow: 0 8px 24px -8px rgba(0,0,0,0.15); transform: translateY(-2px); }
+    .modal-backdrop { background: rgba(15, 23, 42, 0.55); }
+    .drop-zone.drag-over { background: #eef2ff; border-color: #6366f1; }
+    .spinner { border: 3px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; width: 28px; height: 28px; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .toast { animation: slideIn .2s ease-out; }
+    @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    #cadCanvasWrap canvas { touch-action: none; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen overflow-hidden">
+
+  <!-- Boot loader -->
+  <div id="bootLoader" class="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center gap-3">
+    <div class="spinner"></div>
+    <p class="text-sm text-slate-500">Loading RUDMS…</p>
+  </div>
+
+  <div id="app" class="h-screen flex flex-col hidden">
+
+    <!-- Header -->
+    <header class="h-16 flex items-center gap-4 px-4 border-b border-slate-200 bg-white shrink-0">
+      <button id="mobileSidebarToggle" class="md:hidden p-2 rounded hover:bg-slate-100">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="flex items-center gap-2 shrink-0">
+        <div class="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center font-bold text-sm">R</div>
+        <span class="font-semibold text-slate-900 hidden sm:block">RUDMS</span>
+      </div>
+
+      <div class="flex-1 max-w-xl relative">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="searchInput" type="text" placeholder="Search files by name…" autocomplete="off"
+          class="w-full pl-9 pr-9 py-2 rounded-lg bg-slate-100 border border-transparent focus:bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none text-sm transition">
+        <button id="clearSearch" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+
+      <div class="ml-auto flex items-center gap-2">
+        <div class="hidden md:flex items-center bg-slate-100 rounded-lg p-0.5 mr-1">
+          <button id="gridViewBtn" class="p-1.5 rounded-md bg-white shadow-sm" title="Grid view">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          </button>
+          <button id="listViewBtn" class="p-1.5 rounded-md text-slate-500" title="List view">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+          </button>
+        </div>
+        <button id="uploadBtn" class="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3.5 py-2 rounded-lg shadow-sm transition">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0-12 4 4m-4-4-4 4"/><path d="M20 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg>
+          <span class="hidden sm:inline">Upload</span>
+        </button>
+        <div id="userBadge" class="hidden sm:flex items-center gap-2 text-xs text-slate-500 pl-2 border-l border-slate-200 ml-1"></div>
+      </div>
+    </header>
+
+    <div class="flex-1 flex min-h-0">
+      <!-- Sidebar -->
+      <aside id="sidebar" class="w-60 shrink-0 border-r border-slate-200 bg-white flex flex-col fixed md:static inset-y-0 left-0 top-16 md:top-0 z-40 -translate-x-full md:translate-x-0 transition-transform">
+        <nav class="flex-1 overflow-y-auto p-3 space-y-0.5">
+          <button data-category="__all__" class="sidebar-link active w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50">
+            <span class="flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+              All Files
+            </span>
+            <span class="count text-xs bg-slate-100 rounded-full px-2 py-0.5">0</span>
+          </button>
+
+          <p class="px-3 pt-4 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wide">Categories</p>
+          <div id="categoryList" class="space-y-0.5"></div>
+
+          <button id="addCategoryBtn" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-brand-600 hover:bg-brand-50 mt-1">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
+            Add Category
+          </button>
+        </nav>
+        <div class="p-3 border-t border-slate-100 text-xs text-slate-400">Rukman Udyog Docs Management System</div>
+      </aside>
+      <div id="sidebarOverlay" class="hidden fixed inset-0 bg-black/30 z-30 md:hidden"></div>
+
+      <!-- Main -->
+      <main class="flex-1 min-w-0 overflow-y-auto p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h1 id="viewTitle" class="text-lg font-semibold text-slate-900">All Files</h1>
+          <p id="resultCount" class="text-sm text-slate-400"></p>
+        </div>
+        <div id="emptyState" class="hidden flex-col items-center justify-center text-center py-24 text-slate-400">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mb-3"><path d="M3 7v13h18V7M3 7 7 3h10l4 4M3 7h18"/></svg>
+          <p class="font-medium">No files found</p>
+          <p class="text-sm">Try a different search or upload a new file.</p>
+        </div>
+        <div id="fileGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+        <div id="fileList" class="hidden bg-white rounded-xl border border-slate-200 overflow-hidden"></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Upload Modal -->
+  <div id="uploadModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <h2 class="font-semibold text-slate-900">Upload File</h2>
+        <button data-close="uploadModal" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+      <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div id="dropZone" class="drop-zone border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer transition">
+          <input id="fileInput" type="file" class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.dwg,.dxf,.step,.stp,.stl,.obj">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mx-auto mb-2 text-slate-400"><path d="M12 3v12m0-12 4 4m-4-4-4 4"/><path d="M20 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg>
+          <p class="text-sm text-slate-600"><span class="text-brand-600 font-medium">Click to browse</span> or drag and drop</p>
+          <p class="text-xs text-slate-400 mt-1">PDF, Word, Excel, Images, CAD (.dwg .dxf .step .stl .obj)</p>
+          <p id="selectedFileName" class="text-sm font-medium text-slate-800 mt-3 hidden"></p>
+        </div>
+
+        <div>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Category</label>
+          <div class="flex gap-2">
+            <select id="uploadCategory" class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500"></select>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Viewer Access (comma-separated emails)</label>
+          <input id="viewerEmails" type="text" placeholder="e.g. viewer@company.com, client@company.com" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Editor Access (comma-separated emails)</label>
+          <input id="editorEmails" type="text" placeholder="e.g. editor@company.com" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+        </div>
+
+        <div id="uploadProgress" class="hidden">
+          <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="uploadProgressBar" class="h-full bg-brand-600 w-1/3 animate-pulse"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Uploading and applying permissions…</p>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50">
+        <button data-close="uploadModal" class="px-4 py-2 text-sm rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button id="submitUploadBtn" class="px-4 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium disabled:opacity-50" disabled>Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Category Modal -->
+  <div id="categoryModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <h2 class="font-semibold text-slate-900">New Category</h2>
+        <button data-close="categoryModal" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+      <div class="p-5">
+        <input id="newCategoryInput" type="text" placeholder="e.g. Contracts" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+      </div>
+      <div class="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50">
+        <button data-close="categoryModal" class="px-4 py-2 text-sm rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button id="submitCategoryBtn" class="px-4 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Share / Permissions Modal -->
+  <div id="shareModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <h2 class="font-semibold text-slate-900 truncate pr-4">Share “<span id="shareFileName"></span>”</h2>
+        <button data-close="shareModal" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Viewers (comma-separated emails)</label>
+          <input id="shareViewers" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Editors (comma-separated emails)</label>
+          <input id="shareEditors" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50">
+        <button data-close="shareModal" class="px-4 py-2 text-sm rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button id="submitShareBtn" class="px-4 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Save Access</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview Modal -->
+  <div id="previewModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-2 sm:p-6">
+    <div class="bg-white w-full h-full sm:max-w-4xl sm:h-[85vh] rounded-2xl shadow-xl overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
+        <h2 id="previewFileName" class="font-semibold text-slate-900 truncate pr-4"></h2>
+        <div class="flex items-center gap-2 shrink-0">
+          <a id="previewDownloadBtn" href="#" target="_blank" class="text-sm px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">Download</a>
+          <button data-close="previewModal" class="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+      </div>
+      <div id="previewBody" class="flex-1 min-h-0 bg-slate-50 flex items-center justify-center relative"></div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-[60] space-y-2"></div>
+
+  <script>
+  // ---------------------------------------------------------------------
+  // Server bridge
+  // ---------------------------------------------------------------------
+  function callServer(fnName) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(function (err) { reject(err); })[fnName].apply(null, args);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------
+  var state = {
+    files: [],
+    categories: [],
+    currentCategory: '__all__',
+    searchQuery: '',
+    viewMode: 'grid',
+    currentUser: ''
+  };
+
+  var CAD_3D_EXT = ['stl', 'obj'];
+  var CAD_UNSUPPORTED_EXT = ['dwg', 'dxf', 'step', 'stp'];
+  var IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+  var OFFICE_PREVIEW_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+
+  // ---------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------
+  document.addEventListener('DOMContentLoaded', init);
+
+  function init() {
+    callServer('initializeSystem').then(function (res) {
+      if (!res.success) return showToast(res.error || 'Failed to initialize', 'error');
+      state.files = res.files || [];
+      state.categories = res.categories || [];
+      state.currentUser = res.currentUser || '';
+      renderSidebar();
+      populateCategorySelect();
+      renderCurrentView();
+      document.getElementById('userBadge').textContent = state.currentUser;
+      document.getElementById('bootLoader').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+    }).catch(function (err) {
+      document.getElementById('bootLoader').innerHTML =
+        '<p class="text-red-500 text-sm px-6 text-center">Failed to load RUDMS: ' + escapeHtml(String(err)) + '</p>';
+    });
+
+    bindEvents();
+  }
+
+  // ---------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------
+  function renderSidebar() {
+    document.querySelector('[data-category="__all__"] .count').textContent = state.files.length;
+
+    var list = document.getElementById('categoryList');
+    list.innerHTML = state.categories.map(function (cat) {
+      var count = state.files.filter(function (f) { return f.category === cat; }).length;
+      return '<button data-category="' + escapeHtml(cat) + '" class="sidebar-link w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50">' +
+        '<span class="flex items-center gap-2 truncate">' + folderIcon() + '<span class="truncate">' + escapeHtml(cat) + '</span></span>' +
+        '<span class="count text-xs bg-slate-100 rounded-full px-2 py-0.5">' + count + '</span></button>';
+    }).join('');
+
+    list.querySelectorAll('[data-category]').forEach(function (btn) {
+      btn.addEventListener('click', function () { selectCategory(btn.getAttribute('data-category')); });
+    });
+  }
+
+  function populateCategorySelect() {
+    var select = document.getElementById('uploadCategory');
+    select.innerHTML = state.categories.map(function (c) {
+      return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+    }).join('');
+  }
+
+  function selectCategory(cat) {
+    state.currentCategory = cat;
+    document.querySelectorAll('.sidebar-link').forEach(function (el) {
+      el.classList.toggle('active', el.getAttribute('data-category') === cat);
+    });
+    document.getElementById('viewTitle').textContent = cat === '__all__' ? 'All Files' : cat;
+    closeMobileSidebar();
+    renderCurrentView();
+  }
+
+  function getFilteredFiles() {
+    var q = state.searchQuery.trim().toLowerCase();
+    return state.files.filter(function (f) {
+      var inCategory = state.currentCategory === '__all__' || f.category === state.currentCategory;
+      var matches = !q || String(f.fileName).toLowerCase().indexOf(q) !== -1;
+      return inCategory && matches;
+    });
+  }
+
+  function renderCurrentView() {
+    var files = getFilteredFiles();
+    document.getElementById('resultCount').textContent = files.length + (files.length === 1 ? ' file' : ' files');
+    document.getElementById('emptyState').classList.toggle('hidden', files.length !== 0);
+    document.getElementById('emptyState').classList.toggle('flex', files.length === 0);
+
+    if (state.viewMode === 'grid') {
+      document.getElementById('fileGrid').classList.remove('hidden');
+      document.getElementById('fileList').classList.add('hidden');
+      renderGrid(files);
+    } else {
+      document.getElementById('fileList').classList.remove('hidden');
+      document.getElementById('fileGrid').classList.add('hidden');
+      renderList(files);
+    }
+  }
+
+  function renderGrid(files) {
+    document.getElementById('fileGrid').innerHTML = files.map(function (f) {
+      return '<div class="file-card bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3">' +
+        '<div class="flex items-start justify-between">' +
+          fileIcon(f.fileType, 'w-10 h-10') +
+          fileMenu(f) +
+        '</div>' +
+        '<div>' +
+          '<p class="text-sm font-medium text-slate-800 truncate" title="' + escapeHtml(f.fileName) + '">' + escapeHtml(f.fileName) + '</p>' +
+          '<p class="text-xs text-slate-400 mt-0.5">' + escapeHtml(f.category) + ' · ' + formatSize(f.size) + '</p>' +
+        '</div>' +
+        '<div class="flex items-center justify-between text-xs text-slate-400 mt-auto pt-2 border-t border-slate-50">' +
+          '<span>' + formatDate(f.uploadDate) + '</span>' +
+          '<button data-action="preview" data-id="' + f.fileId + '" class="text-brand-600 font-medium hover:underline">Preview</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    attachFileActionHandlers();
+  }
+
+  function renderList(files) {
+    var rows = files.map(function (f) {
+      return '<div class="flex items-center gap-3 px-4 py-3 border-b border-slate-100 hover:bg-slate-50">' +
+        fileIcon(f.fileType, 'w-8 h-8 shrink-0') +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-medium text-slate-800 truncate">' + escapeHtml(f.fileName) + '</p>' +
+          '<p class="text-xs text-slate-400">' + escapeHtml(f.category) + ' · ' + formatSize(f.size) + ' · ' + formatDate(f.uploadDate) + '</p>' +
+        '</div>' +
+        '<button data-action="preview" data-id="' + f.fileId + '" class="text-xs font-medium text-brand-600 hover:underline shrink-0">Preview</button>' +
+        fileMenu(f) +
+      '</div>';
+    }).join('');
+    document.getElementById('fileList').innerHTML = rows;
+    attachFileActionHandlers();
+  }
+
+  function fileMenu(f) {
+    return '<div class="relative shrink-0">' +
+      '<button data-action="menu" data-id="' + f.fileId + '" class="p-1 rounded hover:bg-slate-100 text-slate-400">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>' +
+      '</button>' +
+      '<div data-menu-for="' + f.fileId + '" class="hidden absolute right-0 top-8 z-20 bg-white border border-slate-200 rounded-lg shadow-lg w-40 py-1 text-sm">' +
+        '<button data-action="download" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-slate-50">Download</button>' +
+        '<button data-action="share" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-slate-50">Share / Access</button>' +
+        '<button data-action="delete" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600">Delete</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function attachFileActionHandlers() {
+    document.querySelectorAll('[data-action="menu"]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var id = btn.getAttribute('data-id');
+        document.querySelectorAll('[data-menu-for]').forEach(function (m) {
+          m.classList.toggle('hidden', m.getAttribute('data-menu-for') !== id || !m.classList.contains('hidden'));
+        });
+      });
+    });
+    document.querySelectorAll('[data-action="preview"]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openPreview(btn.getAttribute('data-id')); });
+    });
+    document.querySelectorAll('[data-action="download"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var f = findFile(btn.getAttribute('data-id'));
+        if (f) window.open('https://drive.google.com/uc?export=download&id=' + f.fileId, '_blank');
+      });
+    });
+    document.querySelectorAll('[data-action="share"]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openShareModal(btn.getAttribute('data-id')); });
+    });
+    document.querySelectorAll('[data-action="delete"]').forEach(function (btn) {
+      btn.addEventListener('click', function () { handleDelete(btn.getAttribute('data-id')); });
+    });
+  }
+
+  document.addEventListener('click', function () {
+    document.querySelectorAll('[data-menu-for]').forEach(function (m) { m.classList.add('hidden'); });
+  });
+
+  function findFile(id) {
+    return state.files.filter(function (f) { return String(f.fileId) === String(id); })[0];
+  }
+
+  // ---------------------------------------------------------------------
+  // Search (instant, client-side substring match)
+  // ---------------------------------------------------------------------
+  function bindEvents() {
+    var search = document.getElementById('searchInput');
+    search.addEventListener('input', function () {
+      state.searchQuery = search.value;
+      document.getElementById('clearSearch').classList.toggle('hidden', !search.value);
+      renderCurrentView();
+    });
+    document.getElementById('clearSearch').addEventListener('click', function () {
+      search.value = '';
+      state.searchQuery = '';
+      document.getElementById('clearSearch').classList.add('hidden');
+      renderCurrentView();
+    });
+
+    document.getElementById('gridViewBtn').addEventListener('click', function () { setViewMode('grid'); });
+    document.getElementById('listViewBtn').addEventListener('click', function () { setViewMode('list'); });
+
+    document.getElementById('mobileSidebarToggle').addEventListener('click', openMobileSidebar);
+    document.getElementById('sidebarOverlay').addEventListener('click', closeMobileSidebar);
+
+    document.querySelectorAll('[data-close]').forEach(function (btn) {
+      btn.addEventListener('click', function () { closeModal(btn.getAttribute('data-close')); });
+    });
+
+    document.getElementById('uploadBtn').addEventListener('click', function () { openModal('uploadModal'); });
+    document.getElementById('addCategoryBtn').addEventListener('click', function () { openModal('categoryModal'); });
+
+    bindUploadModal();
+    bindCategoryModal();
+    bindShareModal();
+  }
+
+  function setViewMode(mode) {
+    state.viewMode = mode;
+    document.getElementById('gridViewBtn').classList.toggle('bg-white', mode === 'grid');
+    document.getElementById('gridViewBtn').classList.toggle('shadow-sm', mode === 'grid');
+    document.getElementById('gridViewBtn').classList.toggle('text-slate-500', mode !== 'grid');
+    document.getElementById('listViewBtn').classList.toggle('bg-white', mode === 'list');
+    document.getElementById('listViewBtn').classList.toggle('shadow-sm', mode === 'list');
+    document.getElementById('listViewBtn').classList.toggle('text-slate-500', mode !== 'list');
+    renderCurrentView();
+  }
+
+  function openMobileSidebar() {
+    document.getElementById('sidebar').classList.remove('-translate-x-full');
+    document.getElementById('sidebarOverlay').classList.remove('hidden');
+  }
+  function closeMobileSidebar() {
+    document.getElementById('sidebar').classList.add('-translate-x-full');
+    document.getElementById('sidebarOverlay').classList.add('hidden');
+  }
+
+  function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); }
+  function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); }
+
+  // ---------------------------------------------------------------------
+  // Upload modal
+  // ---------------------------------------------------------------------
+  var pendingUpload = null;
+
+  function bindUploadModal() {
+    var dropZone = document.getElementById('dropZone');
+    var fileInput = document.getElementById('fileInput');
+
+    dropZone.addEventListener('click', function () { fileInput.click(); });
+    dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', function () { dropZone.classList.remove('drag-over'); });
+    dropZone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) handleFileSelected(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files.length) handleFileSelected(fileInput.files[0]);
+    });
+
+    document.getElementById('submitUploadBtn').addEventListener('click', submitUpload);
+  }
+
+  function handleFileSelected(file) {
+    pendingUpload = file;
+    document.getElementById('selectedFileName').textContent = file.name + ' (' + formatSize(file.size) + ')';
+    document.getElementById('selectedFileName').classList.remove('hidden');
+    document.getElementById('submitUploadBtn').disabled = false;
+  }
+
+  function submitUpload() {
+    if (!pendingUpload) return;
+    var reader = new FileReader();
+    document.getElementById('uploadProgress').classList.remove('hidden');
+    document.getElementById('submitUploadBtn').disabled = true;
+
+    reader.onload = function () {
+      var base64 = reader.result.split(',')[1];
+      var payload = {
+        fileName: pendingUpload.name,
+        mimeType: pendingUpload.type || 'application/octet-stream',
+        base64Data: base64,
+        category: document.getElementById('uploadCategory').value,
+        viewerEmails: splitEmails(document.getElementById('viewerEmails').value),
+        editorEmails: splitEmails(document.getElementById('editorEmails').value)
+      };
+
+      callServer('uploadFile', payload).then(function (res) {
+        document.getElementById('uploadProgress').classList.add('hidden');
+        if (!res.success) {
+          showToast(res.error || 'Upload failed', 'error');
+          document.getElementById('submitUploadBtn').disabled = false;
+          return;
+        }
+        state.files.unshift(res.file);
+        if (state.categories.indexOf(res.file.category) === -1) {
+          state.categories.push(res.file.category);
+          state.categories.sort();
+          renderSidebar();
+          populateCategorySelect();
+        } else {
+          renderSidebar();
+        }
+        renderCurrentView();
+        resetUploadModal();
+        closeModal('uploadModal');
+        showToast('File uploaded successfully', 'success');
+        (res.warnings || []).forEach(function (w) { showToast(w, 'error'); });
+      }).catch(function (err) {
+        document.getElementById('uploadProgress').classList.add('hidden');
+        document.getElementById('submitUploadBtn').disabled = false;
+        showToast(String(err), 'error');
+      });
+    };
+    reader.readAsDataURL(pendingUpload);
+  }
+
+  function resetUploadModal() {
+    pendingUpload = null;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('selectedFileName').classList.add('hidden');
+    document.getElementById('viewerEmails').value = '';
+    document.getElementById('editorEmails').value = '';
+    document.getElementById('submitUploadBtn').disabled = true;
+  }
+
+  function splitEmails(str) {
+    return (str || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  // ---------------------------------------------------------------------
+  // Category modal
+  // ---------------------------------------------------------------------
+  function bindCategoryModal() {
+    document.getElementById('submitCategoryBtn').addEventListener('click', function () {
+      var name = document.getElementById('newCategoryInput').value.trim();
+      if (!name) return;
+      callServer('addCategory', name).then(function (res) {
+        if (!res.success) return showToast(res.error || 'Failed to create category', 'error');
+        state.categories = res.categories;
+        renderSidebar();
+        populateCategorySelect();
+        document.getElementById('newCategoryInput').value = '';
+        closeModal('categoryModal');
+        showToast('Category created', 'success');
+      }).catch(function (err) { showToast(String(err), 'error'); });
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Share / permissions modal
+  // ---------------------------------------------------------------------
+  var activeShareFileId = null;
+
+  function openShareModal(fileId) {
+    var f = findFile(fileId);
+    if (!f) return;
+    activeShareFileId = fileId;
+    document.getElementById('shareFileName').textContent = f.fileName;
+    document.getElementById('shareViewers').value = f.viewers || '';
+    document.getElementById('shareEditors').value = f.editors || '';
+    openModal('shareModal');
+  }
+
+  function bindShareModal() {
+    document.getElementById('submitShareBtn').addEventListener('click', function () {
+      if (!activeShareFileId) return;
+      var viewers = splitEmails(document.getElementById('shareViewers').value);
+      var editors = splitEmails(document.getElementById('shareEditors').value);
+      callServer('updateFilePermissions', activeShareFileId, viewers, editors).then(function (res) {
+        if (!res.success) return showToast(res.error || 'Failed to update access', 'error');
+        var f = findFile(activeShareFileId);
+        if (f) { f.viewers = viewers.join(', '); f.editors = editors.join(', '); }
+        closeModal('shareModal');
+        showToast('Access updated', 'success');
+        (res.warnings || []).forEach(function (w) { showToast(w, 'error'); });
+      }).catch(function (err) { showToast(String(err), 'error'); });
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Delete
+  // ---------------------------------------------------------------------
+  function handleDelete(fileId) {
+    var f = findFile(fileId);
+    if (!f) return;
+    if (!confirm('Move "' + f.fileName + '" to trash?')) return;
+    callServer('deleteFile', fileId).then(function (res) {
+      if (!res.success) return showToast(res.error || 'Delete failed', 'error');
+      state.files = state.files.filter(function (x) { return String(x.fileId) !== String(fileId); });
+      renderSidebar();
+      renderCurrentView();
+      showToast('File deleted', 'success');
+    }).catch(function (err) { showToast(String(err), 'error'); });
+  }
+
+  // ---------------------------------------------------------------------
+  // Preview modal (incl. Three.js CAD viewer)
+  // ---------------------------------------------------------------------
+  var cadState = { renderer: null, animationId: null };
+
+  function openPreview(fileId) {
+    var f = findFile(fileId);
+    if (!f) return;
+    teardownCadViewer();
+
+    document.getElementById('previewFileName').textContent = f.fileName;
+    document.getElementById('previewDownloadBtn').href = 'https://drive.google.com/uc?export=download&id=' + f.fileId;
+    var body = document.getElementById('previewBody');
+    body.innerHTML = '<div class="spinner"></div>';
+    openModal('previewModal');
+
+    var ext = (f.fileType || '').toLowerCase();
+
+    if (IMAGE_EXT.indexOf(ext) !== -1 || OFFICE_PREVIEW_EXT.indexOf(ext) !== -1) {
+      body.innerHTML = '<iframe src="https://drive.google.com/file/d/' + f.fileId + '/preview" class="w-full h-full border-0" allow="autoplay"></iframe>';
+      return;
+    }
+
+    if (CAD_3D_EXT.indexOf(ext) !== -1) {
+      body.innerHTML = '<div id="cadCanvasWrap" class="w-full h-full"></div><p class="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-slate-400 bg-white/80 px-2 py-1 rounded">Drag to rotate · Scroll to zoom</p>';
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        render3DModel(ext, res.base64);
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
+    if (CAD_UNSUPPORTED_EXT.indexOf(ext) !== -1) {
+      body.innerHTML = '<div class="text-center text-slate-500 max-w-sm px-6">' +
+        fileIcon(ext, 'w-12 h-12 mx-auto mb-3') +
+        '<p class="font-medium text-slate-700">In-browser preview not available</p>' +
+        '<p class="text-sm mt-1">".' + ext + '" files require a native CAD application. Download the file to view it in AutoCAD / SolidWorks / your CAD viewer.</p>' +
+      '</div>';
+      return;
+    }
+
+    body.innerHTML = '<div class="text-center text-slate-500"><p class="font-medium">No inline preview for this file type</p><p class="text-sm mt-1">Use the Download button above.</p></div>';
+  }
+
+  function previewError(msg) {
+    return '<div class="text-center text-red-500 text-sm px-6">Could not load preview: ' + escapeHtml(String(msg)) + '</div>';
+  }
+
+  function render3DModel(ext, base64) {
+    var wrap = document.getElementById('cadCanvasWrap');
+    if (!wrap) return;
+    var width = wrap.clientWidth, height = wrap.clientHeight;
+
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf1f5f9);
+    var camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 5000);
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+    wrap.appendChild(renderer.domElement);
+    cadState.renderer = renderer;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    var light1 = new THREE.DirectionalLight(0xffffff, 0.8); light1.position.set(1, 1, 1); scene.add(light1);
+    var light2 = new THREE.DirectionalLight(0xffffff, 0.4); light2.position.set(-1, -1, -1); scene.add(light2);
+
+    var bytes = Uint8Array.from(atob(base64), function (c) { return c.charCodeAt(0); });
+    var material = new THREE.MeshStandardMaterial({ color: 0x6366f1, metalness: 0.2, roughness: 0.6 });
+    var object;
+
+    try {
+      if (ext === 'stl') {
+        var geometry = new THREE.STLLoader().parse(bytes.buffer);
+        geometry.center();
+        object = new THREE.Mesh(geometry, material);
+      } else {
+        var text = new TextDecoder('utf-8').decode(bytes);
+        object = new THREE.OBJLoader().parse(text);
+        object.traverse(function (child) { if (child.isMesh) child.material = material; });
+        var box = new THREE.Box3().setFromObject(object);
+        var center = box.getCenter(new THREE.Vector3());
+        object.position.sub(center);
+      }
+    } catch (err) {
+      wrap.parentElement.innerHTML = previewError('Unable to parse 3D model - ' + err.message);
+      return;
+    }
+
+    scene.add(object);
+
+    var box = new THREE.Box3().setFromObject(object);
+    var size = box.getSize(new THREE.Vector3()).length() || 1;
+    camera.position.set(size * 0.7, size * 0.6, size * 0.9);
+    camera.lookAt(0, 0, 0);
+
+    var controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    function animate() {
+      cadState.animationId = requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', onResize);
+    function onResize() {
+      if (!wrap.isConnected) { window.removeEventListener('resize', onResize); return; }
+      camera.aspect = wrap.clientWidth / wrap.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    }
+  }
+
+  function teardownCadViewer() {
+    if (cadState.animationId) cancelAnimationFrame(cadState.animationId);
+    if (cadState.renderer) { cadState.renderer.dispose(); cadState.renderer = null; }
+    cadState.animationId = null;
+  }
+
+  document.getElementById('previewModal').querySelector('[data-close]').addEventListener('click', teardownCadViewer);
+
+  // ---------------------------------------------------------------------
+  // Helpers: icons, formatting, toasts
+  // ---------------------------------------------------------------------
+  var ICON_MAP = {
+    pdf: ['📕', 'bg-red-50 text-red-600'],
+    doc: ['📘', 'bg-blue-50 text-blue-600'], docx: ['📘', 'bg-blue-50 text-blue-600'],
+    xls: ['📗', 'bg-green-50 text-green-600'], xlsx: ['📗', 'bg-green-50 text-green-600'],
+    ppt: ['📙', 'bg-orange-50 text-orange-600'], pptx: ['📙', 'bg-orange-50 text-orange-600'],
+    png: ['🖼️', 'bg-purple-50 text-purple-600'], jpg: ['🖼️', 'bg-purple-50 text-purple-600'],
+    jpeg: ['🖼️', 'bg-purple-50 text-purple-600'], gif: ['🖼️', 'bg-purple-50 text-purple-600'], webp: ['🖼️', 'bg-purple-50 text-purple-600'],
+    dwg: ['📐', 'bg-slate-100 text-slate-600'], dxf: ['📐', 'bg-slate-100 text-slate-600'],
+    step: ['🧩', 'bg-slate-100 text-slate-600'], stp: ['🧩', 'bg-slate-100 text-slate-600'],
+    stl: ['🧊', 'bg-indigo-50 text-indigo-600'], obj: ['🧊', 'bg-indigo-50 text-indigo-600']
+  };
+
+  function fileIcon(ext, sizeClass) {
+    var meta = ICON_MAP[(ext || '').toLowerCase()] || ['📄', 'bg-slate-100 text-slate-500'];
+    return '<div class="' + sizeClass + ' rounded-lg flex items-center justify-center text-lg ' + meta[1] + '">' + meta[0] + '</div>';
+  }
+
+  function folderIcon() {
+    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>';
+  }
+
+  function formatSize(bytes) {
+    bytes = Number(bytes) || 0;
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function formatDate(d) {
+    var date = new Date(d);
+    if (isNaN(date.getTime())) return '';
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function showToast(message, type) {
+    var el = document.createElement('div');
+    el.className = 'toast px-4 py-2.5 rounded-lg shadow-lg text-sm text-white max-w-xs ' + (type === 'error' ? 'bg-red-500' : 'bg-slate-800');
+    el.textContent = message;
+    document.getElementById('toastContainer').appendChild(el);
+    setTimeout(function () {
+      el.style.opacity = '0';
+      el.style.transition = 'opacity .2s';
+      setTimeout(function () { el.remove(); }, 200);
+    }, 3500);
+  }
+  </script>
+</body>
+</html>
