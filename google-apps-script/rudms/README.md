@@ -48,6 +48,19 @@ inside a Google Sites page via `<iframe>`.
   Use "By Folder" for broad, category-wide access (e.g. "everyone in
   Purchasing can view Purchase Orders"); use "By File" for one-off
   exceptions on a specific document.
+- **Sign in / Sign out**: Apps Script web apps have no app-level session of
+  their own — access is gated entirely by the visitor's Google sign-in
+  *before* the page even loads (that's what "Who has access: Anyone" in the
+  deployment step means). There is no separate "log in" screen inside
+  RUDMS to build. What's provided instead is a user menu (click your email
+  in the top-right):
+  - **Switch Account** — opens Google's account chooser so a visitor signed
+    into multiple Google accounts in the same browser can pick a different
+    one, then returns to this same web app URL.
+  - **Sign Out** — signs the visitor out of their Google account for this
+    browser tab (via `accounts.google.com/Logout`) and returns to this web
+    app URL, which will then prompt Google's normal sign-in screen again
+    before RUDMS loads.
 - **Previews**:
   - Images, PDFs, Word/Excel/PowerPoint → shown via Drive's built-in
     `/preview` iframe (requires the viewing user to have access, exactly

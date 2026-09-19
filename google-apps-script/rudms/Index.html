@@ -89,7 +89,28 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0-12 4 4m-4-4-4 4"/><path d="M20 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg>
           <span class="hidden sm:inline">Upload</span>
         </button>
-        <div id="userBadge" class="hidden sm:flex items-center gap-2 text-xs text-white/70 pl-2 border-l border-white/20 ml-1"></div>
+        <div class="relative pl-2 border-l border-white/20 ml-1">
+          <button id="userMenuBtn" class="hidden sm:flex items-center gap-2 text-xs text-white/80 hover:text-white px-1.5 py-1 rounded-lg hover:bg-white/10 transition">
+            <span id="userAvatar" class="w-6 h-6 rounded-full bg-white/15 flex items-center justify-center text-[11px] font-semibold text-white shrink-0"></span>
+            <span id="userBadge" class="max-w-[140px] truncate"></span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div id="userMenuDropdown" class="hidden absolute right-0 top-11 z-30 bg-white border border-slate-200 rounded-xl shadow-lg w-64 py-2 text-sm">
+            <div class="px-3.5 py-2 border-b border-slate-100">
+              <p class="text-xs text-slate-400">Signed in as</p>
+              <p id="userMenuEmail" class="text-sm font-medium text-slate-800 truncate"></p>
+            </div>
+            <a id="switchAccountLink" href="#" target="_blank" rel="noopener" class="flex items-center gap-2 px-3.5 py-2 text-slate-700 hover:bg-slate-50">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+              Switch Account
+            </a>
+            <a id="signOutLink" href="#" target="_blank" rel="noopener" class="flex items-center gap-2 px-3.5 py-2 text-red-600 hover:bg-red-50">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+              Sign Out
+            </a>
+            <p class="px-3.5 pt-2 text-[11px] text-slate-400 leading-snug">Signs you out of your Google account in this tab. Reopen this link to sign back in.</p>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -314,7 +335,7 @@
       renderSidebar();
       populateCategorySelect();
       renderCurrentView();
-      document.getElementById('userBadge').textContent = state.currentUser;
+      setupUserMenu();
       document.getElementById('bootLoader').classList.add('hidden');
       document.getElementById('app').classList.remove('hidden');
     }).catch(function (err) {
@@ -323,6 +344,37 @@
     });
 
     bindEvents();
+  }
+
+  // ---------------------------------------------------------------------
+  // User menu (Switch Account / Sign Out)
+  //
+  // Apps Script web apps have no app-level session of their own - access is
+  // gated entirely by the visitor's Google sign-in before the page even
+  // loads. "Sign out" here means signing out of the Google account itself
+  // (via Google's own logout endpoint), which then forces a fresh Google
+  // sign-in the next time this link is opened.
+  // ---------------------------------------------------------------------
+  function setupUserMenu() {
+    var email = state.currentUser || '';
+    var currentUrl = window.location.href;
+
+    document.getElementById('userBadge').textContent = email;
+    document.getElementById('userMenuEmail').textContent = email;
+    document.getElementById('userAvatar').textContent = email.charAt(0).toUpperCase() || '?';
+    document.getElementById('switchAccountLink').href =
+      'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(currentUrl);
+    document.getElementById('signOutLink').href =
+      'https://accounts.google.com/Logout?continue=' + encodeURIComponent(currentUrl);
+
+    var menuBtn = document.getElementById('userMenuBtn');
+    var dropdown = document.getElementById('userMenuDropdown');
+    menuBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      dropdown.classList.toggle('hidden');
+    });
+    document.addEventListener('click', function () { dropdown.classList.add('hidden'); });
+    dropdown.addEventListener('click', function (e) { e.stopPropagation(); });
   }
 
   // ---------------------------------------------------------------------
