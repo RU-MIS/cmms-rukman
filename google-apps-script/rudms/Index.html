@@ -311,6 +311,14 @@
           if (settled) return;
           settled = true;
           clearTimeout(timer);
+          if (result === null || result === undefined) {
+            reject(new Error(
+              'Server function "' + fnName + '" returned nothing. This usually means the ' +
+              'deployed Code.gs is out of date or a different version than Index.html - ' +
+              're-copy the latest Code.gs into the Apps Script editor and deploy a new version.'
+            ));
+            return;
+          }
           resolve(result);
         })
         .withFailureHandler(function (err) {
