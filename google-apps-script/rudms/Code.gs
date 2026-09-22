@@ -87,12 +87,15 @@ function listCategoryFolders_(rootFolder) {
  * Fast, read-only lookup: returns the index sheet if it already exists,
  * or null if it doesn't. Never creates anything, so callers that only
  * need to READ (like getAllFiles) stay quick even when the sheet is
- * missing, instead of paying for a full create sequence inline. Searches
- * the whole Drive by name (not folder-scoped) since the sheet isn't
- * moved into the RUDMS folder - see getIndexSheet_.
+ * missing, instead of paying for a full create sequence inline.
+ * Folder-scoped (not a whole-Drive search) - scoped DriveApp lookups
+ * have proven reliably fast throughout this project; a Drive-wide
+ * name search on a Workspace account with many files is slower and
+ * risks the same "response never arrives" failure this is trying to
+ * avoid, so the sheet is kept inside the RUDMS folder, same as before.
  */
-function findIndexSheet_() {
-  var files = DriveApp.getFilesByName(INDEX_FILE_NAME);
+function findIndexSheet_(rootFolder) {
+  var files = rootFolder.getFilesByName(INDEX_FILE_NAME);
   if (files.hasNext()) {
     return SpreadsheetApp.open(files.next()).getSheets()[0];
   }
@@ -100,27 +103,35 @@ function findIndexSheet_() {
 }
 
 /**
- * Finds-or-creates the index sheet, in as few API calls as possible -
- * every extra round trip here is a chance for it to not come back (see
- * the notes throughout this file on slow Apps Script calls sometimes
- * failing to deliver a response in this environment). Deliberately:
+ * Finds-or-creates the index sheet, trimmed to the fewest calls that
+ * still keep it reliably findable later - every extra round trip here
+ * is a chance for it to not come back (see the notes throughout this
+ * file on slow Apps Script calls sometimes failing to deliver a
+ * response in this environment). Deliberately:
  *   - does NOT cache the sheet's ID in PropertiesService (a cached ID
  *     that outlives a manually-deleted file leaves openById() pointing
  *     at a dead reference that fails silently instead of throwing)
- *   - does NOT move the created sheet into the RUDMS folder (that's a
- *     create + addFile + removeFile round trip just for tidiness)
- *   - does NOT apply header formatting (bold/frozen row) on create
- * Resolving by name every time is self-healing: if the sheet is ever
- * deleted, the next call just recreates it.
+ *   - does NOT apply header formatting (bold/frozen row) on create -
+ *     just one appendRow() for the header values
+ * It DOES still move the sheet into the RUDMS folder (create +
+ * addFile + removeFile) so the fast folder-scoped find above can
+ * actually locate it afterwards. Resolving by name every time is
+ * self-healing: if the sheet is ever deleted, the next call just
+ * recreates it.
  *
  * Only call this where creation is actually needed (uploads, permission
  * edits, the background "ensure" call) - use findIndexSheet_ for reads.
  */
 function getIndexSheet_() {
-  var existing = findIndexSheet_();
+  var rootFolder = getRootFolder_();
+  var existing = findIndexSheet_(rootFolder);
   if (existing) return existing;
 
-  var sheet = SpreadsheetApp.create(INDEX_FILE_NAME).getSheets()[0];
+  var ss = SpreadsheetApp.create(INDEX_FILE_NAME);
+  var file = DriveApp.getFileById(ss.getId());
+  rootFolder.addFile(file);
+  DriveApp.getRootFolder().removeFile(file);
+  var sheet = ss.getSheets()[0];
   sheet.appendRow(SHEET_HEADERS);
   return sheet;
 }
@@ -216,7 +227,7 @@ function ensureDefaultCategories() {
  */
 function getAllFiles() {
   try {
-    var sheet = findIndexSheet_();
+    var sheet = findIndexSheet_(getRootFolder_());
     return { success: true, files: sheet ? readAllRows_(sheet) : [] };
   } catch (err) {
     return { success: false, error: err.message };
