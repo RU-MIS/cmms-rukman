@@ -15,6 +15,7 @@
 
 var ROOT_FOLDER_NAME = 'Rukman Udyog Docs Management System (RUDMS)';
 var DEFAULT_CATEGORIES = ['RFQ', 'Purchase Orders', 'Purchase Bills', 'CAD Designs'];
+var CONTACTS_FILE_NAME = 'RUDMS_Contacts.json';
 
 // ---------------------------------------------------------------------------
 // Web app entry point
@@ -404,6 +405,85 @@ function getFileContentForPreview(fileId) {
       mimeType: blob.getContentType(),
       fileName: file.getName()
     };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Saved contacts ("doer list") - a reusable people picker for the
+// Viewer/Editor access fields, so emails don't need retyping every time.
+// Stored as a single JSON file in the root folder (DriveApp only, same
+// reasoning as the rest of this file - no SpreadsheetApp).
+// ---------------------------------------------------------------------------
+
+function findContactsFile_(rootFolder) {
+  var files = rootFolder.getFilesByName(CONTACTS_FILE_NAME);
+  return files.hasNext() ? files.next() : null;
+}
+
+function readContacts_(rootFolder) {
+  var file = findContactsFile_(rootFolder);
+  if (!file) return [];
+  try {
+    var list = JSON.parse(file.getBlob().getDataAsString() || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function writeContacts_(rootFolder, contacts) {
+  var json = JSON.stringify(contacts);
+  var file = findContactsFile_(rootFolder);
+  if (file) {
+    file.setContent(json);
+  } else {
+    rootFolder.createFile(CONTACTS_FILE_NAME, json, MimeType.PLAIN_TEXT);
+  }
+}
+
+function getContacts() {
+  try {
+    return { success: true, contacts: readContacts_(getRootFolder_()) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/** Adds a new contact, or updates the name if the email already exists. */
+function saveContact(name, email) {
+  try {
+    var cleanEmail = String(email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      throw new Error('Enter a valid email address.');
+    }
+    var cleanName = String(name || '').trim();
+
+    var rootFolder = getRootFolder_();
+    var contacts = readContacts_(rootFolder);
+    var existing = contacts.filter(function (c) { return c.email === cleanEmail; })[0];
+    if (existing) {
+      existing.name = cleanName || existing.name;
+    } else {
+      contacts.push({ name: cleanName, email: cleanEmail });
+    }
+    contacts.sort(function (a, b) { return (a.name || a.email).localeCompare(b.name || b.email); });
+
+    writeContacts_(rootFolder, contacts);
+    return { success: true, contacts: contacts };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function deleteContact(email) {
+  try {
+    var cleanEmail = String(email || '').trim().toLowerCase();
+    var rootFolder = getRootFolder_();
+    var contacts = readContacts_(rootFolder).filter(function (c) { return c.email !== cleanEmail; });
+    writeContacts_(rootFolder, contacts);
+    return { success: true, contacts: contacts };
   } catch (err) {
     return { success: false, error: err.message };
   }
