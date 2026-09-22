@@ -16,6 +16,9 @@
 var ROOT_FOLDER_NAME = 'Rukman Udyog Docs Management System (RUDMS)';
 var DEFAULT_CATEGORIES = ['RFQ', 'Purchase Orders', 'Purchase Bills', 'CAD Designs'];
 var CONTACTS_FILE_NAME = 'RUDMS_Contacts.json';
+var USERS_FILE_NAME = 'RUDMS_Users.json';
+var SESSIONS_FILE_NAME = 'RUDMS_Sessions.json';
+var SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // ---------------------------------------------------------------------------
 // Web app entry point
@@ -148,15 +151,34 @@ function fileToRecord_(file, categoryName) {
  * Fast, minimal call for first paint: just identity + root folder.
  * Deliberately does NOT touch categories, so it stays quick even on a
  * cold start.
+ *
+ * authMode tells the client whether to show the login screen:
+ *  - 'google': visitor is signed into a Google account, currentUser is
+ *    their email - no login screen needed, unchanged from before.
+ *  - 'external': visitor authenticated with a username/password and
+ *    passed a valid session token as externalToken.
+ *  - 'none': neither - client shows the login screen.
  */
-function getBootstrapInfo() {
+function getBootstrapInfo(externalToken) {
   try {
     var rootFolder = getRootFolder_();
-    return {
-      success: true,
-      currentUser: Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail(),
-      rootFolderId: rootFolder.getId()
-    };
+    var googleEmail = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
+
+    if (googleEmail) {
+      return { success: true, currentUser: googleEmail, authMode: 'google', rootFolderId: rootFolder.getId() };
+    }
+
+    var session = validateSession_(rootFolder, externalToken);
+    if (session) {
+      return {
+        success: true,
+        currentUser: session.name || session.username,
+        authMode: 'external',
+        rootFolderId: rootFolder.getId()
+      };
+    }
+
+    return { success: true, currentUser: '', authMode: 'none', rootFolderId: rootFolder.getId() };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -236,7 +258,7 @@ function addCategory(categoryName) {
 /**
  * payload: {
  *   fileName, mimeType, base64Data, category,
- *   viewerEmails: string[], editorEmails: string[]
+ *   viewerEmails: string[], editorEmails: string[], externalToken
  * }
  */
 function uploadFile(payload) {
@@ -265,7 +287,7 @@ function uploadFile(payload) {
     var editorEmails = uniqueEmails_(payload.editorEmails);
     var warnings = applyPermissions_(file, viewerEmails, editorEmails);
 
-    var uploadedBy = Session.getActiveUser().getEmail() || 'unknown';
+    var uploadedBy = resolveCurrentUser_(rootFolder, payload.externalToken);
     file.setDescription(buildFileMeta_(viewerEmails, editorEmails, uploadedBy));
 
     return {
@@ -433,41 +455,44 @@ function getFileContentForPreview(fileId) {
 }
 
 // ---------------------------------------------------------------------------
-// Saved contacts ("doer list") - a reusable people picker for the
-// Viewer/Editor access fields, so emails don't need retyping every time.
-// Stored as a single JSON file in the root folder (DriveApp only, same
-// reasoning as the rest of this file - no SpreadsheetApp).
+// Generic single-file JSON storage helper, used for contacts, login
+// accounts, and sessions below - all DriveApp only, no SpreadsheetApp.
 // ---------------------------------------------------------------------------
 
-function findContactsFile_(rootFolder) {
-  var files = rootFolder.getFilesByName(CONTACTS_FILE_NAME);
+function findNamedFile_(rootFolder, fileName) {
+  var files = rootFolder.getFilesByName(fileName);
   return files.hasNext() ? files.next() : null;
 }
 
-function readContacts_(rootFolder) {
-  var file = findContactsFile_(rootFolder);
-  if (!file) return [];
+function readJsonFile_(rootFolder, fileName, fallback) {
+  var file = findNamedFile_(rootFolder, fileName);
+  if (!file) return fallback;
   try {
-    var list = JSON.parse(file.getBlob().getDataAsString() || '[]');
-    return Array.isArray(list) ? list : [];
+    var data = JSON.parse(file.getBlob().getDataAsString() || 'null');
+    return (data === null || data === undefined) ? fallback : data;
   } catch (err) {
-    return [];
+    return fallback;
   }
 }
 
-function writeContacts_(rootFolder, contacts) {
-  var json = JSON.stringify(contacts);
-  var file = findContactsFile_(rootFolder);
+function writeJsonFile_(rootFolder, fileName, data) {
+  var json = JSON.stringify(data);
+  var file = findNamedFile_(rootFolder, fileName);
   if (file) {
     file.setContent(json);
   } else {
-    rootFolder.createFile(CONTACTS_FILE_NAME, json, MimeType.PLAIN_TEXT);
+    rootFolder.createFile(fileName, json, MimeType.PLAIN_TEXT);
   }
 }
 
+// ---------------------------------------------------------------------------
+// Saved contacts ("doer list") - a reusable people picker for the
+// Viewer/Editor access fields, so emails don't need retyping every time.
+// ---------------------------------------------------------------------------
+
 function getContacts() {
   try {
-    return { success: true, contacts: readContacts_(getRootFolder_()) };
+    return { success: true, contacts: readJsonFile_(getRootFolder_(), CONTACTS_FILE_NAME, []) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -483,7 +508,7 @@ function saveContact(name, email) {
     var cleanName = String(name || '').trim();
 
     var rootFolder = getRootFolder_();
-    var contacts = readContacts_(rootFolder);
+    var contacts = readJsonFile_(rootFolder, CONTACTS_FILE_NAME, []);
     var existing = contacts.filter(function (c) { return c.email === cleanEmail; })[0];
     if (existing) {
       existing.name = cleanName || existing.name;
@@ -492,7 +517,7 @@ function saveContact(name, email) {
     }
     contacts.sort(function (a, b) { return (a.name || a.email).localeCompare(b.name || b.email); });
 
-    writeContacts_(rootFolder, contacts);
+    writeJsonFile_(rootFolder, CONTACTS_FILE_NAME, contacts);
     return { success: true, contacts: contacts };
   } catch (err) {
     return { success: false, error: err.message };
@@ -503,10 +528,169 @@ function deleteContact(email) {
   try {
     var cleanEmail = String(email || '').trim().toLowerCase();
     var rootFolder = getRootFolder_();
-    var contacts = readContacts_(rootFolder).filter(function (c) { return c.email !== cleanEmail; });
-    writeContacts_(rootFolder, contacts);
+    var contacts = readJsonFile_(rootFolder, CONTACTS_FILE_NAME, []).filter(function (c) { return c.email !== cleanEmail; });
+    writeJsonFile_(rootFolder, CONTACTS_FILE_NAME, contacts);
     return { success: true, contacts: contacts };
   } catch (err) {
     return { success: false, error: err.message };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Login accounts for people without a Google account
+//
+// Google-signed-in visitors keep working exactly as before (their email
+// via Session.getActiveUser()). This adds a second, independent path:
+// a username/password checked against a salted SHA-256 hash, issuing a
+// random session token the client stores in localStorage and sends back
+// as `externalToken` on calls that need to know who's asking.
+//
+// Honest limitation: this gates what the RUDMS *client UI* shows (no
+// login, no file browser) - it is not a server-side authorization check
+// on every single function, since this app's functions are otherwise
+// callable directly. That's an appropriate bar for keeping casual/public
+// visitors out, not a defense against a determined technical attacker.
+// ---------------------------------------------------------------------------
+
+function generateSalt_() {
+  return Utilities.getUuid();
+}
+
+function hashPassword_(password, salt) {
+  var bytes = Utilities.computeHmacSha256Signature(String(password), salt);
+  return bytes.map(function (b) { return ((b + 256) % 256).toString(16).padStart(2, '0'); }).join('');
+}
+
+function readUsers_(rootFolder) {
+  return readJsonFile_(rootFolder, USERS_FILE_NAME, []);
+}
+
+function publicUserFields_(u) {
+  return { username: u.username, name: u.name, createdAt: u.createdAt };
+}
+
+function listExternalUsers() {
+  try {
+    var users = readUsers_(getRootFolder_());
+    return { success: true, users: users.map(publicUserFields_) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function createExternalUser(username, password, name) {
+  try {
+    var cleanUsername = String(username || '').trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,40}$/.test(cleanUsername)) {
+      throw new Error('Username must be 3-40 characters: letters, numbers, dot, underscore or dash only.');
+    }
+    if (!password || String(password).length < 6) {
+      throw new Error('Password must be at least 6 characters.');
+    }
+
+    var rootFolder = getRootFolder_();
+    var users = readUsers_(rootFolder);
+    if (users.some(function (u) { return u.username === cleanUsername; })) {
+      throw new Error('That username is already taken.');
+    }
+
+    var salt = generateSalt_();
+    users.push({
+      username: cleanUsername,
+      name: String(name || '').trim() || cleanUsername,
+      salt: salt,
+      passwordHash: hashPassword_(password, salt),
+      createdAt: new Date().toISOString()
+    });
+    users.sort(function (a, b) { return a.username.localeCompare(b.username); });
+
+    writeJsonFile_(rootFolder, USERS_FILE_NAME, users);
+    return { success: true, users: users.map(publicUserFields_) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function deleteExternalUser(username) {
+  try {
+    var cleanUsername = String(username || '').trim().toLowerCase();
+    var rootFolder = getRootFolder_();
+    var users = readUsers_(rootFolder).filter(function (u) { return u.username !== cleanUsername; });
+    writeJsonFile_(rootFolder, USERS_FILE_NAME, users);
+
+    // Also kill any active sessions for this account.
+    var sessions = readJsonFile_(rootFolder, SESSIONS_FILE_NAME, {});
+    Object.keys(sessions).forEach(function (token) {
+      if (sessions[token].username === cleanUsername) delete sessions[token];
+    });
+    writeJsonFile_(rootFolder, SESSIONS_FILE_NAME, sessions);
+
+    return { success: true, users: users.map(publicUserFields_) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function login(username, password) {
+  try {
+    var cleanUsername = String(username || '').trim().toLowerCase();
+    var rootFolder = getRootFolder_();
+    var users = readUsers_(rootFolder);
+    var user = users.filter(function (u) { return u.username === cleanUsername; })[0];
+
+    if (!user || hashPassword_(String(password || ''), user.salt) !== user.passwordHash) {
+      throw new Error('Incorrect username or password.');
+    }
+
+    var sessions = readJsonFile_(rootFolder, SESSIONS_FILE_NAME, {});
+    var now = Date.now();
+    Object.keys(sessions).forEach(function (t) {
+      if (sessions[t].expiresAt < now) delete sessions[t];
+    });
+
+    var token = Utilities.getUuid();
+    sessions[token] = { username: user.username, name: user.name, expiresAt: now + SESSION_TTL_MS };
+    writeJsonFile_(rootFolder, SESSIONS_FILE_NAME, sessions);
+
+    return { success: true, token: token, username: user.username, name: user.name };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function validateSession_(rootFolder, token) {
+  if (!token) return null;
+  var sessions = readJsonFile_(rootFolder, SESSIONS_FILE_NAME, {});
+  var session = sessions[token];
+  if (!session || session.expiresAt < Date.now()) return null;
+  return session;
+}
+
+function validateSession(token) {
+  try {
+    var session = validateSession_(getRootFolder_(), token);
+    return session ? { success: true, username: session.username, name: session.name } : { success: false };
+  } catch (err) {
+    return { success: false };
+  }
+}
+
+function logoutSession(token) {
+  try {
+    var rootFolder = getRootFolder_();
+    var sessions = readJsonFile_(rootFolder, SESSIONS_FILE_NAME, {});
+    delete sessions[token];
+    writeJsonFile_(rootFolder, SESSIONS_FILE_NAME, sessions);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/** Google identity if signed in, else a valid external session's display name, else 'unknown'. */
+function resolveCurrentUser_(rootFolder, externalToken) {
+  var googleEmail = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
+  if (googleEmail) return googleEmail;
+  var session = validateSession_(rootFolder, externalToken);
+  return session ? (session.name || session.username) : 'unknown';
 }

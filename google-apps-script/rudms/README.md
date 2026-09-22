@@ -55,23 +55,43 @@ Google Sites page via `<iframe>`.
   Use "By Folder" for broad, category-wide access (e.g. "everyone in
   Purchasing can view Purchase Orders"); use "By File" for one-off
   exceptions on a specific document.
-- **Sign in / Sign out**: Apps Script web apps have no app-level session of
-  their own — access is gated entirely by the visitor's Google sign-in
-  *before* the page even loads (that's what "Who has access: Anyone" in the
-  deployment step means). There is no separate "log in" screen inside
-  RUDMS to build. What's provided instead is a user menu (click your email
-  in the top-right):
-  - **Switch Account** — opens Google's account chooser so a visitor signed
-    into multiple Google accounts in the same browser can pick a different
-    one, then returns to this same web app URL.
-  - **Sign Out** — signs the visitor out of their Google account for this
-    browser tab (via `accounts.google.com/Logout`) and returns to this web
-    app URL, which will then prompt Google's normal sign-in screen again
-    before RUDMS loads.
+- **Sign in / Sign out**: two independent paths.
+  - **Google sign-in** — unchanged: gated by the visitor's Google account
+    *before* the page even loads ("Who has access: Anyone" in the
+    deployment step). The user menu (click your name, top-right) offers
+    **Switch Account** (Google's account chooser) and **Sign Out**
+    (`accounts.google.com/Logout`).
+  - **Login accounts** — for people without a Google account. Create
+    accounts from **Manage Access → Login Accounts** (username + password,
+    min 6 characters; passwords are salted and SHA-256 hashed, never
+    stored in plain text). A visitor with no Google session sees a login
+    screen instead of the file browser; signing in issues a random
+    session token (30-day expiry) stored in the browser's `localStorage`
+    and sent back as `externalToken` on calls that need to know who's
+    asking (currently just `uploadFile`, for the "Uploaded By" field).
+    **Honest limitation**: this gates the RUDMS *client UI* - no login, no
+    file browser - it is not a server-side authorization check on every
+    function, since every function here is otherwise directly callable.
+    That's an appropriate bar for keeping casual/public visitors out, not
+    a defense against a determined technical attacker. If you need that
+    level of hardening, every function would need to validate the token
+    itself, which is a larger change.
+- **Downloads**: proxied through `getFileContentForPreview()` on the
+  server rather than a direct `drive.google.com` link, so both
+  Google-signed-in and login-account visitors can download a file without
+  needing Drive-level access to it themselves.
 - **Previews**:
   - Images, PDFs, Word/Excel/PowerPoint → shown via Drive's built-in
-    `/preview` iframe (requires the viewing user to have access, exactly
-    as granted above).
+    `/preview` iframe. **This still requires the viewing browser to have
+    Drive-level access to that specific file** - it works for
+    Google-signed-in visitors with the right Drive permissions, but a
+    login-account (non-Google) visitor will see Drive's "you need access"
+    message here even though they're signed into RUDMS. They can still
+    use the (now server-proxied) Download button instead. Making preview
+    itself Drive-independent for login accounts - fetching the blob
+    server-side and rendering images/PDFs directly, as `getFileContentForPreview`
+    already does for CAD files - is a reasonable follow-up if that
+    matters for your use case.
   - `.stl` and `.obj` → rendered live in an interactive WebGL viewer
     (Three.js + `STLLoader`/`OBJLoader` + `OrbitControls`) — rotate with
     drag, zoom with scroll, no download needed.
