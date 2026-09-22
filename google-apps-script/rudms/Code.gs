@@ -1,15 +1,20 @@
 /**
  * Rukman Udyog Docs Management System (RUDMS)
- * Backend: Drive folder/sheet setup, upload, permissions, indexing, search.
+ * Backend: Drive folder setup, upload, permissions, indexing, search.
+ *
+ * File metadata (viewers/editors/uploadedBy) is stored directly on each
+ * Drive file's description field as JSON, NOT in a separate Google
+ * Sheet. This project went through extensive debugging where every
+ * function that touched SpreadsheetApp (even ones whose final return
+ * value contained no Sheets objects at all) reliably failed to have its
+ * response delivered back to the client via google.script.run, while
+ * every DriveApp-only function reliably worked - consistently, across
+ * dozens of tests, in this specific environment. Rather than keep
+ * fighting that, the whole app avoids SpreadsheetApp entirely.
  */
 
 var ROOT_FOLDER_NAME = 'Rukman Udyog Docs Management System (RUDMS)';
-var INDEX_FILE_NAME = 'RUDMS_Index';
 var DEFAULT_CATEGORIES = ['RFQ', 'Purchase Orders', 'Purchase Bills', 'CAD Designs'];
-var SHEET_HEADERS = [
-  'File ID', 'File Name', 'Category', 'Drive Link', 'File Type',
-  'Allowed Viewers', 'Allowed Editors', 'Upload Date', 'Uploaded By', 'Size (bytes)'
-];
 
 // ---------------------------------------------------------------------------
 // Web app entry point
@@ -72,105 +77,51 @@ function listCategoryFolders_(rootFolder) {
   var iter = rootFolder.getFolders();
   while (iter.hasNext()) {
     var folder = iter.next();
-    if (!folder.isTrashed() && folder.getName() !== INDEX_FILE_NAME) {
-      names[folder.getName()] = true;
-    }
+    if (!folder.isTrashed()) names[folder.getName()] = true;
   }
   return Object.keys(names).sort();
 }
 
 // ---------------------------------------------------------------------------
-// Metadata index (Google Sheet acting as lightweight DB)
+// Per-file metadata, stored as JSON in the Drive file's own description
 // ---------------------------------------------------------------------------
 
-/**
- * Fast, read-only lookup: returns the index sheet if it already exists,
- * or null if it doesn't. Never creates anything, so callers that only
- * need to READ (like getAllFiles) stay quick even when the sheet is
- * missing, instead of paying for a full create sequence inline.
- * Folder-scoped (not a whole-Drive search) - scoped DriveApp lookups
- * have proven reliably fast throughout this project; a Drive-wide
- * name search on a Workspace account with many files is slower and
- * risks the same "response never arrives" failure this is trying to
- * avoid, so the sheet is kept inside the RUDMS folder, same as before.
- */
-function findIndexSheet_(rootFolder) {
-  var files = rootFolder.getFilesByName(INDEX_FILE_NAME);
-  if (files.hasNext()) {
-    return SpreadsheetApp.open(files.next()).getSheets()[0];
+function buildFileMeta_(viewerEmails, editorEmails, uploadedBy) {
+  return JSON.stringify({
+    viewers: viewerEmails.join(', '),
+    editors: editorEmails.join(', '),
+    uploadedBy: uploadedBy
+  });
+}
+
+function parseFileMeta_(description) {
+  try {
+    var meta = JSON.parse(description || '{}');
+    return {
+      viewers: meta.viewers || '',
+      editors: meta.editors || '',
+      uploadedBy: meta.uploadedBy || ''
+    };
+  } catch (err) {
+    return { viewers: '', editors: '', uploadedBy: '' };
   }
-  return null;
 }
 
-/**
- * Finds-or-creates the index sheet, trimmed to the fewest calls that
- * still keep it reliably findable later - every extra round trip here
- * is a chance for it to not come back (see the notes throughout this
- * file on slow Apps Script calls sometimes failing to deliver a
- * response in this environment). Deliberately:
- *   - does NOT cache the sheet's ID in PropertiesService (a cached ID
- *     that outlives a manually-deleted file leaves openById() pointing
- *     at a dead reference that fails silently instead of throwing)
- *   - does NOT apply header formatting (bold/frozen row) on create -
- *     just one appendRow() for the header values
- * It DOES still move the sheet into the RUDMS folder (create +
- * addFile + removeFile) so the fast folder-scoped find above can
- * actually locate it afterwards. Resolving by name every time is
- * self-healing: if the sheet is ever deleted, the next call just
- * recreates it.
- *
- * Only call this where creation is actually needed (uploads, permission
- * edits, the background "ensure" call) - use findIndexSheet_ for reads.
- */
-function getIndexSheet_() {
-  var rootFolder = getRootFolder_();
-  var existing = findIndexSheet_(rootFolder);
-  if (existing) return existing;
-
-  var ss = SpreadsheetApp.create(INDEX_FILE_NAME);
-  var file = DriveApp.getFileById(ss.getId());
-  rootFolder.addFile(file);
-  DriveApp.getRootFolder().removeFile(file);
-  var sheet = ss.getSheets()[0];
-  sheet.appendRow(SHEET_HEADERS);
-  return sheet;
-}
-
-function appendIndexRow_(row) {
-  var sheet = getIndexSheet_();
-  sheet.appendRow(row);
-}
-
-function findRowByFileId_(sheet, fileId) {
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === fileId) return i + 1; // 1-indexed sheet row
-  }
-  return -1;
-}
-
-function readAllRows_(sheet) {
-  var data = sheet.getDataRange().getValues();
-  var rows = [];
-  for (var i = 1; i < data.length; i++) {
-    var r = data[i];
-    if (!r[0]) continue;
-    rows.push({
-      fileId: String(r[0]),
-      fileName: String(r[1]),
-      category: String(r[2]),
-      driveLink: String(r[3]),
-      fileType: String(r[4]),
-      viewers: String(r[5]),
-      editors: String(r[6]),
-      // Sheets returns Date objects for date-formatted cells - stringify
-      // explicitly rather than passing a raw Date through google.script.run.
-      uploadDate: (r[7] instanceof Date) ? r[7].toISOString() : String(r[7]),
-      uploadedBy: String(r[8]),
-      size: Number(r[9]) || 0
-    });
-  }
-  return rows;
+function fileToRecord_(file, categoryName) {
+  var meta = parseFileMeta_(file.getDescription());
+  var name = file.getName();
+  return {
+    fileId: file.getId(),
+    fileName: name,
+    category: categoryName,
+    driveLink: file.getUrl(),
+    fileType: (name.split('.').pop() || '').toLowerCase(),
+    viewers: meta.viewers,
+    editors: meta.editors,
+    uploadDate: file.getDateCreated().toISOString(),
+    uploadedBy: meta.uploadedBy,
+    size: file.getSize()
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -179,8 +130,8 @@ function readAllRows_(sheet) {
 
 /**
  * Fast, minimal call for first paint: just identity + root folder.
- * Deliberately does NOT touch categories or the index sheet, so it stays
- * quick even on a cold start.
+ * Deliberately does NOT touch categories, so it stays quick even on a
+ * cold start.
  */
 function getBootstrapInfo() {
   try {
@@ -196,26 +147,21 @@ function getBootstrapInfo() {
 }
 
 /**
- * Creates the default category folders and the index sheet, exactly
- * once each (gated by a Script Property flag) - safe to call on every
- * load since it's a no-op after the first successful run. Called
- * fire-and-forget from the client after first paint, so this being slow
- * (real Drive/Sheets creation calls) never blocks the UI.
+ * Creates the default category folders exactly once (gated by a Script
+ * Property flag) - safe to call on every load since it's a no-op after
+ * the first successful run. Called fire-and-forget from the client
+ * after first paint, so this being slow never blocks the UI.
  */
 function ensureDefaultCategories() {
   try {
     var props = PropertiesService.getScriptProperties();
-    var rootFolder = getRootFolder_();
-
     if (!props.getProperty('CATEGORIES_READY')) {
+      var rootFolder = getRootFolder_();
       DEFAULT_CATEGORIES.forEach(function (c) {
         getOrCreateCategoryFolder_(rootFolder, c);
       });
       props.setProperty('CATEGORIES_READY', 'true');
     }
-
-    getIndexSheet_(); // finds-or-creates; cheap no-op once it exists
-
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -223,14 +169,27 @@ function ensureDefaultCategories() {
 }
 
 /**
- * Read-only and fast: if the index sheet doesn't exist yet (brand new
- * setup, or it was deleted and ensureDefaultCategories hasn't recreated
- * it yet), just returns an empty list instead of creating anything.
+ * Lists every file across every category folder, reading each file's
+ * metadata straight off its own Drive description - no separate index
+ * to fall out of sync or fail to load.
  */
 function getAllFiles() {
   try {
-    var sheet = findIndexSheet_(getRootFolder_());
-    return { success: true, files: sheet ? readAllRows_(sheet) : [] };
+    var rootFolder = getRootFolder_();
+    var files = [];
+    var folderIter = rootFolder.getFolders();
+    while (folderIter.hasNext()) {
+      var folder = folderIter.next();
+      if (folder.isTrashed()) continue;
+      var categoryName = folder.getName();
+      var fileIter = folder.getFiles();
+      while (fileIter.hasNext()) {
+        var file = fileIter.next();
+        if (file.isTrashed()) continue;
+        files.push(fileToRecord_(file, categoryName));
+      }
+    }
+    return { success: true, files: files };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -283,48 +242,13 @@ function uploadFile(payload) {
     var editorEmails = uniqueEmails_(payload.editorEmails);
     var warnings = applyPermissions_(file, viewerEmails, editorEmails);
 
-    var uploadDate = new Date();
     var uploadedBy = Session.getActiveUser().getEmail() || 'unknown';
-    var extension = (payload.fileName.split('.').pop() || '').toLowerCase();
-
-    // The Drive upload above is the part that actually matters - don't
-    // let a hiccup in the bookkeeping sheet (index sheet missing/slow to
-    // create, etc.) fail an otherwise-successful upload. Surface it as a
-    // warning instead; the file will just be missing from the list until
-    // a future upload/edit successfully appends it, or the sheet exists
-    // by then and a reload picks it up.
-    try {
-      appendIndexRow_([
-        file.getId(),
-        payload.fileName,
-        categoryFolder.getName(),
-        file.getUrl(),
-        extension,
-        viewerEmails.join(', '),
-        editorEmails.join(', '),
-        uploadDate,
-        uploadedBy,
-        file.getSize()
-      ]);
-    } catch (indexErr) {
-      warnings.push('File uploaded to Drive, but the index sheet could not be updated yet (' + indexErr.message + '). Reload and try again if it doesn\'t appear in the list shortly.');
-    }
+    file.setDescription(buildFileMeta_(viewerEmails, editorEmails, uploadedBy));
 
     return {
       success: true,
       warnings: warnings,
-      file: {
-        fileId: file.getId(),
-        fileName: payload.fileName,
-        category: categoryFolder.getName(),
-        driveLink: file.getUrl(),
-        fileType: extension,
-        viewers: viewerEmails.join(', '),
-        editors: editorEmails.join(', '),
-        uploadDate: uploadDate.toISOString(),
-        uploadedBy: uploadedBy,
-        size: file.getSize()
-      }
+      file: fileToRecord_(file, categoryFolder.getName())
     };
   } catch (err) {
     return { success: false, error: err.message };
@@ -371,12 +295,8 @@ function updateFilePermissions(fileId, viewerEmails, editorEmails) {
     var newEditors = uniqueEmails_(editorEmails);
     var warnings = applyPermissions_(file, newViewers, newEditors);
 
-    var sheet = getIndexSheet_();
-    var rowIndex = findRowByFileId_(sheet, fileId);
-    if (rowIndex > 0) {
-      sheet.getRange(rowIndex, 6).setValue(newViewers.join(', '));
-      sheet.getRange(rowIndex, 7).setValue(newEditors.join(', '));
-    }
+    var existingMeta = parseFileMeta_(file.getDescription());
+    file.setDescription(buildFileMeta_(newViewers, newEditors, existingMeta.uploadedBy));
 
     return { success: true, warnings: warnings };
   } catch (err) {
@@ -386,13 +306,7 @@ function updateFilePermissions(fileId, viewerEmails, editorEmails) {
 
 function deleteFile(fileId) {
   try {
-    var file = DriveApp.getFileById(fileId);
-    file.setTrashed(true);
-
-    var sheet = getIndexSheet_();
-    var rowIndex = findRowByFileId_(sheet, fileId);
-    if (rowIndex > 0) sheet.deleteRow(rowIndex);
-
+    DriveApp.getFileById(fileId).setTrashed(true);
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -436,10 +350,10 @@ function getCategoryAccessOverview() {
  * sharing list (replacing whatever was there before). When
  * applyToExistingFiles is true, the same emails are also additively
  * stamped onto every file already inside the folder (union with whatever
- * access that file already had) and the index Sheet is refreshed to match,
- * purely so the file list in the UI displays accurate access - Drive
- * itself already grants folder viewers/editors access to existing and
- * future files in the folder regardless of this flag.
+ * access that file already had) so each file's own metadata displays
+ * accurate access - Drive itself already grants folder viewers/editors
+ * access to existing and future files in the folder regardless of this
+ * flag.
  */
 function updateCategoryAccess(categoryName, viewerEmails, editorEmails, applyToExistingFiles) {
   try {
@@ -458,19 +372,15 @@ function updateCategoryAccess(categoryName, viewerEmails, editorEmails, applyToE
     var warnings = applyPermissions_(folder, newViewers, newEditors);
 
     if (applyToExistingFiles) {
-      var sheet = getIndexSheet_();
       var iter = folder.getFiles();
       while (iter.hasNext()) {
         var file = iter.next();
         warnings = warnings.concat(applyPermissions_(file, newViewers, newEditors));
 
-        var rowIndex = findRowByFileId_(sheet, file.getId());
-        if (rowIndex > 0) {
-          var existingViewers = String(sheet.getRange(rowIndex, 6).getValue() || '').split(',');
-          var existingEditors = String(sheet.getRange(rowIndex, 7).getValue() || '').split(',');
-          sheet.getRange(rowIndex, 6).setValue(uniqueEmails_(existingViewers.concat(newViewers)).join(', '));
-          sheet.getRange(rowIndex, 7).setValue(uniqueEmails_(existingEditors.concat(newEditors)).join(', '));
-        }
+        var existingMeta = parseFileMeta_(file.getDescription());
+        var mergedViewers = uniqueEmails_(existingMeta.viewers.split(',').concat(newViewers));
+        var mergedEditors = uniqueEmails_(existingMeta.editors.split(',').concat(newEditors));
+        file.setDescription(buildFileMeta_(mergedViewers, mergedEditors, existingMeta.uploadedBy));
       }
     }
 
