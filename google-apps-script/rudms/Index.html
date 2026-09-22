@@ -823,6 +823,19 @@
         editorEmails: splitEmails(document.getElementById('editorEmails').value)
       };
 
+      // Instant client-side check (the server re-checks authoritatively
+      // regardless, since state.files can be stale) - saves a round trip
+      // for the common case of an obvious duplicate.
+      var isDuplicate = state.files.some(function (f) {
+        return f.category === payload.category && f.fileName.toLowerCase() === payload.fileName.toLowerCase();
+      });
+      if (isDuplicate) {
+        document.getElementById('uploadProgress').classList.add('hidden');
+        document.getElementById('submitUploadBtn').disabled = false;
+        showToast('"' + payload.fileName + '" already exists in ' + payload.category + '. Rename the file or delete the existing one first.', 'error');
+        return;
+      }
+
       callServerNoRetry('uploadFile', payload).then(function (res) {
         document.getElementById('uploadProgress').classList.add('hidden');
         if (!res.success) {

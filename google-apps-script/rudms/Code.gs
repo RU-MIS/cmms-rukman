@@ -71,6 +71,21 @@ function getOrCreateCategoryFolder_(rootFolder, categoryName) {
   return rootFolder.createFolder(name);
 }
 
+/**
+ * Case-insensitive exact-name match within a single folder - "logo.png"
+ * and "LOGO.PNG" count as duplicates, but "logo.png" and "logo.jpeg"
+ * don't (different extension = different file).
+ */
+function fileNameExistsInFolder_(folder, fileName) {
+  var target = String(fileName).toLowerCase();
+  var files = folder.getFiles();
+  while (files.hasNext()) {
+    var file = files.next();
+    if (!file.isTrashed() && file.getName().toLowerCase() === target) return true;
+  }
+  return false;
+}
+
 function listCategoryFolders_(rootFolder) {
   var names = {};
   DEFAULT_CATEGORIES.forEach(function (c) { names[c] = true; });
@@ -232,6 +247,13 @@ function uploadFile(payload) {
 
     var rootFolder = getRootFolder_();
     var categoryFolder = getOrCreateCategoryFolder_(rootFolder, payload.category || 'Uncategorized');
+
+    if (fileNameExistsInFolder_(categoryFolder, payload.fileName)) {
+      throw new Error(
+        '"' + payload.fileName + '" already exists in ' + categoryFolder.getName() +
+        '. Rename the file or delete the existing one first.'
+      );
+    }
 
     var bytes = Utilities.base64Decode(payload.base64Data);
     var blob = Utilities.newBlob(bytes, payload.mimeType || 'application/octet-stream', payload.fileName);
