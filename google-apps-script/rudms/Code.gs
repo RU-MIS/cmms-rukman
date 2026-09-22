@@ -84,33 +84,45 @@ function listCategoryFolders_(rootFolder) {
 // ---------------------------------------------------------------------------
 
 /**
- * Deliberately does NOT cache the index sheet's ID in PropertiesService.
- * A cached ID that outlives the file (someone deletes/trashes the sheet
- * by hand) leaves SpreadsheetApp.openById() pointing at a dead reference
- * that doesn't cleanly throw - it can come back as a broken object that
- * fails to serialize back to the client instead of raising a catchable
- * error. Resolving by name inside the folder every time costs one extra
- * Drive lookup but is self-healing: if the sheet is ever deleted, the
- * next call just recreates it, exactly like category folders already do.
+ * Fast, read-only lookup: returns the index sheet if it already exists,
+ * or null if it doesn't. Never creates anything, so callers that only
+ * need to READ (like getAllFiles) stay quick even when the sheet is
+ * missing, instead of paying for a full create-and-move sequence inline.
+ */
+function findIndexSheet_(rootFolder) {
+  var files = rootFolder.getFilesByName(INDEX_FILE_NAME);
+  if (files.hasNext()) {
+    return SpreadsheetApp.open(files.next()).getSheets()[0];
+  }
+  return null;
+}
+
+/**
+ * Finds-or-creates the index sheet. Deliberately does NOT cache the
+ * sheet's ID in PropertiesService - a cached ID that outlives the file
+ * (someone deletes/trashes the sheet by hand) leaves
+ * SpreadsheetApp.openById() pointing at a dead reference that doesn't
+ * cleanly throw, and can fail to serialize back to the client instead of
+ * raising a catchable error. Resolving by name every time is
+ * self-healing: if the sheet is ever deleted, the next call just
+ * recreates it, exactly like category folders already do.
+ *
+ * Only call this where creation is actually needed (uploads, permission
+ * edits, the background "ensure" call) - use findIndexSheet_ for reads.
  */
 function getIndexSheet_() {
   var rootFolder = getRootFolder_();
-  var files = rootFolder.getFilesByName(INDEX_FILE_NAME);
-  var ss;
+  var existing = findIndexSheet_(rootFolder);
+  if (existing) return existing;
 
-  if (files.hasNext()) {
-    ss = SpreadsheetApp.open(files.next());
-  } else {
-    ss = SpreadsheetApp.create(INDEX_FILE_NAME);
-    var file = DriveApp.getFileById(ss.getId());
-    rootFolder.addFile(file);
-    DriveApp.getRootFolder().removeFile(file);
-    var sheet = ss.getSheets()[0];
-    sheet.getRange(1, 1, 1, SHEET_HEADERS.length).setValues([SHEET_HEADERS]).setFontWeight('bold');
-    sheet.setFrozenRows(1);
-  }
-
-  return ss.getSheets()[0];
+  var ss = SpreadsheetApp.create(INDEX_FILE_NAME);
+  var file = DriveApp.getFileById(ss.getId());
+  rootFolder.addFile(file);
+  DriveApp.getRootFolder().removeFile(file);
+  var sheet = ss.getSheets()[0];
+  sheet.getRange(1, 1, 1, SHEET_HEADERS.length).setValues([SHEET_HEADERS]).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  return sheet;
 }
 
 function appendIndexRow_(row) {
@@ -127,7 +139,6 @@ function findRowByFileId_(sheet, fileId) {
 }
 
 function readAllRows_(sheet) {
-  sheet = sheet || getIndexSheet_();
   var data = sheet.getDataRange().getValues();
   var rows = [];
   for (var i = 1; i < data.length; i++) {
@@ -172,30 +183,41 @@ function getBootstrapInfo() {
 }
 
 /**
- * Creates the default category folders exactly once (gated by a Script
- * Property flag) - safe to call on every load since it's a no-op after
- * the first successful run.
+ * Creates the default category folders and the index sheet, exactly
+ * once each (gated by a Script Property flag) - safe to call on every
+ * load since it's a no-op after the first successful run. Called
+ * fire-and-forget from the client after first paint, so this being slow
+ * (real Drive/Sheets creation calls) never blocks the UI.
  */
 function ensureDefaultCategories() {
   try {
     var props = PropertiesService.getScriptProperties();
-    if (props.getProperty('CATEGORIES_READY')) {
-      return { success: true };
-    }
     var rootFolder = getRootFolder_();
-    DEFAULT_CATEGORIES.forEach(function (c) {
-      getOrCreateCategoryFolder_(rootFolder, c);
-    });
-    props.setProperty('CATEGORIES_READY', 'true');
+
+    if (!props.getProperty('CATEGORIES_READY')) {
+      DEFAULT_CATEGORIES.forEach(function (c) {
+        getOrCreateCategoryFolder_(rootFolder, c);
+      });
+      props.setProperty('CATEGORIES_READY', 'true');
+    }
+
+    getIndexSheet_(); // finds-or-creates; cheap no-op once it exists
+
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
   }
 }
 
+/**
+ * Read-only and fast: if the index sheet doesn't exist yet (brand new
+ * setup, or it was deleted and ensureDefaultCategories hasn't recreated
+ * it yet), just returns an empty list instead of creating anything.
+ */
 function getAllFiles() {
   try {
-    return { success: true, files: readAllRows_() };
+    var sheet = findIndexSheet_(getRootFolder_());
+    return { success: true, files: sheet ? readAllRows_(sheet) : [] };
   } catch (err) {
     return { success: false, error: err.message };
   }
