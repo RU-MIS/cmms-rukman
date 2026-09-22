@@ -144,6 +144,10 @@
           <h1 id="viewTitle" class="text-lg font-semibold text-slate-900">All Files</h1>
           <p id="resultCount" class="text-sm text-slate-400"></p>
         </div>
+        <div id="filesLoadErrorBanner" class="hidden mb-4 flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-4 py-3">
+          <span>Couldn't load the file list right now. Uploading and browsing categories still work.</span>
+          <button id="retryLoadFilesBtn" class="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium">Retry</button>
+        </div>
         <div id="emptyState" class="hidden flex-col items-center justify-center text-center py-24 text-slate-400">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mb-3"><path d="M3 7v13h18V7M3 7 7 3h10l4 4M3 7h18"/></svg>
           <p class="font-medium">No files found</p>
@@ -372,7 +376,8 @@
     searchQuery: '',
     viewMode: 'grid',
     currentUser: '',
-    categoryAccess: []
+    categoryAccess: [],
+    filesLoadError: null
   };
 
   var CAD_3D_EXT = ['stl', 'obj'];
@@ -388,6 +393,28 @@
   function setBootMessage(text) {
     var el = document.querySelector('#bootLoader p');
     if (el) el.textContent = text;
+  }
+
+  function finishBoot() {
+    renderSidebar();
+    populateCategorySelect();
+    renderCurrentView();
+    setupUserMenu();
+    document.getElementById('bootLoader').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+
+    // Fire-and-forget: creates the default category folders once, ever.
+    // Doesn't block first paint - if it adds anything new the sidebar
+    // will pick it up next time categories are refreshed.
+    callServer('ensureDefaultCategories').catch(function () {});
+  }
+
+  function loadFiles() {
+    return callServer('getAllFiles').then(function (fileRes) {
+      if (!fileRes.success) throw new Error(fileRes.error || 'Failed to load files');
+      state.files = fileRes.files || [];
+      return true;
+    });
   }
 
   function init() {
@@ -406,24 +433,16 @@
         state.categories = catRes.categories || [];
 
         setBootMessage('Loading files…');
-        return callServer('getAllFiles');
+        // Don't let a getAllFiles hiccup block the whole app - the rest
+        // (browsing categories, uploading) works fine without it. Land
+        // on an empty list with a visible "Couldn't load files" notice
+        // and a manual retry instead of a full boot failure.
+        return loadFiles().catch(function (err) {
+          state.files = [];
+          state.filesLoadError = String(err);
+        });
       })
-      .then(function (fileRes) {
-        if (!fileRes.success) throw new Error(fileRes.error || 'Failed to load files');
-        state.files = fileRes.files || [];
-
-        renderSidebar();
-        populateCategorySelect();
-        renderCurrentView();
-        setupUserMenu();
-        document.getElementById('bootLoader').classList.add('hidden');
-        document.getElementById('app').classList.remove('hidden');
-
-        // Fire-and-forget: creates the default category folders once, ever.
-        // Doesn't block first paint - if it adds anything new the sidebar
-        // will pick it up next time categories are refreshed.
-        callServer('ensureDefaultCategories').catch(function () {});
-      })
+      .then(finishBoot)
       .catch(function (err) {
         document.getElementById('bootLoader').innerHTML =
           '<p class="text-red-500 text-sm px-6 text-center max-w-sm">Failed to load RUDMS: ' + escapeHtml(String(err)) + '</p>' +
@@ -522,6 +541,8 @@
   }
 
   function renderCurrentView() {
+    document.getElementById('filesLoadErrorBanner').classList.toggle('hidden', !state.filesLoadError);
+
     var files = getFilteredFiles();
     document.getElementById('resultCount').textContent = files.length + (files.length === 1 ? ' file' : ' files');
     document.getElementById('emptyState').classList.toggle('hidden', files.length !== 0);
@@ -641,6 +662,26 @@
 
     document.getElementById('gridViewBtn').addEventListener('click', function () { setViewMode('grid'); });
     document.getElementById('listViewBtn').addEventListener('click', function () { setViewMode('list'); });
+
+    document.getElementById('retryLoadFilesBtn').addEventListener('click', function (e) {
+      var btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = 'Retrying…';
+      loadFiles()
+        .then(function () {
+          state.filesLoadError = null;
+          renderSidebar();
+          renderCurrentView();
+          showToast('File list loaded', 'success');
+        })
+        .catch(function (err) {
+          showToast('Still couldn\'t load files: ' + String(err), 'error');
+        })
+        .then(function () {
+          btn.disabled = false;
+          btn.textContent = 'Retry';
+        });
+    });
 
     document.getElementById('mobileSidebarToggle').addEventListener('click', openMobileSidebar);
     document.getElementById('sidebarOverlay').addEventListener('click', closeMobileSidebar);
