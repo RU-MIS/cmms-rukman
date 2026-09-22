@@ -128,8 +128,8 @@ function findRowByFileId_(sheet, fileId) {
   return -1;
 }
 
-function readAllRows_() {
-  var sheet = getIndexSheet_();
+function readAllRows_(sheet) {
+  sheet = sheet || getIndexSheet_();
   var data = sheet.getDataRange().getValues();
   var rows = [];
   for (var i = 1; i < data.length; i++) {
@@ -158,16 +158,22 @@ function readAllRows_() {
 function initializeSystem() {
   try {
     var rootFolder = getRootFolder_();
-    DEFAULT_CATEGORIES.forEach(function (c) {
-      getOrCreateCategoryFolder_(rootFolder, c);
-    });
-    getIndexSheet_();
+    var props = PropertiesService.getScriptProperties();
+
+    if (!props.getProperty('CATEGORIES_READY')) {
+      DEFAULT_CATEGORIES.forEach(function (c) {
+        getOrCreateCategoryFolder_(rootFolder, c);
+      });
+      props.setProperty('CATEGORIES_READY', 'true');
+    }
+
+    var sheet = getIndexSheet_();
 
     return {
       success: true,
       currentUser: Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail(),
       categories: listCategoryFolders_(rootFolder),
-      files: readAllRows_()
+      files: readAllRows_(sheet)
     };
   } catch (err) {
     return { success: false, error: err.message };
