@@ -156,16 +156,18 @@ function readAllRows_(sheet) {
     var r = data[i];
     if (!r[0]) continue;
     rows.push({
-      fileId: r[0],
-      fileName: r[1],
-      category: r[2],
-      driveLink: r[3],
-      fileType: r[4],
-      viewers: r[5],
-      editors: r[6],
-      uploadDate: r[7],
-      uploadedBy: r[8],
-      size: r[9]
+      fileId: String(r[0]),
+      fileName: String(r[1]),
+      category: String(r[2]),
+      driveLink: String(r[3]),
+      fileType: String(r[4]),
+      viewers: String(r[5]),
+      editors: String(r[6]),
+      // Sheets returns Date objects for date-formatted cells - stringify
+      // explicitly rather than passing a raw Date through google.script.run.
+      uploadDate: (r[7] instanceof Date) ? r[7].toISOString() : String(r[7]),
+      uploadedBy: String(r[8]),
+      size: Number(r[9]) || 0
     });
   }
   return rows;
@@ -319,7 +321,7 @@ function uploadFile(payload) {
         fileType: extension,
         viewers: viewerEmails.join(', '),
         editors: editorEmails.join(', '),
-        uploadDate: uploadDate,
+        uploadDate: uploadDate.toISOString(),
         uploadedBy: uploadedBy,
         size: file.getSize()
       }
