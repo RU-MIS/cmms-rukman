@@ -83,22 +83,21 @@ function listCategoryFolders_(rootFolder) {
 // Metadata index (Google Sheet acting as lightweight DB)
 // ---------------------------------------------------------------------------
 
+/**
+ * Deliberately does NOT cache the index sheet's ID in PropertiesService.
+ * A cached ID that outlives the file (someone deletes/trashes the sheet
+ * by hand) leaves SpreadsheetApp.openById() pointing at a dead reference
+ * that doesn't cleanly throw - it can come back as a broken object that
+ * fails to serialize back to the client instead of raising a catchable
+ * error. Resolving by name inside the folder every time costs one extra
+ * Drive lookup but is self-healing: if the sheet is ever deleted, the
+ * next call just recreates it, exactly like category folders already do.
+ */
 function getIndexSheet_() {
-  var props = PropertiesService.getScriptProperties();
-  var cachedId = props.getProperty('INDEX_SHEET_ID');
-
-  if (cachedId) {
-    try {
-      var cached = SpreadsheetApp.openById(cachedId).getSheets()[0];
-      return cached;
-    } catch (err) {
-      // Fall through and re-resolve below.
-    }
-  }
-
   var rootFolder = getRootFolder_();
   var files = rootFolder.getFilesByName(INDEX_FILE_NAME);
   var ss;
+
   if (files.hasNext()) {
     ss = SpreadsheetApp.open(files.next());
   } else {
@@ -111,7 +110,6 @@ function getIndexSheet_() {
     sheet.setFrozenRows(1);
   }
 
-  props.setProperty('INDEX_SHEET_ID', ss.getId());
   return ss.getSheets()[0];
 }
 
