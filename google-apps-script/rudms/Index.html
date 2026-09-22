@@ -277,6 +277,7 @@
       <div class="flex items-center gap-1 px-5 pt-3 shrink-0 border-b border-slate-100">
         <button data-access-tab="folders" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-brand-600 text-brand-600">By Folder</button>
         <button data-access-tab="files" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">By File</button>
+        <button data-access-tab="doers" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">Doer List</button>
       </div>
 
       <div class="flex-1 min-h-0 overflow-y-auto p-5">
@@ -288,6 +289,19 @@
         <div id="accessFilesPane" class="hidden">
           <input id="accessFileSearch" type="text" placeholder="Filter files by name…" class="w-full mb-3 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
           <div id="accessFileList" class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden"></div>
+        </div>
+
+        <div id="accessDoersPane" class="hidden">
+          <p class="text-xs text-slate-400 mb-3">People saved here show up in the "Pick from contacts" list whenever you set Viewer/Editor access, on upload or on any existing file.</p>
+
+          <div class="flex gap-2 mb-4 bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <input id="doerNewName" type="text" placeholder="Name" class="w-36 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">
+            <input id="doerNewEmail" type="email" placeholder="email@company.com" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">
+            <button id="doerAddBtn" class="shrink-0 px-3.5 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Add</button>
+          </div>
+
+          <input id="doerSearch" type="text" placeholder="Search doer list…" class="w-full mb-3 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+          <div id="doerList" class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden"></div>
         </div>
       </div>
     </div>
@@ -939,6 +953,7 @@
     document.getElementById('accessFileSearch').addEventListener('input', function (e) {
       renderFileAccessList(e.target.value);
     });
+    bindDoerListPane();
   }
 
   function setAccessTab(tab) {
@@ -951,6 +966,69 @@
     });
     document.getElementById('accessFoldersPane').classList.toggle('hidden', tab !== 'folders');
     document.getElementById('accessFilesPane').classList.toggle('hidden', tab !== 'files');
+    document.getElementById('accessDoersPane').classList.toggle('hidden', tab !== 'doers');
+    if (tab === 'doers') {
+      document.getElementById('doerList').innerHTML = '<div class="spinner mx-auto my-6"></div>';
+      loadContactsIfNeeded().then(function () { renderDoerListPane(''); });
+    }
+  }
+
+  function renderDoerListPane(query) {
+    query = (query || document.getElementById('doerSearch').value || '').trim().toLowerCase();
+    var list = (state.contacts || []).filter(function (c) {
+      return !query || (c.name || '').toLowerCase().indexOf(query) !== -1 || c.email.toLowerCase().indexOf(query) !== -1;
+    });
+    var container = document.getElementById('doerList');
+
+    if (!list.length) {
+      container.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">' +
+        ((state.contacts || []).length ? 'No one matches.' : 'No one on the doer list yet — add someone above.') + '</p>';
+      return;
+    }
+
+    container.innerHTML = list.map(function (c) {
+      return '<div class="flex items-center gap-3 px-4 py-2.5">' +
+        '<span class="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-semibold shrink-0">' +
+          escapeHtml((c.name || c.email).charAt(0).toUpperCase()) +
+        '</span>' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-medium text-slate-800 truncate">' + escapeHtml(c.name || c.email) + '</p>' +
+          (c.name ? '<p class="text-xs text-slate-400 truncate">' + escapeHtml(c.email) + '</p>' : '') +
+        '</div>' +
+        '<button data-doer-remove="' + escapeHtml(c.email) + '" class="shrink-0 text-xs font-medium text-red-500 hover:underline">Remove</button>' +
+      '</div>';
+    }).join('');
+
+    container.querySelectorAll('[data-doer-remove]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var email = btn.getAttribute('data-doer-remove');
+        callServer('deleteContact', email).then(function (res) {
+          if (!res.success) return showToast(res.error || 'Could not remove', 'error');
+          state.contacts = res.contacts;
+          renderDoerListPane();
+          showToast('Removed from doer list', 'success');
+        }).catch(function (err) { showToast(String(err), 'error'); });
+      });
+    });
+  }
+
+  function bindDoerListPane() {
+    document.getElementById('doerSearch').addEventListener('input', function () { renderDoerListPane(); });
+
+    document.getElementById('doerAddBtn').addEventListener('click', function () {
+      var name = document.getElementById('doerNewName').value.trim();
+      var email = document.getElementById('doerNewEmail').value.trim();
+      if (!email) return showToast('Enter an email first', 'error');
+
+      callServer('saveContact', name, email).then(function (res) {
+        if (!res.success) return showToast(res.error || 'Could not save', 'error');
+        state.contacts = res.contacts;
+        document.getElementById('doerNewName').value = '';
+        document.getElementById('doerNewEmail').value = '';
+        renderDoerListPane();
+        showToast('Added to doer list', 'success');
+      }).catch(function (err) { showToast(String(err), 'error'); });
+    });
   }
 
   function openAccessCenter(tab, focusCategory) {
