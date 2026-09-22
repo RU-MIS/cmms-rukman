@@ -87,10 +87,12 @@ function listCategoryFolders_(rootFolder) {
  * Fast, read-only lookup: returns the index sheet if it already exists,
  * or null if it doesn't. Never creates anything, so callers that only
  * need to READ (like getAllFiles) stay quick even when the sheet is
- * missing, instead of paying for a full create-and-move sequence inline.
+ * missing, instead of paying for a full create sequence inline. Searches
+ * the whole Drive by name (not folder-scoped) since the sheet isn't
+ * moved into the RUDMS folder - see getIndexSheet_.
  */
-function findIndexSheet_(rootFolder) {
-  var files = rootFolder.getFilesByName(INDEX_FILE_NAME);
+function findIndexSheet_() {
+  var files = DriveApp.getFilesByName(INDEX_FILE_NAME);
   if (files.hasNext()) {
     return SpreadsheetApp.open(files.next()).getSheets()[0];
   }
@@ -98,30 +100,28 @@ function findIndexSheet_(rootFolder) {
 }
 
 /**
- * Finds-or-creates the index sheet. Deliberately does NOT cache the
- * sheet's ID in PropertiesService - a cached ID that outlives the file
- * (someone deletes/trashes the sheet by hand) leaves
- * SpreadsheetApp.openById() pointing at a dead reference that doesn't
- * cleanly throw, and can fail to serialize back to the client instead of
- * raising a catchable error. Resolving by name every time is
- * self-healing: if the sheet is ever deleted, the next call just
- * recreates it, exactly like category folders already do.
+ * Finds-or-creates the index sheet, in as few API calls as possible -
+ * every extra round trip here is a chance for it to not come back (see
+ * the notes throughout this file on slow Apps Script calls sometimes
+ * failing to deliver a response in this environment). Deliberately:
+ *   - does NOT cache the sheet's ID in PropertiesService (a cached ID
+ *     that outlives a manually-deleted file leaves openById() pointing
+ *     at a dead reference that fails silently instead of throwing)
+ *   - does NOT move the created sheet into the RUDMS folder (that's a
+ *     create + addFile + removeFile round trip just for tidiness)
+ *   - does NOT apply header formatting (bold/frozen row) on create
+ * Resolving by name every time is self-healing: if the sheet is ever
+ * deleted, the next call just recreates it.
  *
  * Only call this where creation is actually needed (uploads, permission
  * edits, the background "ensure" call) - use findIndexSheet_ for reads.
  */
 function getIndexSheet_() {
-  var rootFolder = getRootFolder_();
-  var existing = findIndexSheet_(rootFolder);
+  var existing = findIndexSheet_();
   if (existing) return existing;
 
-  var ss = SpreadsheetApp.create(INDEX_FILE_NAME);
-  var file = DriveApp.getFileById(ss.getId());
-  rootFolder.addFile(file);
-  DriveApp.getRootFolder().removeFile(file);
-  var sheet = ss.getSheets()[0];
-  sheet.getRange(1, 1, 1, SHEET_HEADERS.length).setValues([SHEET_HEADERS]).setFontWeight('bold');
-  sheet.setFrozenRows(1);
+  var sheet = SpreadsheetApp.create(INDEX_FILE_NAME).getSheets()[0];
+  sheet.appendRow(SHEET_HEADERS);
   return sheet;
 }
 
@@ -216,7 +216,7 @@ function ensureDefaultCategories() {
  */
 function getAllFiles() {
   try {
-    var sheet = findIndexSheet_(getRootFolder_());
+    var sheet = findIndexSheet_();
     return { success: true, files: sheet ? readAllRows_(sheet) : [] };
   } catch (err) {
     return { success: false, error: err.message };
@@ -274,18 +274,28 @@ function uploadFile(payload) {
     var uploadedBy = Session.getActiveUser().getEmail() || 'unknown';
     var extension = (payload.fileName.split('.').pop() || '').toLowerCase();
 
-    appendIndexRow_([
-      file.getId(),
-      payload.fileName,
-      categoryFolder.getName(),
-      file.getUrl(),
-      extension,
-      viewerEmails.join(', '),
-      editorEmails.join(', '),
-      uploadDate,
-      uploadedBy,
-      file.getSize()
-    ]);
+    // The Drive upload above is the part that actually matters - don't
+    // let a hiccup in the bookkeeping sheet (index sheet missing/slow to
+    // create, etc.) fail an otherwise-successful upload. Surface it as a
+    // warning instead; the file will just be missing from the list until
+    // a future upload/edit successfully appends it, or the sheet exists
+    // by then and a reload picks it up.
+    try {
+      appendIndexRow_([
+        file.getId(),
+        payload.fileName,
+        categoryFolder.getName(),
+        file.getUrl(),
+        extension,
+        viewerEmails.join(', '),
+        editorEmails.join(', '),
+        uploadDate,
+        uploadedBy,
+        file.getSize()
+      ]);
+    } catch (indexErr) {
+      warnings.push('File uploaded to Drive, but the index sheet could not be updated yet (' + indexErr.message + '). Reload and try again if it doesn\'t appear in the list shortly.');
+    }
 
     return {
       success: true,
