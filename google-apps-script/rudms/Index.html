@@ -295,9 +295,9 @@
   // Server bridge
   // ---------------------------------------------------------------------
   var SERVER_CALL_TIMEOUT_MS = 4 * 60 * 1000; // Apps Script executions cap out around 6 min anyway
+  var SERVER_RETRY_DELAY_MS = 700;
 
-  function callServer(fnName) {
-    var args = Array.prototype.slice.call(arguments, 1);
+  function callServerOnce(fnName, args) {
     return new Promise(function (resolve, reject) {
       var settled = false;
       var timer = setTimeout(function () {
@@ -312,11 +312,7 @@
           settled = true;
           clearTimeout(timer);
           if (result === null || result === undefined) {
-            reject(new Error(
-              'Server function "' + fnName + '" returned nothing. This usually means the ' +
-              'deployed Code.gs is out of date or a different version than Index.html - ' +
-              're-copy the latest Code.gs into the Apps Script editor and deploy a new version.'
-            ));
+            reject(new Error('Server function "' + fnName + '" returned nothing.'));
             return;
           }
           resolve(result);
@@ -328,6 +324,42 @@
           reject(err);
         })[fnName].apply(null, args);
     });
+  }
+
+  function wait(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  /**
+   * google.script.run occasionally fails to deliver a response at all
+   * (see the extensive notes in Code.gs) even though the server-side
+   * function completed fine - it's intermittent, not tied to any one
+   * function. Automatically retry a couple of times before giving up,
+   * since idempotent calls (everything except uploadFile) are safe to
+   * repeat. Pass retries: 0 for genuinely non-idempotent calls.
+   */
+  function callServer(fnName) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var options = { retries: 2 };
+    if (args.length && args[args.length - 1] && typeof args[args.length - 1] === 'object' &&
+        args[args.length - 1].__callServerOptions) {
+      options = args.pop().__callServerOptions;
+    }
+
+    function attempt(attemptsLeft) {
+      return callServerOnce(fnName, args).catch(function (err) {
+        if (attemptsLeft <= 0) throw err;
+        return wait(SERVER_RETRY_DELAY_MS).then(function () { return attempt(attemptsLeft - 1); });
+      });
+    }
+
+    return attempt(options.retries);
+  }
+
+  function callServerNoRetry(fnName) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    args.push({ __callServerOptions: { retries: 0 } });
+    return callServer.apply(null, [fnName].concat(args));
   }
 
   // ---------------------------------------------------------------------
@@ -394,7 +426,8 @@
       })
       .catch(function (err) {
         document.getElementById('bootLoader').innerHTML =
-          '<p class="text-red-500 text-sm px-6 text-center">Failed to load RUDMS: ' + escapeHtml(String(err)) + '</p>';
+          '<p class="text-red-500 text-sm px-6 text-center max-w-sm">Failed to load RUDMS: ' + escapeHtml(String(err)) + '</p>' +
+          '<button onclick="location.reload()" class="mt-3 px-4 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Try Again</button>';
       });
 
     bindEvents();
@@ -711,7 +744,7 @@
         editorEmails: splitEmails(document.getElementById('editorEmails').value)
       };
 
-      callServer('uploadFile', payload).then(function (res) {
+      callServerNoRetry('uploadFile', payload).then(function (res) {
         document.getElementById('uploadProgress').classList.add('hidden');
         if (!res.success) {
           showToast(res.error || 'Upload failed', 'error');
