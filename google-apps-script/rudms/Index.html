@@ -353,22 +353,48 @@
   // ---------------------------------------------------------------------
   document.addEventListener('DOMContentLoaded', init);
 
+  function setBootMessage(text) {
+    var el = document.querySelector('#bootLoader p');
+    if (el) el.textContent = text;
+  }
+
   function init() {
-    callServer('initializeSystem').then(function (res) {
-      if (!res.success) return showToast(res.error || 'Failed to initialize', 'error');
-      state.files = res.files || [];
-      state.categories = res.categories || [];
-      state.currentUser = res.currentUser || '';
-      renderSidebar();
-      populateCategorySelect();
-      renderCurrentView();
-      setupUserMenu();
-      document.getElementById('bootLoader').classList.add('hidden');
-      document.getElementById('app').classList.remove('hidden');
-    }).catch(function (err) {
-      document.getElementById('bootLoader').innerHTML =
-        '<p class="text-red-500 text-sm px-6 text-center">Failed to load RUDMS: ' + escapeHtml(String(err)) + '</p>';
-    });
+    setBootMessage('Connecting…');
+
+    callServer('getBootstrapInfo')
+      .then(function (boot) {
+        if (!boot.success) throw new Error(boot.error || 'Failed to connect');
+        state.currentUser = boot.currentUser || '';
+
+        setBootMessage('Loading your files…');
+        return Promise.all([
+          callServer('getCategories'),
+          callServer('getAllFiles')
+        ]);
+      })
+      .then(function (results) {
+        var catRes = results[0], fileRes = results[1];
+        if (!catRes.success) throw new Error(catRes.error || 'Failed to load categories');
+        if (!fileRes.success) throw new Error(fileRes.error || 'Failed to load files');
+
+        state.categories = catRes.categories || [];
+        state.files = fileRes.files || [];
+        renderSidebar();
+        populateCategorySelect();
+        renderCurrentView();
+        setupUserMenu();
+        document.getElementById('bootLoader').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+
+        // Fire-and-forget: creates the default category folders once, ever.
+        // Doesn't block first paint - if it adds anything new the sidebar
+        // will pick it up next time categories are refreshed.
+        callServer('ensureDefaultCategories').catch(function () {});
+      })
+      .catch(function (err) {
+        document.getElementById('bootLoader').innerHTML =
+          '<p class="text-red-500 text-sm px-6 text-center">Failed to load RUDMS: ' + escapeHtml(String(err)) + '</p>';
+      });
 
     bindEvents();
   }

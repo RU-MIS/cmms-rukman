@@ -155,26 +155,41 @@ function readAllRows_(sheet) {
 // Public API - system bootstrap
 // ---------------------------------------------------------------------------
 
-function initializeSystem() {
+/**
+ * Fast, minimal call for first paint: just identity + root folder.
+ * Deliberately does NOT touch categories or the index sheet, so it stays
+ * quick even on a cold start.
+ */
+function getBootstrapInfo() {
   try {
     var rootFolder = getRootFolder_();
-    var props = PropertiesService.getScriptProperties();
-
-    if (!props.getProperty('CATEGORIES_READY')) {
-      DEFAULT_CATEGORIES.forEach(function (c) {
-        getOrCreateCategoryFolder_(rootFolder, c);
-      });
-      props.setProperty('CATEGORIES_READY', 'true');
-    }
-
-    var sheet = getIndexSheet_();
-
     return {
       success: true,
       currentUser: Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail(),
-      categories: listCategoryFolders_(rootFolder),
-      files: readAllRows_(sheet)
+      rootFolderId: rootFolder.getId()
     };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Creates the default category folders exactly once (gated by a Script
+ * Property flag) - safe to call on every load since it's a no-op after
+ * the first successful run.
+ */
+function ensureDefaultCategories() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    if (props.getProperty('CATEGORIES_READY')) {
+      return { success: true };
+    }
+    var rootFolder = getRootFolder_();
+    DEFAULT_CATEGORIES.forEach(function (c) {
+      getOrCreateCategoryFolder_(rootFolder, c);
+    });
+    props.setProperty('CATEGORIES_READY', 'true');
+    return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -228,8 +243,8 @@ function uploadFile(payload) {
     var bytes = Utilities.base64Decode(payload.base64Data);
     var blob = Utilities.newBlob(bytes, payload.mimeType || 'application/octet-stream', payload.fileName);
     var file = categoryFolder.createFile(blob);
-
-    file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    // Files created via DriveApp are already private to the owner by
+    // default - no separate setSharing() call needed here.
 
     var viewerEmails = uniqueEmails_(payload.viewerEmails);
     var editorEmails = uniqueEmails_(payload.editorEmails);
