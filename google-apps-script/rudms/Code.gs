@@ -35,7 +35,7 @@ function doGet(e) {
 // Folder management
 // ---------------------------------------------------------------------------
 
-function getRootFolder_() {
+function getRootFolder() {
   var props = PropertiesService.getScriptProperties();
   var cachedId = props.getProperty('ROOT_FOLDER_ID');
 
@@ -62,7 +62,7 @@ function getRootFolder_() {
   return created;
 }
 
-function getOrCreateCategoryFolder_(rootFolder, categoryName) {
+function getOrCreateCategoryFolder(rootFolder, categoryName) {
   var name = String(categoryName).trim();
   if (!name) throw new Error('Category name cannot be empty.');
 
@@ -79,7 +79,7 @@ function getOrCreateCategoryFolder_(rootFolder, categoryName) {
  * and "LOGO.PNG" count as duplicates, but "logo.png" and "logo.jpeg"
  * don't (different extension = different file).
  */
-function fileNameExistsInFolder_(folder, fileName) {
+function fileNameExistsInFolder(folder, fileName) {
   var target = String(fileName).toLowerCase();
   var files = folder.getFiles();
   while (files.hasNext()) {
@@ -89,7 +89,7 @@ function fileNameExistsInFolder_(folder, fileName) {
   return false;
 }
 
-function listCategoryFolders_(rootFolder) {
+function listCategoryFolders(rootFolder) {
   var names = {};
   DEFAULT_CATEGORIES.forEach(function (c) { names[c] = true; });
 
@@ -105,7 +105,7 @@ function listCategoryFolders_(rootFolder) {
 // Per-file metadata, stored as JSON in the Drive file's own description
 // ---------------------------------------------------------------------------
 
-function buildFileMeta_(viewerEmails, editorEmails, uploadedBy) {
+function buildFileMeta(viewerEmails, editorEmails, uploadedBy) {
   return JSON.stringify({
     viewers: viewerEmails.join(', '),
     editors: editorEmails.join(', '),
@@ -113,7 +113,7 @@ function buildFileMeta_(viewerEmails, editorEmails, uploadedBy) {
   });
 }
 
-function parseFileMeta_(description) {
+function parseFileMeta(description) {
   try {
     var meta = JSON.parse(description || '{}');
     return {
@@ -126,8 +126,8 @@ function parseFileMeta_(description) {
   }
 }
 
-function fileToRecord_(file, categoryName) {
-  var meta = parseFileMeta_(file.getDescription());
+function fileToRecord(file, categoryName) {
+  var meta = parseFileMeta(file.getDescription());
   var name = file.getName();
   return {
     fileId: file.getId(),
@@ -162,11 +162,11 @@ function fileToRecord_(file, categoryName) {
  */
 function getBootstrapInfo(externalToken) {
   try {
-    var rootFolder = getRootFolder_();
-    var session = validateSession_(rootFolder, externalToken);
+    var rootFolder = getRootFolder();
+    var session = validateSessionInternal(rootFolder, externalToken);
 
     if (session) {
-      var user = findUserByUsername_(readUsers_(rootFolder), session.username);
+      var user = findUserByUsername(readUsers(rootFolder), session.username);
       return {
         success: true,
         currentUser: session.name || session.username,
@@ -192,9 +192,9 @@ function ensureDefaultCategories() {
   try {
     var props = PropertiesService.getScriptProperties();
     if (!props.getProperty('CATEGORIES_READY')) {
-      var rootFolder = getRootFolder_();
+      var rootFolder = getRootFolder();
       DEFAULT_CATEGORIES.forEach(function (c) {
-        getOrCreateCategoryFolder_(rootFolder, c);
+        getOrCreateCategoryFolder(rootFolder, c);
       });
       props.setProperty('CATEGORIES_READY', 'true');
     }
@@ -211,7 +211,7 @@ function ensureDefaultCategories() {
  */
 function getAllFiles() {
   try {
-    var rootFolder = getRootFolder_();
+    var rootFolder = getRootFolder();
     var files = [];
     var folderIter = rootFolder.getFolders();
     while (folderIter.hasNext()) {
@@ -222,7 +222,7 @@ function getAllFiles() {
       while (fileIter.hasNext()) {
         var file = fileIter.next();
         if (file.isTrashed()) continue;
-        files.push(fileToRecord_(file, categoryName));
+        files.push(fileToRecord(file, categoryName));
       }
     }
     return { success: true, files: files };
@@ -233,7 +233,7 @@ function getAllFiles() {
 
 function getCategories() {
   try {
-    return { success: true, categories: listCategoryFolders_(getRootFolder_()) };
+    return { success: true, categories: listCategoryFolders(getRootFolder()) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -241,9 +241,9 @@ function getCategories() {
 
 function addCategory(categoryName) {
   try {
-    var rootFolder = getRootFolder_();
-    getOrCreateCategoryFolder_(rootFolder, categoryName);
-    return { success: true, categories: listCategoryFolders_(rootFolder) };
+    var rootFolder = getRootFolder();
+    getOrCreateCategoryFolder(rootFolder, categoryName);
+    return { success: true, categories: listCategoryFolders(rootFolder) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -265,10 +265,10 @@ function uploadFile(payload) {
       throw new Error('Missing file data.');
     }
 
-    var rootFolder = getRootFolder_();
-    var categoryFolder = getOrCreateCategoryFolder_(rootFolder, payload.category || 'Uncategorized');
+    var rootFolder = getRootFolder();
+    var categoryFolder = getOrCreateCategoryFolder(rootFolder, payload.category || 'Uncategorized');
 
-    if (fileNameExistsInFolder_(categoryFolder, payload.fileName)) {
+    if (fileNameExistsInFolder(categoryFolder, payload.fileName)) {
       throw new Error(
         '"' + payload.fileName + '" already exists in ' + categoryFolder.getName() +
         '. Rename the file or delete the existing one first.'
@@ -281,24 +281,24 @@ function uploadFile(payload) {
     // Files created via DriveApp are already private to the owner by
     // default - no separate setSharing() call needed here.
 
-    var viewerEmails = uniqueEmails_(payload.viewerEmails);
-    var editorEmails = uniqueEmails_(payload.editorEmails);
-    var warnings = applyPermissions_(file, viewerEmails, editorEmails);
+    var viewerEmails = uniqueEmails(payload.viewerEmails);
+    var editorEmails = uniqueEmails(payload.editorEmails);
+    var warnings = applyPermissions(file, viewerEmails, editorEmails);
 
-    var uploadedBy = resolveCurrentUser_(rootFolder, payload.externalToken);
-    file.setDescription(buildFileMeta_(viewerEmails, editorEmails, uploadedBy));
+    var uploadedBy = resolveCurrentUser(rootFolder, payload.externalToken);
+    file.setDescription(buildFileMeta(viewerEmails, editorEmails, uploadedBy));
 
     return {
       success: true,
       warnings: warnings,
-      file: fileToRecord_(file, categoryFolder.getName())
+      file: fileToRecord(file, categoryFolder.getName())
     };
   } catch (err) {
     return { success: false, error: err.message };
   }
 }
 
-function uniqueEmails_(list) {
+function uniqueEmails(list) {
   if (!list) return [];
   var seen = {};
   var out = [];
@@ -312,7 +312,7 @@ function uniqueEmails_(list) {
   return out;
 }
 
-function applyPermissions_(file, viewerEmails, editorEmails) {
+function applyPermissions(file, viewerEmails, editorEmails) {
   var warnings = [];
   editorEmails.forEach(function (email) {
     try { file.addEditor(email); } catch (e) { warnings.push('Could not add editor ' + email + ': ' + e.message); }
@@ -334,12 +334,12 @@ function updateFilePermissions(fileId, viewerEmails, editorEmails) {
       }
     });
 
-    var newViewers = uniqueEmails_(viewerEmails);
-    var newEditors = uniqueEmails_(editorEmails);
-    var warnings = applyPermissions_(file, newViewers, newEditors);
+    var newViewers = uniqueEmails(viewerEmails);
+    var newEditors = uniqueEmails(editorEmails);
+    var warnings = applyPermissions(file, newViewers, newEditors);
 
-    var existingMeta = parseFileMeta_(file.getDescription());
-    file.setDescription(buildFileMeta_(newViewers, newEditors, existingMeta.uploadedBy));
+    var existingMeta = parseFileMeta(file.getDescription());
+    file.setDescription(buildFileMeta(newViewers, newEditors, existingMeta.uploadedBy));
 
     return { success: true, warnings: warnings };
   } catch (err) {
@@ -360,7 +360,7 @@ function deleteFile(fileId) {
 // Folder-level (category) access management
 // ---------------------------------------------------------------------------
 
-function mapUsersToEmails_(users) {
+function mapUsersToEmails(users) {
   return users.map(function (u) { return u.getEmail(); }).filter(Boolean);
 }
 
@@ -372,14 +372,14 @@ function mapUsersToEmails_(users) {
  */
 function getCategoryAccessOverview() {
   try {
-    var rootFolder = getRootFolder_();
-    var categories = listCategoryFolders_(rootFolder);
+    var rootFolder = getRootFolder();
+    var categories = listCategoryFolders(rootFolder);
     var result = categories.map(function (name) {
-      var folder = getOrCreateCategoryFolder_(rootFolder, name);
+      var folder = getOrCreateCategoryFolder(rootFolder, name);
       return {
         name: name,
-        viewers: mapUsersToEmails_(folder.getViewers()).join(', '),
-        editors: mapUsersToEmails_(folder.getEditors()).join(', ')
+        viewers: mapUsersToEmails(folder.getViewers()).join(', '),
+        editors: mapUsersToEmails(folder.getEditors()).join(', ')
       };
     });
     return { success: true, categories: result };
@@ -400,8 +400,8 @@ function getCategoryAccessOverview() {
  */
 function updateCategoryAccess(categoryName, viewerEmails, editorEmails, applyToExistingFiles) {
   try {
-    var rootFolder = getRootFolder_();
-    var folder = getOrCreateCategoryFolder_(rootFolder, categoryName);
+    var rootFolder = getRootFolder();
+    var folder = getOrCreateCategoryFolder(rootFolder, categoryName);
 
     folder.getViewers().forEach(function (u) { try { folder.removeViewer(u); } catch (e) {} });
     folder.getEditors().forEach(function (u) {
@@ -410,20 +410,20 @@ function updateCategoryAccess(categoryName, viewerEmails, editorEmails, applyToE
       }
     });
 
-    var newViewers = uniqueEmails_(viewerEmails);
-    var newEditors = uniqueEmails_(editorEmails);
-    var warnings = applyPermissions_(folder, newViewers, newEditors);
+    var newViewers = uniqueEmails(viewerEmails);
+    var newEditors = uniqueEmails(editorEmails);
+    var warnings = applyPermissions(folder, newViewers, newEditors);
 
     if (applyToExistingFiles) {
       var iter = folder.getFiles();
       while (iter.hasNext()) {
         var file = iter.next();
-        warnings = warnings.concat(applyPermissions_(file, newViewers, newEditors));
+        warnings = warnings.concat(applyPermissions(file, newViewers, newEditors));
 
-        var existingMeta = parseFileMeta_(file.getDescription());
-        var mergedViewers = uniqueEmails_(existingMeta.viewers.split(',').concat(newViewers));
-        var mergedEditors = uniqueEmails_(existingMeta.editors.split(',').concat(newEditors));
-        file.setDescription(buildFileMeta_(mergedViewers, mergedEditors, existingMeta.uploadedBy));
+        var existingMeta = parseFileMeta(file.getDescription());
+        var mergedViewers = uniqueEmails(existingMeta.viewers.split(',').concat(newViewers));
+        var mergedEditors = uniqueEmails(existingMeta.editors.split(',').concat(newEditors));
+        file.setDescription(buildFileMeta(mergedViewers, mergedEditors, existingMeta.uploadedBy));
       }
     }
 
@@ -457,13 +457,13 @@ function getFileContentForPreview(fileId) {
 // accounts, and sessions below - all DriveApp only, no SpreadsheetApp.
 // ---------------------------------------------------------------------------
 
-function findNamedFile_(rootFolder, fileName) {
+function findNamedFile(rootFolder, fileName) {
   var files = rootFolder.getFilesByName(fileName);
   return files.hasNext() ? files.next() : null;
 }
 
-function readJsonFile_(rootFolder, fileName, fallback) {
-  var file = findNamedFile_(rootFolder, fileName);
+function readJsonFile(rootFolder, fileName, fallback) {
+  var file = findNamedFile(rootFolder, fileName);
   if (!file) return fallback;
   try {
     var data = JSON.parse(file.getBlob().getDataAsString() || 'null');
@@ -473,9 +473,9 @@ function readJsonFile_(rootFolder, fileName, fallback) {
   }
 }
 
-function writeJsonFile_(rootFolder, fileName, data) {
+function writeJsonFile(rootFolder, fileName, data) {
   var json = JSON.stringify(data);
-  var file = findNamedFile_(rootFolder, fileName);
+  var file = findNamedFile(rootFolder, fileName);
   if (file) {
     file.setContent(json);
   } else {
@@ -490,7 +490,7 @@ function writeJsonFile_(rootFolder, fileName, data) {
 
 function getContacts() {
   try {
-    return { success: true, contacts: readJsonFile_(getRootFolder_(), CONTACTS_FILE_NAME, []) };
+    return { success: true, contacts: readJsonFile(getRootFolder(), CONTACTS_FILE_NAME, []) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -505,8 +505,8 @@ function saveContact(name, email) {
     }
     var cleanName = String(name || '').trim();
 
-    var rootFolder = getRootFolder_();
-    var contacts = readJsonFile_(rootFolder, CONTACTS_FILE_NAME, []);
+    var rootFolder = getRootFolder();
+    var contacts = readJsonFile(rootFolder, CONTACTS_FILE_NAME, []);
     var existing = contacts.filter(function (c) { return c.email === cleanEmail; })[0];
     if (existing) {
       existing.name = cleanName || existing.name;
@@ -515,7 +515,7 @@ function saveContact(name, email) {
     }
     contacts.sort(function (a, b) { return (a.name || a.email).localeCompare(b.name || b.email); });
 
-    writeJsonFile_(rootFolder, CONTACTS_FILE_NAME, contacts);
+    writeJsonFile(rootFolder, CONTACTS_FILE_NAME, contacts);
     return { success: true, contacts: contacts };
   } catch (err) {
     return { success: false, error: err.message };
@@ -525,9 +525,9 @@ function saveContact(name, email) {
 function deleteContact(email) {
   try {
     var cleanEmail = String(email || '').trim().toLowerCase();
-    var rootFolder = getRootFolder_();
-    var contacts = readJsonFile_(rootFolder, CONTACTS_FILE_NAME, []).filter(function (c) { return c.email !== cleanEmail; });
-    writeJsonFile_(rootFolder, CONTACTS_FILE_NAME, contacts);
+    var rootFolder = getRootFolder();
+    var contacts = readJsonFile(rootFolder, CONTACTS_FILE_NAME, []).filter(function (c) { return c.email !== cleanEmail; });
+    writeJsonFile(rootFolder, CONTACTS_FILE_NAME, contacts);
     return { success: true, contacts: contacts };
   } catch (err) {
     return { success: false, error: err.message };
@@ -557,43 +557,43 @@ function deleteContact(email) {
 // accounts, not a defense against a determined technical attacker.
 // ---------------------------------------------------------------------------
 
-function generateSalt_() {
+function generateSalt() {
   return Utilities.getUuid();
 }
 
-function hashPassword_(password, salt) {
+function hashPassword(password, salt) {
   var bytes = Utilities.computeHmacSha256Signature(String(password), salt);
   return bytes.map(function (b) { return ((b + 256) % 256).toString(16).padStart(2, '0'); }).join('');
 }
 
-function readUsers_(rootFolder) {
-  return readJsonFile_(rootFolder, USERS_FILE_NAME, []);
+function readUsers(rootFolder) {
+  return readJsonFile(rootFolder, USERS_FILE_NAME, []);
 }
 
-function publicUserFields_(u) {
+function publicUserFields(u) {
   return { username: u.username, name: u.name, role: u.role || 'member', createdAt: u.createdAt };
 }
 
-function findUserByUsername_(users, username) {
+function findUserByUsername(users, username) {
   var clean = String(username || '').trim().toLowerCase();
   return users.filter(function (u) { return u.username === clean; })[0] || null;
 }
 
 /** Throws unless callerToken belongs to a valid, currently-admin session. */
-function requireAdmin_(rootFolder, callerToken) {
-  var session = validateSession_(rootFolder, callerToken);
+function requireAdmin(rootFolder, callerToken) {
+  var session = validateSessionInternal(rootFolder, callerToken);
   if (!session) throw new Error('You must be signed in to do this.');
-  var user = findUserByUsername_(readUsers_(rootFolder), session.username);
+  var user = findUserByUsername(readUsers(rootFolder), session.username);
   if (!user || user.role !== 'admin') throw new Error('Only an admin can manage login accounts.');
 }
 
 /** Admin-only once any account exists; the very first account bootstraps freely. */
 function listExternalUsers(callerToken) {
   try {
-    var rootFolder = getRootFolder_();
-    var users = readUsers_(rootFolder);
-    if (users.length > 0) requireAdmin_(rootFolder, callerToken);
-    return { success: true, users: users.map(publicUserFields_) };
+    var rootFolder = getRootFolder();
+    var users = readUsers(rootFolder);
+    if (users.length > 0) requireAdmin(rootFolder, callerToken);
+    return { success: true, users: users.map(publicUserFields) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -609,32 +609,32 @@ function createExternalUser(username, password, name, role, callerToken) {
       throw new Error('Password must be at least 6 characters.');
     }
 
-    var rootFolder = getRootFolder_();
-    var users = readUsers_(rootFolder);
+    var rootFolder = getRootFolder();
+    var users = readUsers(rootFolder);
 
     // Bootstrap: the first-ever account needs no admin session (there is
     // no one to be admin yet) and is always created as admin. Every
     // account after that requires an existing admin's token.
     var isBootstrap = users.length === 0;
-    if (!isBootstrap) requireAdmin_(rootFolder, callerToken);
+    if (!isBootstrap) requireAdmin(rootFolder, callerToken);
 
-    if (findUserByUsername_(users, cleanUsername)) {
+    if (findUserByUsername(users, cleanUsername)) {
       throw new Error('That username is already taken.');
     }
 
-    var salt = generateSalt_();
+    var salt = generateSalt();
     users.push({
       username: cleanUsername,
       name: String(name || '').trim() || cleanUsername,
       role: isBootstrap ? 'admin' : (role === 'admin' ? 'admin' : 'member'),
       salt: salt,
-      passwordHash: hashPassword_(password, salt),
+      passwordHash: hashPassword(password, salt),
       createdAt: new Date().toISOString()
     });
     users.sort(function (a, b) { return a.username.localeCompare(b.username); });
 
-    writeJsonFile_(rootFolder, USERS_FILE_NAME, users);
-    return { success: true, users: users.map(publicUserFields_) };
+    writeJsonFile(rootFolder, USERS_FILE_NAME, users);
+    return { success: true, users: users.map(publicUserFields) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -642,21 +642,21 @@ function createExternalUser(username, password, name, role, callerToken) {
 
 function deleteExternalUser(username, callerToken) {
   try {
-    var rootFolder = getRootFolder_();
-    requireAdmin_(rootFolder, callerToken);
+    var rootFolder = getRootFolder();
+    requireAdmin(rootFolder, callerToken);
 
     var cleanUsername = String(username || '').trim().toLowerCase();
-    var users = readUsers_(rootFolder).filter(function (u) { return u.username !== cleanUsername; });
-    writeJsonFile_(rootFolder, USERS_FILE_NAME, users);
+    var users = readUsers(rootFolder).filter(function (u) { return u.username !== cleanUsername; });
+    writeJsonFile(rootFolder, USERS_FILE_NAME, users);
 
     // Also kill any active sessions for this account.
-    var sessions = readJsonFile_(rootFolder, SESSIONS_FILE_NAME, {});
+    var sessions = readJsonFile(rootFolder, SESSIONS_FILE_NAME, {});
     Object.keys(sessions).forEach(function (token) {
       if (sessions[token].username === cleanUsername) delete sessions[token];
     });
-    writeJsonFile_(rootFolder, SESSIONS_FILE_NAME, sessions);
+    writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
 
-    return { success: true, users: users.map(publicUserFields_) };
+    return { success: true, users: users.map(publicUserFields) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -664,15 +664,15 @@ function deleteExternalUser(username, callerToken) {
 
 function login(username, password) {
   try {
-    var rootFolder = getRootFolder_();
-    var users = readUsers_(rootFolder);
-    var user = findUserByUsername_(users, username);
+    var rootFolder = getRootFolder();
+    var users = readUsers(rootFolder);
+    var user = findUserByUsername(users, username);
 
-    if (!user || hashPassword_(String(password || ''), user.salt) !== user.passwordHash) {
+    if (!user || hashPassword(String(password || ''), user.salt) !== user.passwordHash) {
       throw new Error('Incorrect username or password.');
     }
 
-    var sessions = readJsonFile_(rootFolder, SESSIONS_FILE_NAME, {});
+    var sessions = readJsonFile(rootFolder, SESSIONS_FILE_NAME, {});
     var now = Date.now();
     Object.keys(sessions).forEach(function (t) {
       if (sessions[t].expiresAt < now) delete sessions[t];
@@ -680,7 +680,7 @@ function login(username, password) {
 
     var token = Utilities.getUuid();
     sessions[token] = { username: user.username, name: user.name, expiresAt: now + SESSION_TTL_MS };
-    writeJsonFile_(rootFolder, SESSIONS_FILE_NAME, sessions);
+    writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
 
     return { success: true, token: token, username: user.username, name: user.name, role: user.role || 'member' };
   } catch (err) {
@@ -688,9 +688,9 @@ function login(username, password) {
   }
 }
 
-function validateSession_(rootFolder, token) {
+function validateSessionInternal(rootFolder, token) {
   if (!token) return null;
-  var sessions = readJsonFile_(rootFolder, SESSIONS_FILE_NAME, {});
+  var sessions = readJsonFile(rootFolder, SESSIONS_FILE_NAME, {});
   var session = sessions[token];
   if (!session || session.expiresAt < Date.now()) return null;
   return session;
@@ -698,10 +698,10 @@ function validateSession_(rootFolder, token) {
 
 function validateSession(token) {
   try {
-    var rootFolder = getRootFolder_();
-    var session = validateSession_(rootFolder, token);
+    var rootFolder = getRootFolder();
+    var session = validateSessionInternal(rootFolder, token);
     if (!session) return { success: false };
-    var user = findUserByUsername_(readUsers_(rootFolder), session.username);
+    var user = findUserByUsername(readUsers(rootFolder), session.username);
     return { success: true, username: session.username, name: session.name, role: user ? (user.role || 'member') : 'member' };
   } catch (err) {
     return { success: false };
@@ -710,10 +710,10 @@ function validateSession(token) {
 
 function logoutSession(token) {
   try {
-    var rootFolder = getRootFolder_();
-    var sessions = readJsonFile_(rootFolder, SESSIONS_FILE_NAME, {});
+    var rootFolder = getRootFolder();
+    var sessions = readJsonFile(rootFolder, SESSIONS_FILE_NAME, {});
     delete sessions[token];
-    writeJsonFile_(rootFolder, SESSIONS_FILE_NAME, sessions);
+    writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -721,8 +721,8 @@ function logoutSession(token) {
 }
 
 /** Logged-in session's display name, else Google identity as a last resort, else 'unknown'. */
-function resolveCurrentUser_(rootFolder, externalToken) {
-  var session = validateSession_(rootFolder, externalToken);
+function resolveCurrentUser(rootFolder, externalToken) {
+  var session = validateSessionInternal(rootFolder, externalToken);
   if (session) return session.name || session.username;
   var googleEmail = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
   return googleEmail || 'unknown';
