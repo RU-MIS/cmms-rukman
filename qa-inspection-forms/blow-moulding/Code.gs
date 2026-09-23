@@ -200,43 +200,81 @@ function getNextSlot(dateStr, machineNo, partName) {
 }
 
 /**
- * Exports just this session's rows straight from the live sheet as a PDF
- * (no temp file, no Drive permission needed) and emails it to REPORT_EMAIL.
- * r1/r2/c1/c2 select the Check Point row range; fzr=true reprints the
- * frozen header rows (1-2) at the top of the export automatically.
+ * Renders this session's header rows + Check Point rows as an HTML table
+ * (styled like the paper form) for use as the finalize email's body.
+ */
+function buildReportHtml_(sheet, minRow, maxRow) {
+  var totalCols = totalCols_();
+  var groupRow = sheet.getRange(3, 1, 1, totalCols).getValues()[0];
+  var headerRow = sheet.getRange(4, 1, 1, totalCols).getValues()[0];
+  var bodyRows = sheet.getRange(minRow, 1, maxRow - minRow + 1, totalCols).getValues();
+  var tz = Session.getScriptTimeZone();
+
+  function cellText(val) {
+    if (val === '' || val === null || val === undefined) { return '&nbsp;'; }
+    if (Object.prototype.toString.call(val) === '[object Date]') {
+      return Utilities.formatDate(val, tz, 'dd-MMM-yyyy HH:mm');
+    }
+    return String(val);
+  }
+
+  var html = '<div style="font-family:Arial,sans-serif;">';
+  html += '<div style="background:#111;color:#fff;text-align:center;padding:8px;font-weight:bold;font-size:16px;">RUKMAN UDYOG</div>';
+  html += '<div style="background:#111;color:#fff;text-align:center;padding:6px;font-weight:bold;">' +
+    FORM_TITLE.toUpperCase() + '&nbsp;&nbsp;(' + DOC_CODE + ')</div>';
+  html += '<table style="border-collapse:collapse;font-size:11px;margin-top:10px;" border="1" cellpadding="4" cellspacing="0">';
+
+  html += '<tr>';
+  for (var c = 0; c < FIXED_HEADERS.length; c++) { html += '<td></td>'; }
+  var i = FIXED_HEADERS.length;
+  while (i < FIXED_HEADERS.length + allSlotsInOrder_().length * 2) {
+    html += '<td colspan="2" style="text-align:center;font-weight:bold;background:#eee;">' + cellText(groupRow[i]) + '</td>';
+    i += 2;
+  }
+  html += '<td></td><td></td><td></td></tr>';
+
+  html += '<tr>';
+  headerRow.forEach(function (h) {
+    html += '<td style="font-weight:bold;background:#f5f5f5;white-space:nowrap;">' + cellText(h) + '</td>';
+  });
+  html += '</tr>';
+
+  bodyRows.forEach(function (row) {
+    html += '<tr>';
+    row.forEach(function (val) { html += '<td>' + cellText(val) + '</td>'; });
+    html += '</tr>';
+  });
+
+  html += '</table></div>';
+  return html;
+}
+
+/**
+ * Emails this session's report as an HTML table in the email body (no PDF
+ * attachment) - avoids needing the UrlFetchApp/Drive permissions that some
+ * Google Workspace setups block for unverified Apps Script apps. Only the
+ * mail-sending permission is required.
  */
 function emailFinalReport_(sheet, map, dateStr, machineNo, partName) {
-  var totalCols = totalCols_();
   var rowNums = CHECKPOINTS.map(function (cp) { return map[cp.label]; }).filter(function (r) { return !!r; });
   var minRow = Math.min.apply(null, rowNums);
   var maxRow = Math.max.apply(null, rowNums);
 
   var reportName = FORM_TITLE + ' - ' + partName + ' - ' + machineNo + ' - ' + dateStr;
-  var url = 'https://docs.google.com/spreadsheets/d/' + sheet.getParent().getId() + '/export' +
-    '?format=pdf&gid=' + sheet.getSheetId() +
-    '&size=A3&portrait=false&fitw=true&gridlines=true' +
-    '&printtitle=false&sheetnames=false&pagenum=UNDEFINED' +
-    '&fzr=true' +
-    '&r1=' + (minRow - 1) + '&r2=' + maxRow + '&c1=0&c2=' + totalCols;
-  var response = UrlFetchApp.fetch(url, {
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
-  });
-  var pdfBlob = response.getBlob().setName(reportName + '.pdf');
+  var html = buildReportHtml_(sheet, minRow, maxRow);
 
   MailApp.sendEmail({
     to: REPORT_EMAIL,
     subject: reportName,
-    body: 'Attached: ' + FORM_TITLE + ' report.\n\n' +
-      'Date: ' + dateStr + '\nM/C No.: ' + machineNo + '\nPart Name: ' + partName,
-    attachments: [pdfBlob]
+    htmlBody: html
   });
 }
 
 /**
  * Saves one time-slot's readings into the existing Check Point rows for this
  * Date + M/C No + Part Name (creating those rows first if this is the first
- * slot of the day). finalize=true writes Status "Report Generated", emails a
- * PDF of the report to REPORT_EMAIL, and otherwise writes "Submitted".
+ * slot of the day). finalize=true writes Status "Report Generated" and
+ * emails the report to REPORT_EMAIL, and otherwise writes "Submitted".
  * Re-validates the slot is still the correct next one.
  */
 function submitInspection(payload, finalize) {
