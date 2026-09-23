@@ -7,9 +7,11 @@
  */
 
 var FORM_TITLE = 'In-Process Inspection - Blow Moulding';
+var DOC_CODE = 'F/QA/3A';
 var SHEET_NAME = 'Blow Moulding Log';
 var CHECKING_FREQ = 'Every Two Hours';
 var REPORT_EMAIL = 'qms1@rukmanudyog.com';
+var HEADER_ROWS = 4; // 2 title rows (RUKMAN UDYOG + form name) + 2 column-header rows
 
 // Time slots, in order, for one shift. Both shifts use the same 6 slots.
 var SLOTS = ['9 to 11', '11 to 1', '1 to 3', '3 to 5', '5 to 7', '7 to 9'];
@@ -92,9 +94,20 @@ function getSheet_() {
 function buildHeaders_(sheet) {
   var all = allSlotsInOrder_();
   var totalCols = totalCols_();
+
+  // Row 1-2: title band, like the paper form's "RUKMAN UDYOG" / form name bar.
+  sheet.getRange(1, 1, 1, totalCols).merge()
+    .setValue('RUKMAN UDYOG')
+    .setFontWeight('bold').setFontSize(14).setHorizontalAlignment('center')
+    .setBackground('#111111').setFontColor('#ffffff');
+  sheet.getRange(2, 1, 1, totalCols).merge()
+    .setValue(FORM_TITLE.toUpperCase() + '  (' + DOC_CODE + ')')
+    .setFontWeight('bold').setHorizontalAlignment('center')
+    .setBackground('#111111').setFontColor('#ffffff');
+
+  // Row 3-4: DAY/NIGHT group labels + actual column headers.
   var row1 = new Array(totalCols).fill('');
   var row2 = FIXED_HEADERS.slice();
-
   all.forEach(function (s, i) {
     var vCol = slotValueCol_(i);
     row1[vCol - 1] = s.shift.indexOf('Day') === 0 ? 'DAY' : 'NIGHT';
@@ -103,15 +116,15 @@ function buildHeaders_(sheet) {
   });
   row2 = row2.concat(TAIL_HEADERS);
 
-  sheet.getRange(1, 1, 1, totalCols).setValues([row1]);
-  sheet.getRange(2, 1, 1, totalCols).setValues([row2]);
+  sheet.getRange(3, 1, 1, totalCols).setValues([row1]);
+  sheet.getRange(4, 1, 1, totalCols).setValues([row2]);
 
   all.forEach(function (s, i) {
     var vCol = slotValueCol_(i);
-    sheet.getRange(1, vCol, 1, 2).merge().setHorizontalAlignment('center');
+    sheet.getRange(3, vCol, 1, 2).merge().setHorizontalAlignment('center');
   });
-  sheet.getRange(1, 1, 2, totalCols).setFontWeight('bold');
-  sheet.setFrozenRows(2);
+  sheet.getRange(3, 1, 2, totalCols).setFontWeight('bold');
+  sheet.setFrozenRows(HEADER_ROWS);
   sheet.setFrozenColumns(4);
 }
 
@@ -133,14 +146,15 @@ function normalizeDate_(value) {
 function findSessionRows_(sheet, dateStr, machineNo, partName) {
   var lastRow = sheet.getLastRow();
   var map = {};
-  if (lastRow < 3) { return map; }
-  var data = sheet.getRange(3, 1, lastRow - 2, 5).getValues();
+  if (lastRow <= HEADER_ROWS) { return map; }
+  var firstDataRow = HEADER_ROWS + 1;
+  var data = sheet.getRange(firstDataRow, 1, lastRow - HEADER_ROWS, 5).getValues();
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
     if (normalizeDate_(row[1]) === normalizeDate_(dateStr) &&
         String(row[2]).trim() === String(machineNo).trim() &&
         String(row[3]).trim() === String(partName).trim()) {
-      map[row[4]] = i + 3; // 1-based sheet row
+      map[row[4]] = i + firstDataRow; // 1-based sheet row
     }
   }
   return map;
