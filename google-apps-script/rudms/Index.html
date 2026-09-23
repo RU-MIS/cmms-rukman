@@ -879,6 +879,13 @@
   // Search (instant, client-side substring match)
   // ---------------------------------------------------------------------
   function bindEvents() {
+    // The "All Files" link lives outside #categoryList (which is rebuilt
+    // by renderSidebar on every load), so it needs its own click binding
+    // here instead of picking one up from that dynamic re-render.
+    document.querySelector('[data-category="__all__"]').addEventListener('click', function () {
+      selectCategory('__all__');
+    });
+
     var search = document.getElementById('searchInput');
     search.addEventListener('input', function () {
       state.searchQuery = search.value;
