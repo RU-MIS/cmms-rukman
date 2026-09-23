@@ -64,7 +64,7 @@ Google Sites page via `<iframe>`.
     in plain text.
   - **Bootstrapping the very first account**: nobody can reach "Login
     Accounts" before at least one account exists, so the first one is
-    created directly in the Apps Script editor. Select `setupFirstAdmin_`
+    created directly in the Apps Script editor. Select `setupFirstAdmin`
     in the toolbar's function dropdown and click **Run** once - it
     creates username `admin` / password `ChangeMe123` as an admin. Sign
     in with that, then immediately create your real admin account(s) (for
@@ -140,7 +140,7 @@ Google Sites page via `<iframe>`.
      grants the script permission to manage Drive files/folders on your
      behalf). This also pre-creates the RUDMS root folder and default
      category folders so the first real visitor doesn't pay that cost.
-   - Select `setupFirstAdmin_` in the same dropdown and click **Run**
+   - Select `setupFirstAdmin` in the same dropdown and click **Run**
      once more - this creates the first login account (username `admin`,
      password `ChangeMe123`, role admin) so you can actually sign into
      the deployed app afterward. Sign in with it once the web app is

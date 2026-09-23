@@ -547,7 +547,7 @@ function deleteContact(email) {
 // Accounts" tab); 'member' cannot. The very first account (when none
 // exist yet) can be created without an admin session - that's the
 // bootstrap step, meant to be run once from the Apps Script editor
-// (Run -> setupFirstAdmin_) since no one can log in yet at that point.
+// (Run -> setupFirstAdmin) since no one can log in yet at that point.
 //
 // Honest limitation: this gates what the RUDMS *client UI* shows (no
 // login, no file browser) - it is not a server-side authorization check
@@ -736,8 +736,13 @@ function resolveCurrentUser_(rootFolder, externalToken) {
  * Apps Script editor (select this function in the toolbar dropdown,
  * click Run), then sign in with the username/password below and change
  * or replace them from the app.
+ *
+ * Deliberately named WITHOUT a trailing underscore: Apps Script's
+ * "Select function to run" dropdown hides any function whose name ends
+ * in "_" (its convention for private helpers), so a trailing underscore
+ * here would make this un-runnable from the editor UI.
  */
-function setupFirstAdmin_() {
+function setupFirstAdmin() {
   var result = createExternalUser('admin', 'ChangeMe123', 'Administrator', 'admin');
   Logger.log(JSON.stringify(result));
   return result;
