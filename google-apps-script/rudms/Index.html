@@ -76,7 +76,7 @@
         <button id="loginSubmitBtn" class="w-full px-4 py-2.5 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Sign In</button>
       </div>
 
-      <p class="text-center text-xs text-slate-400 mt-5">Part of Rukman Udyog? <a href="javascript:void(0)" onclick="location.reload()" class="text-brand-600 font-medium hover:underline">Use your Google account instead</a></p>
+      <p class="text-center text-xs text-slate-400 mt-5">Don't have a login? Ask your admin to create one for you.</p>
     </div>
   </div>
 
@@ -307,7 +307,7 @@
         <button data-access-tab="folders" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-brand-600 text-brand-600">By Folder</button>
         <button data-access-tab="files" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">By File</button>
         <button data-access-tab="doers" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">Doer List</button>
-        <button data-access-tab="logins" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">Login Accounts</button>
+        <button id="loginsTabBtn" data-access-tab="logins" class="hidden access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">Login Accounts</button>
       </div>
 
       <div class="flex-1 min-h-0 overflow-y-auto p-5">
@@ -341,6 +341,10 @@
             <input id="loginNewName" type="text" placeholder="Full name" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">
             <input id="loginNewUsername" type="text" placeholder="Username" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">
             <input id="loginNewPassword" type="password" placeholder="Password (min 6 chars)" class="col-span-2 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">
+            <select id="loginNewRole" class="col-span-2 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">
+              <option value="member">Member (can't manage login accounts)</option>
+              <option value="admin">Admin (can create/remove login accounts)</option>
+            </select>
             <button id="loginAccountAddBtn" class="col-span-2 px-3.5 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Create Login</button>
           </div>
 
@@ -470,8 +474,9 @@
     searchQuery: '',
     viewMode: 'grid',
     currentUser: '',
-    authMode: '', // 'google' | 'external' | 'none'
+    authMode: '', // 'loggedin' | 'none'
     authToken: null,
+    userRole: '', // 'admin' | 'member'
     categoryAccess: [],
     filesLoadError: null,
     contacts: null
@@ -490,7 +495,8 @@
   var CAD_3D_EXT = ['stl', 'obj'];
   var CAD_UNSUPPORTED_EXT = ['dwg', 'dxf', 'step', 'stp'];
   var IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
-  var OFFICE_PREVIEW_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+  var PDF_EXT = ['pdf'];
+  var OFFICE_ONLY_EXT = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
 
   // ---------------------------------------------------------------------
   // Init
@@ -567,6 +573,7 @@
         if (!boot.success) throw new Error(boot.error || 'Failed to connect');
         state.currentUser = boot.currentUser || '';
         state.authMode = boot.authMode;
+        state.userRole = boot.role || '';
 
         if (boot.authMode === 'none') {
           state.authToken = null;
@@ -615,7 +622,8 @@
         return;
       }
       state.authToken = res.token;
-      state.authMode = 'external';
+      state.authMode = 'loggedin';
+      state.userRole = res.role || 'member';
       state.currentUser = res.name || res.username;
       setStoredAuthToken(res.token);
       hideLoginScreen();
@@ -641,21 +649,12 @@
   // ---------------------------------------------------------------------
   function setupUserMenu() {
     var name = state.currentUser || '';
-    var currentUrl = window.location.href;
-    var isExternal = state.authMode === 'external';
 
     document.getElementById('userBadge').textContent = name;
     document.getElementById('userMenuEmail').textContent = name;
     document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase() || '?';
-
-    document.getElementById('switchAccountLink').classList.toggle('hidden', isExternal);
-    if (!isExternal) {
-      document.getElementById('switchAccountLink').href =
-        'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(currentUrl);
-    }
-    document.getElementById('signOutHint').textContent = isExternal ?
-      'Signs you out of this RUDMS login on this device.' :
-      'Signs you out of your Google account in this tab. Reopen this link to sign back in.';
+    document.getElementById('switchAccountLink').classList.add('hidden');
+    document.getElementById('signOutHint').textContent = 'Signs you out of RUDMS on this device.';
 
     var menuBtn = document.getElementById('userMenuBtn');
     var dropdown = document.getElementById('userMenuDropdown');
@@ -667,14 +666,10 @@
     dropdown.addEventListener('click', function (e) { e.stopPropagation(); });
 
     document.getElementById('signOutBtn').addEventListener('click', function () {
-      if (isExternal) {
-        callServer('logoutSession', state.authToken).catch(function () {}).then(function () {
-          setStoredAuthToken(null);
-          location.reload();
-        });
-      } else {
-        window.open('https://accounts.google.com/Logout?continue=' + encodeURIComponent(currentUrl), '_blank', 'noopener');
-      }
+      callServer('logoutSession', state.authToken).catch(function () {}).then(function () {
+        setStoredAuthToken(null);
+        location.reload();
+      });
     });
   }
 
@@ -1120,7 +1115,7 @@
     }
     if (tab === 'logins') {
       document.getElementById('loginAccountList').innerHTML = '<div class="spinner mx-auto my-6"></div>';
-      callServer('listExternalUsers').then(function (res) {
+      callServer('listExternalUsers', state.authToken).then(function (res) {
         renderLoginAccountList(res.success ? (res.users || []) : []);
         if (!res.success) showToast(res.error || 'Could not load login accounts', 'error');
       }).catch(function (err) { showToast(String(err), 'error'); });
@@ -1139,7 +1134,9 @@
           escapeHtml((u.name || u.username).charAt(0).toUpperCase()) +
         '</span>' +
         '<div class="min-w-0 flex-1">' +
-          '<p class="text-sm font-medium text-slate-800 truncate">' + escapeHtml(u.name || u.username) + '</p>' +
+          '<p class="text-sm font-medium text-slate-800 truncate">' + escapeHtml(u.name || u.username) +
+            (u.role === 'admin' ? ' <span class="text-[10px] font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded align-middle">ADMIN</span>' : '') +
+          '</p>' +
           '<p class="text-xs text-slate-400 truncate">@' + escapeHtml(u.username) + '</p>' +
         '</div>' +
         '<button data-login-remove="' + escapeHtml(u.username) + '" class="shrink-0 text-xs font-medium text-red-500 hover:underline">Remove</button>' +
@@ -1150,7 +1147,7 @@
       btn.addEventListener('click', function () {
         var username = btn.getAttribute('data-login-remove');
         if (!confirm('Remove login "' + username + '"? They will be signed out immediately.')) return;
-        callServer('deleteExternalUser', username).then(function (res) {
+        callServer('deleteExternalUser', username, state.authToken).then(function (res) {
           if (!res.success) return showToast(res.error || 'Could not remove', 'error');
           renderLoginAccountList(res.users || []);
           showToast('Login account removed', 'success');
@@ -1164,12 +1161,14 @@
       var name = document.getElementById('loginNewName').value.trim();
       var username = document.getElementById('loginNewUsername').value.trim();
       var password = document.getElementById('loginNewPassword').value;
+      var role = document.getElementById('loginNewRole').value;
 
-      callServer('createExternalUser', username, password, name).then(function (res) {
+      callServer('createExternalUser', username, password, name, role, state.authToken).then(function (res) {
         if (!res.success) return showToast(res.error || 'Could not create login', 'error');
         document.getElementById('loginNewName').value = '';
         document.getElementById('loginNewUsername').value = '';
         document.getElementById('loginNewPassword').value = '';
+        document.getElementById('loginNewRole').value = 'member';
         renderLoginAccountList(res.users || []);
         showToast('Login account created', 'success');
       }).catch(function (err) { showToast(String(err), 'error'); });
@@ -1236,7 +1235,8 @@
 
   function openAccessCenter(tab, focusCategory) {
     openModal('accessModal');
-    setAccessTab(tab || 'folders');
+    document.getElementById('loginsTabBtn').classList.toggle('hidden', state.userRole !== 'admin');
+    setAccessTab((tab === 'logins' && state.userRole !== 'admin') ? 'folders' : (tab || 'folders'));
     document.getElementById('accessFolderList').innerHTML = '<div class="spinner mx-auto"></div>';
 
     callServer('getCategoryAccessOverview').then(function (res) {
@@ -1568,8 +1568,35 @@
 
     var ext = (f.fileType || '').toLowerCase();
 
-    if (IMAGE_EXT.indexOf(ext) !== -1 || OFFICE_PREVIEW_EXT.indexOf(ext) !== -1) {
-      body.innerHTML = '<iframe src="https://drive.google.com/file/d/' + f.fileId + '/preview" class="w-full h-full border-0" allow="autoplay"></iframe>';
+    // Images and PDFs are fetched through the server and rendered from a
+    // data URI, same as CAD below - not Drive's own /preview iframe,
+    // which needs the *viewer's own browser* to have Drive-level access
+    // to the file. Since everyone signs into RUDMS with a username/
+    // password now (not a Google account), no visitor's browser has
+    // that, so the iframe would just show Drive's "you need access"
+    // message for literally everyone.
+    if (IMAGE_EXT.indexOf(ext) !== -1) {
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        body.innerHTML = '<img src="data:' + res.mimeType + ';base64,' + res.base64 + '" class="max-w-full max-h-full object-contain">';
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
+    if (PDF_EXT.indexOf(ext) !== -1) {
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        body.innerHTML = '<embed src="data:application/pdf;base64,' + res.base64 + '" type="application/pdf" class="w-full h-full">';
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
+    if (OFFICE_ONLY_EXT.indexOf(ext) !== -1) {
+      body.innerHTML = '<div class="text-center text-slate-500 max-w-sm px-6">' +
+        fileIcon(ext, 'w-12 h-12 mx-auto mb-3') +
+        '<p class="font-medium text-slate-700">In-browser preview not available</p>' +
+        '<p class="text-sm mt-1">Word/Excel/PowerPoint preview needs Drive-level access this login doesn\'t have. Download the file to open it in its native app.</p>' +
+      '</div>';
       return;
     }
 

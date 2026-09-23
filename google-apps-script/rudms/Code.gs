@@ -152,33 +152,31 @@ function fileToRecord_(file, categoryName) {
  * Deliberately does NOT touch categories, so it stays quick even on a
  * cold start.
  *
+ * Everyone signs in with a username/password (see the Login accounts
+ * section below) - Google identity is never used as a login gate here,
+ * even for visitors signed into a Google account in that browser.
+ *
  * authMode tells the client whether to show the login screen:
- *  - 'google': visitor is signed into a Google account, currentUser is
- *    their email - no login screen needed, unchanged from before.
- *  - 'external': visitor authenticated with a username/password and
- *    passed a valid session token as externalToken.
- *  - 'none': neither - client shows the login screen.
+ *  - 'loggedin': externalToken is a valid, current session.
+ *  - 'none': it isn't - client shows the login screen.
  */
 function getBootstrapInfo(externalToken) {
   try {
     var rootFolder = getRootFolder_();
-    var googleEmail = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
-
-    if (googleEmail) {
-      return { success: true, currentUser: googleEmail, authMode: 'google', rootFolderId: rootFolder.getId() };
-    }
-
     var session = validateSession_(rootFolder, externalToken);
+
     if (session) {
+      var user = findUserByUsername_(readUsers_(rootFolder), session.username);
       return {
         success: true,
         currentUser: session.name || session.username,
-        authMode: 'external',
+        role: user ? (user.role || 'member') : 'member',
+        authMode: 'loggedin',
         rootFolderId: rootFolder.getId()
       };
     }
 
-    return { success: true, currentUser: '', authMode: 'none', rootFolderId: rootFolder.getId() };
+    return { success: true, currentUser: '', role: '', authMode: 'none', rootFolderId: rootFolder.getId() };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -537,19 +535,26 @@ function deleteContact(email) {
 }
 
 // ---------------------------------------------------------------------------
-// Login accounts for people without a Google account
+// Login accounts - EVERYONE signs in with a username/password created by
+// an admin, regardless of whether they have a Google account. Google
+// identity is not used as a login gate at all (only as a last-resort
+// fallback for "uploaded by" if somehow neither applies). Passwords are
+// salted + SHA-256 hashed, never stored in plain text. A successful login
+// issues a random session token the client stores in localStorage and
+// sends back as `externalToken` on calls that need to know who's asking.
 //
-// Google-signed-in visitors keep working exactly as before (their email
-// via Session.getActiveUser()). This adds a second, independent path:
-// a username/password checked against a salted SHA-256 hash, issuing a
-// random session token the client stores in localStorage and sends back
-// as `externalToken` on calls that need to know who's asking.
+// Roles: 'admin' can create/list/remove login accounts (the "Login
+// Accounts" tab); 'member' cannot. The very first account (when none
+// exist yet) can be created without an admin session - that's the
+// bootstrap step, meant to be run once from the Apps Script editor
+// (Run -> setupFirstAdmin_) since no one can log in yet at that point.
 //
 // Honest limitation: this gates what the RUDMS *client UI* shows (no
 // login, no file browser) - it is not a server-side authorization check
-// on every single function, since this app's functions are otherwise
-// callable directly. That's an appropriate bar for keeping casual/public
-// visitors out, not a defense against a determined technical attacker.
+// on every single function, since most of this app's other functions
+// are otherwise callable directly once someone has a token. That's an
+// appropriate bar for controlling who gets in and who can manage
+// accounts, not a defense against a determined technical attacker.
 // ---------------------------------------------------------------------------
 
 function generateSalt_() {
@@ -566,19 +571,35 @@ function readUsers_(rootFolder) {
 }
 
 function publicUserFields_(u) {
-  return { username: u.username, name: u.name, createdAt: u.createdAt };
+  return { username: u.username, name: u.name, role: u.role || 'member', createdAt: u.createdAt };
 }
 
-function listExternalUsers() {
+function findUserByUsername_(users, username) {
+  var clean = String(username || '').trim().toLowerCase();
+  return users.filter(function (u) { return u.username === clean; })[0] || null;
+}
+
+/** Throws unless callerToken belongs to a valid, currently-admin session. */
+function requireAdmin_(rootFolder, callerToken) {
+  var session = validateSession_(rootFolder, callerToken);
+  if (!session) throw new Error('You must be signed in to do this.');
+  var user = findUserByUsername_(readUsers_(rootFolder), session.username);
+  if (!user || user.role !== 'admin') throw new Error('Only an admin can manage login accounts.');
+}
+
+/** Admin-only once any account exists; the very first account bootstraps freely. */
+function listExternalUsers(callerToken) {
   try {
-    var users = readUsers_(getRootFolder_());
+    var rootFolder = getRootFolder_();
+    var users = readUsers_(rootFolder);
+    if (users.length > 0) requireAdmin_(rootFolder, callerToken);
     return { success: true, users: users.map(publicUserFields_) };
   } catch (err) {
     return { success: false, error: err.message };
   }
 }
 
-function createExternalUser(username, password, name) {
+function createExternalUser(username, password, name, role, callerToken) {
   try {
     var cleanUsername = String(username || '').trim().toLowerCase();
     if (!/^[a-z0-9._-]{3,40}$/.test(cleanUsername)) {
@@ -590,7 +611,14 @@ function createExternalUser(username, password, name) {
 
     var rootFolder = getRootFolder_();
     var users = readUsers_(rootFolder);
-    if (users.some(function (u) { return u.username === cleanUsername; })) {
+
+    // Bootstrap: the first-ever account needs no admin session (there is
+    // no one to be admin yet) and is always created as admin. Every
+    // account after that requires an existing admin's token.
+    var isBootstrap = users.length === 0;
+    if (!isBootstrap) requireAdmin_(rootFolder, callerToken);
+
+    if (findUserByUsername_(users, cleanUsername)) {
       throw new Error('That username is already taken.');
     }
 
@@ -598,6 +626,7 @@ function createExternalUser(username, password, name) {
     users.push({
       username: cleanUsername,
       name: String(name || '').trim() || cleanUsername,
+      role: isBootstrap ? 'admin' : (role === 'admin' ? 'admin' : 'member'),
       salt: salt,
       passwordHash: hashPassword_(password, salt),
       createdAt: new Date().toISOString()
@@ -611,10 +640,12 @@ function createExternalUser(username, password, name) {
   }
 }
 
-function deleteExternalUser(username) {
+function deleteExternalUser(username, callerToken) {
   try {
-    var cleanUsername = String(username || '').trim().toLowerCase();
     var rootFolder = getRootFolder_();
+    requireAdmin_(rootFolder, callerToken);
+
+    var cleanUsername = String(username || '').trim().toLowerCase();
     var users = readUsers_(rootFolder).filter(function (u) { return u.username !== cleanUsername; });
     writeJsonFile_(rootFolder, USERS_FILE_NAME, users);
 
@@ -633,10 +664,9 @@ function deleteExternalUser(username) {
 
 function login(username, password) {
   try {
-    var cleanUsername = String(username || '').trim().toLowerCase();
     var rootFolder = getRootFolder_();
     var users = readUsers_(rootFolder);
-    var user = users.filter(function (u) { return u.username === cleanUsername; })[0];
+    var user = findUserByUsername_(users, username);
 
     if (!user || hashPassword_(String(password || ''), user.salt) !== user.passwordHash) {
       throw new Error('Incorrect username or password.');
@@ -652,7 +682,7 @@ function login(username, password) {
     sessions[token] = { username: user.username, name: user.name, expiresAt: now + SESSION_TTL_MS };
     writeJsonFile_(rootFolder, SESSIONS_FILE_NAME, sessions);
 
-    return { success: true, token: token, username: user.username, name: user.name };
+    return { success: true, token: token, username: user.username, name: user.name, role: user.role || 'member' };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -668,8 +698,11 @@ function validateSession_(rootFolder, token) {
 
 function validateSession(token) {
   try {
-    var session = validateSession_(getRootFolder_(), token);
-    return session ? { success: true, username: session.username, name: session.name } : { success: false };
+    var rootFolder = getRootFolder_();
+    var session = validateSession_(rootFolder, token);
+    if (!session) return { success: false };
+    var user = findUserByUsername_(readUsers_(rootFolder), session.username);
+    return { success: true, username: session.username, name: session.name, role: user ? (user.role || 'member') : 'member' };
   } catch (err) {
     return { success: false };
   }
@@ -687,10 +720,25 @@ function logoutSession(token) {
   }
 }
 
-/** Google identity if signed in, else a valid external session's display name, else 'unknown'. */
+/** Logged-in session's display name, else Google identity as a last resort, else 'unknown'. */
 function resolveCurrentUser_(rootFolder, externalToken) {
-  var googleEmail = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
-  if (googleEmail) return googleEmail;
   var session = validateSession_(rootFolder, externalToken);
-  return session ? (session.name || session.username) : 'unknown';
+  if (session) return session.name || session.username;
+  var googleEmail = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
+  return googleEmail || 'unknown';
+}
+
+/**
+ * One-time bootstrap: creates the very first login account (as admin)
+ * so someone can actually sign in and start managing the rest from the
+ * app itself. Nobody can reach the "Login Accounts" tab before this,
+ * since there's no one to be signed in as yet - run this once from the
+ * Apps Script editor (select this function in the toolbar dropdown,
+ * click Run), then sign in with the username/password below and change
+ * or replace them from the app.
+ */
+function setupFirstAdmin_() {
+  var result = createExternalUser('admin', 'ChangeMe123', 'Administrator', 'admin');
+  Logger.log(JSON.stringify(result));
+  return result;
 }

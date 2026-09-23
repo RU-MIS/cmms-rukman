@@ -55,43 +55,52 @@ Google Sites page via `<iframe>`.
   Use "By Folder" for broad, category-wide access (e.g. "everyone in
   Purchasing can view Purchase Orders"); use "By File" for one-off
   exceptions on a specific document.
-- **Sign in / Sign out**: two independent paths.
-  - **Google sign-in** — unchanged: gated by the visitor's Google account
-    *before* the page even loads ("Who has access: Anyone" in the
-    deployment step). The user menu (click your name, top-right) offers
-    **Switch Account** (Google's account chooser) and **Sign Out**
-    (`accounts.google.com/Logout`).
-  - **Login accounts** — for people without a Google account. Create
-    accounts from **Manage Access → Login Accounts** (username + password,
-    min 6 characters; passwords are salted and SHA-256 hashed, never
-    stored in plain text). A visitor with no Google session sees a login
-    screen instead of the file browser; signing in issues a random
-    session token (30-day expiry) stored in the browser's `localStorage`
-    and sent back as `externalToken` on calls that need to know who's
-    asking (currently just `uploadFile`, for the "Uploaded By" field).
-    **Honest limitation**: this gates the RUDMS *client UI* - no login, no
-    file browser - it is not a server-side authorization check on every
-    function, since every function here is otherwise directly callable.
-    That's an appropriate bar for keeping casual/public visitors out, not
-    a defense against a determined technical attacker. If you need that
-    level of hardening, every function would need to validate the token
-    itself, which is a larger change.
+- **Sign in / Sign out**: everyone - regardless of whether they have a
+  Google account - signs in with a **username and password** created by
+  an admin. Google identity is not used as a login gate at all.
+  - **Creating accounts**: from **Manage Access → Login Accounts**
+    (admin-only tab; username + password, min 6 characters, "Member" or
+    "Admin" role). Passwords are salted and SHA-256 hashed, never stored
+    in plain text.
+  - **Bootstrapping the very first account**: nobody can reach "Login
+    Accounts" before at least one account exists, so the first one is
+    created directly in the Apps Script editor. Select `setupFirstAdmin_`
+    in the toolbar's function dropdown and click **Run** once - it
+    creates username `admin` / password `ChangeMe123` as an admin. Sign
+    in with that, then immediately create your real admin account(s) (for
+    the CEO/MD etc.) from the Login Accounts tab and remove the bootstrap
+    `admin` account.
+  - **Roles**: `admin` can create/list/remove login accounts; `member`
+    cannot see that tab at all. Every account (of either role) can browse,
+    upload, and use Manage Access's By Folder/By File/Doer List tabs the
+    same way.
+  - **Sessions**: signing in issues a random token (30-day expiry) stored
+    in the browser's `localStorage` and sent back as `externalToken` on
+    calls that need to know who's asking. **Honest limitation**: this
+    gates the RUDMS *client UI* and who can manage accounts - it is not a
+    server-side authorization check on every single function, since most
+    functions here are otherwise directly callable once someone has any
+    valid token. That's an appropriate bar for controlling who gets in
+    and who can manage accounts, not a defense against a determined
+    technical attacker.
+  - Same Google Drive throughout: the deploying account's Drive is where
+    every category folder and file lives, same as before - login accounts
+    are purely an access layer in front of it, not separate Drive
+    identities.
 - **Downloads**: proxied through `getFileContentForPreview()` on the
-  server rather than a direct `drive.google.com` link, so both
-  Google-signed-in and login-account visitors can download a file without
-  needing Drive-level access to it themselves.
+  server rather than a direct `drive.google.com` link, so any signed-in
+  visitor can download a file regardless of their own Drive access.
 - **Previews**:
-  - Images, PDFs, Word/Excel/PowerPoint → shown via Drive's built-in
-    `/preview` iframe. **This still requires the viewing browser to have
-    Drive-level access to that specific file** - it works for
-    Google-signed-in visitors with the right Drive permissions, but a
-    login-account (non-Google) visitor will see Drive's "you need access"
-    message here even though they're signed into RUDMS. They can still
-    use the (now server-proxied) Download button instead. Making preview
-    itself Drive-independent for login accounts - fetching the blob
-    server-side and rendering images/PDFs directly, as `getFileContentForPreview`
-    already does for CAD files - is a reasonable follow-up if that
-    matters for your use case.
+  - Images and PDFs → fetched through the server and rendered from a data
+    URI (same mechanism as CAD below), **not** Drive's `/preview` iframe.
+    That iframe needs the *viewing browser itself* to have Drive-level
+    access to the file, which no RUDMS visitor has anymore now that login
+    is username/password rather than Google identity - so it was switched
+    to the server-proxied approach to keep working for everyone.
+  - Word/Excel/PowerPoint → **honest limitation**: Google's own preview
+    (the only realistic renderer for these formats) needs that same
+    Drive-level access nobody has now. The portal shows a clear "download
+    to open in its native app" message instead of a broken/blank iframe.
   - `.stl` and `.obj` → rendered live in an interactive WebGL viewer
     (Three.js + `STLLoader`/`OBJLoader` + `OrbitControls`) — rotate with
     drag, zoom with scroll, no download needed.
@@ -131,6 +140,12 @@ Google Sites page via `<iframe>`.
      grants the script permission to manage Drive files/folders on your
      behalf). This also pre-creates the RUDMS root folder and default
      category folders so the first real visitor doesn't pay that cost.
+   - Select `setupFirstAdmin_` in the same dropdown and click **Run**
+     once more - this creates the first login account (username `admin`,
+     password `ChangeMe123`, role admin) so you can actually sign into
+     the deployed app afterward. Sign in with it once the web app is
+     live, then create your real admin account(s) and remove this
+     bootstrap one from **Manage Access → Login Accounts**.
 
 4. **Deploy as a Web App**
    - Click **Deploy → New deployment**.
@@ -139,11 +154,13 @@ Google Sites page via `<iframe>`.
    - **Execute as**: `Me (your-email@rukmanudyog.com)` — this is what lets
      the script create folders/files and manage permissions using your
      Drive, regardless of who is viewing the page.
-   - **Who has access**: `Anyone` (recommended: `Anyone with a Google
-     account` rather than fully anonymous — since the app grants
-     Viewer/Editor access by email and reads `Session.getActiveUser()`,
-     visitors need to be signed in to a Google account for permissions and
-     attribution to work correctly).
+   - **Who has access**: `Anyone` — visitors sign in with the
+     username/password login built into RUDMS itself, not a Google
+     account, so they don't need `Anyone with a Google account` here.
+     (Drive-level Viewer/Editor sharing granted through Manage Access
+     still only takes effect for emails tied to an actual Google account,
+     same as always - that's a separate, optional layer on top of RUDMS's
+     own login.)
    - Click **Deploy**, then **Authorize access** again if prompted.
    - Copy the generated **Web app URL** (`https://script.google.com/macros/s/XXXXXXXX/exec`).
 
