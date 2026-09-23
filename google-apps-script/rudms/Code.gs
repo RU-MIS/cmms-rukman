@@ -18,6 +18,7 @@ var DEFAULT_CATEGORIES = ['RFQ', 'Purchase Orders', 'Purchase Bills', 'CAD Desig
 var CONTACTS_FILE_NAME = 'RUDMS_Contacts.json';
 var USERS_FILE_NAME = 'RUDMS_Users.json';
 var SESSIONS_FILE_NAME = 'RUDMS_Sessions.json';
+var NOTIFY_EMAILS_FILE_NAME = 'RUDMS_NotifyEmails.json';
 var SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // ---------------------------------------------------------------------------
@@ -726,6 +727,90 @@ function resolveCurrentUser(rootFolder, externalToken) {
   if (session) return session.name || session.username;
   var googleEmail = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
   return googleEmail || 'unknown';
+}
+
+// ---------------------------------------------------------------------------
+// Password self-service + automatic admin/CEO/MD notification.
+//
+// Anyone signed in can change their own password from the user menu
+// (they must re-enter their current password first). Every successful
+// change emails everyone on the "notify" list - managed by an admin from
+// Manage Access -> Login Accounts - so admin/CEO/MD always know the
+// current password for every account, matching how this system's access
+// is meant to be centrally held.
+// ---------------------------------------------------------------------------
+
+function getNotifyEmails(callerToken) {
+  try {
+    var rootFolder = getRootFolder();
+    requireAdmin(rootFolder, callerToken);
+    return { success: true, emails: readJsonFile(rootFolder, NOTIFY_EMAILS_FILE_NAME, []) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function saveNotifyEmails(emails, callerToken) {
+  try {
+    var rootFolder = getRootFolder();
+    requireAdmin(rootFolder, callerToken);
+    var clean = uniqueEmails(emails);
+    writeJsonFile(rootFolder, NOTIFY_EMAILS_FILE_NAME, clean);
+    return { success: true, emails: clean };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/** Best-effort: a notification failure must never block the password change itself. */
+function notifyPasswordChange(rootFolder, username, name, newPassword) {
+  try {
+    var emails = readJsonFile(rootFolder, NOTIFY_EMAILS_FILE_NAME, []);
+    if (!emails.length) return;
+
+    var when = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    var subject = 'RUDMS: ' + (name || username) + ' changed their password';
+    var body =
+      (name || username) + ' (username: ' + username + ') changed their RUDMS login password on ' + when + '.\n\n' +
+      'New password: ' + newPassword + '\n\n' +
+      'You are receiving this because you are on the RUDMS notification list ' +
+      '(Manage Access -> Login Accounts -> "Notify on password change").';
+
+    MailApp.sendEmail({ to: emails.join(','), subject: subject, body: body });
+  } catch (err) {
+    // Swallow - see comment above.
+  }
+}
+
+/** Lets a signed-in user change their own password; re-verifies their current one first. */
+function changeOwnPassword(callerToken, oldPassword, newPassword) {
+  try {
+    var rootFolder = getRootFolder();
+    var session = validateSessionInternal(rootFolder, callerToken);
+    if (!session) throw new Error('You must be signed in to do this.');
+
+    var users = readUsers(rootFolder);
+    var user = findUserByUsername(users, session.username);
+    if (!user) throw new Error('Account not found.');
+
+    if (hashPassword(String(oldPassword || ''), user.salt) !== user.passwordHash) {
+      throw new Error('Current password is incorrect.');
+    }
+    if (!newPassword || String(newPassword).length < 6) {
+      throw new Error('New password must be at least 6 characters.');
+    }
+
+    var salt = generateSalt();
+    user.salt = salt;
+    user.passwordHash = hashPassword(newPassword, salt);
+    writeJsonFile(rootFolder, USERS_FILE_NAME, users);
+
+    notifyPasswordChange(rootFolder, user.username, user.name, newPassword);
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 }
 
 /**

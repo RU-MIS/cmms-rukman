@@ -87,6 +87,21 @@ Google Sites page via `<iframe>`.
     every category folder and file lives, same as before - login accounts
     are purely an access layer in front of it, not separate Drive
     identities.
+  - **Changing your own password**: anyone signed in can change it
+    themselves from the user menu (top-right avatar → **Change
+    Password**) - it asks for the current password first, then the new
+    one twice. No admin involvement needed for this part.
+  - **Automatic admin/CEO/MD notification**: an admin sets a
+    notification list of real email addresses from **Manage Access →
+    Login Accounts → "Notify on password change"** (e.g. the admin's,
+    CEO's and MD's own email addresses). From then on, every time
+    *anyone* changes their own password, everyone on that list
+    automatically gets an email with who changed it and their new
+    password, sent via `MailApp` from the deploying account - no manual
+    step. Leave the list empty to turn this off. The list itself is
+    just another JSON file in the RUDMS root folder
+    (`RUDMS_NotifyEmails.json`), same storage pattern as everything
+    else here.
 - **Downloads**: proxied through `getFileContentForPreview()` on the
   server rather than a direct `drive.google.com` link, so any signed-in
   visitor can download a file regardless of their own Drive access.

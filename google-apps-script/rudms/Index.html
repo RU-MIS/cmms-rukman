@@ -133,6 +133,10 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
               Switch Account
             </a>
+            <button id="changePasswordBtn" type="button" class="w-full flex items-center gap-2 px-3.5 py-2 text-slate-700 hover:bg-slate-50">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Change Password
+            </button>
             <button id="signOutBtn" type="button" class="w-full flex items-center gap-2 px-3.5 py-2 text-red-600 hover:bg-red-50">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
               Sign Out
@@ -295,6 +299,35 @@
     </div>
   </div>
 
+  <!-- Change Password Modal -->
+  <div id="changePasswordModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <h2 class="font-semibold text-slate-900">Change Password</h2>
+        <button data-close="changePasswordModal" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Current Password</label>
+          <input id="changePwdCurrent" type="password" autocomplete="current-password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">New Password (min 6 characters)</label>
+          <input id="changePwdNew" type="password" autocomplete="new-password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Confirm New Password</label>
+          <input id="changePwdConfirm" type="password" autocomplete="new-password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+        </div>
+        <p class="text-[11px] text-slate-400 leading-snug">Everyone on the notification list (set by an admin under Manage Access -> Login Accounts) automatically gets an email with your new password once you save.</p>
+      </div>
+      <div class="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50">
+        <button data-close="changePasswordModal" class="px-4 py-2 text-sm rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button id="submitChangePasswordBtn" class="px-4 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Save New Password</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Manage Access Center: folder-wise and file-wise permissions in one place -->
   <div id="accessModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-2 sm:p-6">
     <div class="bg-white w-full h-full sm:max-w-3xl sm:h-[85vh] rounded-2xl shadow-xl overflow-hidden flex flex-col">
@@ -335,7 +368,7 @@
         </div>
 
         <div id="accessLoginsPane" class="hidden">
-          <p class="text-xs text-slate-400 mb-3">Accounts here can sign in to RUDMS with a username and password - for people without a Google account. Everyone else just uses their Google sign-in, no account needed here.</p>
+          <p class="text-xs text-slate-400 mb-3">Everyone signs in to RUDMS with a username and password created here - not their Google account.</p>
 
           <div class="grid grid-cols-2 gap-2 mb-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
             <input id="loginNewName" type="text" placeholder="Full name" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">
@@ -349,6 +382,15 @@
           </div>
 
           <div id="loginAccountList" class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden mt-3"></div>
+
+          <div class="mt-5 pt-4 border-t border-slate-100">
+            <p class="text-sm font-medium text-slate-800 mb-1">Notify on password change</p>
+            <p class="text-xs text-slate-400 mb-2">Every email listed here (e.g. admin, CEO, MD) automatically gets the new password whenever anyone changes their own password from the user menu.</p>
+            <div class="flex gap-1.5">
+              <input id="notifyEmailsInput" type="text" placeholder="e.g. admin@rukmanudyog.com, ceo@rukmanudyog.com, md@rukmanudyog.com" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+              <button id="notifyEmailsSaveBtn" class="shrink-0 px-3.5 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Save</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -639,13 +681,11 @@
   }
 
   // ---------------------------------------------------------------------
-  // User menu (Switch Account / Sign Out)
+  // User menu (Change Password / Sign Out)
   //
-  // Apps Script web apps have no app-level session of their own - access is
-  // gated entirely by the visitor's Google sign-in before the page even
-  // loads. "Sign out" here means signing out of the Google account itself
-  // (via Google's own logout endpoint), which then forces a fresh Google
-  // sign-in the next time this link is opened.
+  // "Sign out" here just clears this browser's RUDMS session token and
+  // reloads to the login screen - it has nothing to do with any Google
+  // account, since sign-in is username/password only.
   // ---------------------------------------------------------------------
   function setupUserMenu() {
     var name = state.currentUser || '';
@@ -671,6 +711,8 @@
         location.reload();
       });
     });
+
+    bindChangePasswordModal();
   }
 
   // ---------------------------------------------------------------------
@@ -1119,6 +1161,10 @@
         renderLoginAccountList(res.success ? (res.users || []) : []);
         if (!res.success) showToast(res.error || 'Could not load login accounts', 'error');
       }).catch(function (err) { showToast(String(err), 'error'); });
+
+      callServer('getNotifyEmails', state.authToken).then(function (res) {
+        if (res.success) document.getElementById('notifyEmailsInput').value = (res.emails || []).join(', ');
+      }).catch(function () {});
     }
   }
 
@@ -1172,6 +1218,46 @@
         renderLoginAccountList(res.users || []);
         showToast('Login account created', 'success');
       }).catch(function (err) { showToast(String(err), 'error'); });
+    });
+
+    document.getElementById('notifyEmailsSaveBtn').addEventListener('click', function () {
+      var emails = document.getElementById('notifyEmailsInput').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      callServer('saveNotifyEmails', emails, state.authToken).then(function (res) {
+        if (!res.success) return showToast(res.error || 'Could not save', 'error');
+        document.getElementById('notifyEmailsInput').value = (res.emails || []).join(', ');
+        showToast('Notification list saved', 'success');
+      }).catch(function (err) { showToast(String(err), 'error'); });
+    });
+  }
+
+  function bindChangePasswordModal() {
+    document.getElementById('changePasswordBtn').addEventListener('click', function () {
+      document.getElementById('changePwdCurrent').value = '';
+      document.getElementById('changePwdNew').value = '';
+      document.getElementById('changePwdConfirm').value = '';
+      openModal('changePasswordModal');
+    });
+
+    document.getElementById('submitChangePasswordBtn').addEventListener('click', function () {
+      var current = document.getElementById('changePwdCurrent').value;
+      var next = document.getElementById('changePwdNew').value;
+      var confirm = document.getElementById('changePwdConfirm').value;
+
+      if (!current) return showToast('Enter your current password', 'error');
+      if (next.length < 6) return showToast('New password must be at least 6 characters', 'error');
+      if (next !== confirm) return showToast('New password and confirmation do not match', 'error');
+
+      var btn = document.getElementById('submitChangePasswordBtn');
+      btn.disabled = true;
+      callServerNoRetry('changeOwnPassword', state.authToken, current, next).then(function (res) {
+        btn.disabled = false;
+        if (!res.success) return showToast(res.error || 'Could not change password', 'error');
+        closeModal('changePasswordModal');
+        showToast('Password changed', 'success');
+      }).catch(function (err) {
+        btn.disabled = false;
+        showToast(String(err), 'error');
+      });
     });
   }
 
