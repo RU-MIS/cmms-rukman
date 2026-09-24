@@ -341,3 +341,14 @@ function submitInspection(payload, finalize) {
     lock.releaseLock();
   }
 }
+
+/**
+ * TEMPORARY - run this once from the Apps Script editor (function dropdown
+ * at the top > select forceAuthAllScopes > Run) to force a single consent
+ * screen covering every scope this project needs, then redeploy. Safe to
+ * delete afterwards; it isn't called from anywhere else.
+ */
+function forceAuthAllScopes() {
+  SpreadsheetApp.getActiveSpreadsheet();
+  MailApp.getRemainingDailyQuota();
+}
