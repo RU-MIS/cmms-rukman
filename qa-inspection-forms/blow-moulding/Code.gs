@@ -250,24 +250,54 @@ function buildReportHtml_(sheet, minRow, maxRow) {
 }
 
 /**
- * Emails this session's report as an HTML table in the email body (no PDF
- * attachment) - avoids needing the UrlFetchApp/Drive permissions that some
- * Google Workspace setups block for unverified Apps Script apps. Only the
- * mail-sending permission is required.
+ * Exports just this session's rows straight from the live sheet as a PDF.
+ * r1/r2/c1/c2 select the Check Point row range; fzr=true reprints the
+ * frozen header rows (RUKMAN UDYOG band + DAY/NIGHT + column headers) at
+ * the top of the export automatically, matching the paper form's layout.
+ */
+function buildReportPdfBlob_(sheet, minRow, maxRow, reportName) {
+  var totalCols = totalCols_();
+  var url = 'https://docs.google.com/spreadsheets/d/' + sheet.getParent().getId() + '/export' +
+    '?format=pdf&gid=' + sheet.getSheetId() +
+    '&size=A3&portrait=false&fitw=true&gridlines=true' +
+    '&printtitle=false&sheetnames=false&pagenum=UNDEFINED' +
+    '&fzr=true' +
+    '&r1=' + (minRow - 1) + '&r2=' + maxRow + '&c1=0&c2=' + totalCols;
+  var response = UrlFetchApp.fetch(url, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+  });
+  return response.getBlob().setName(reportName + '.pdf');
+}
+
+/**
+ * Emails this session's report to REPORT_EMAIL. Tries to attach a real PDF
+ * exported straight from the sheet (matches the paper form's look); if that
+ * fails for any reason, falls back to an HTML table in the email body so a
+ * report always goes out either way.
  */
 function emailFinalReport_(sheet, map, dateStr, machineNo, partName) {
   var rowNums = CHECKPOINTS.map(function (cp) { return map[cp.label]; }).filter(function (r) { return !!r; });
   var minRow = Math.min.apply(null, rowNums);
   var maxRow = Math.max.apply(null, rowNums);
-
   var reportName = FORM_TITLE + ' - ' + partName + ' - ' + machineNo + ' - ' + dateStr;
-  var html = buildReportHtml_(sheet, minRow, maxRow);
 
-  MailApp.sendEmail({
-    to: REPORT_EMAIL,
-    subject: reportName,
-    htmlBody: html
-  });
+  try {
+    var pdfBlob = buildReportPdfBlob_(sheet, minRow, maxRow, reportName);
+    MailApp.sendEmail({
+      to: REPORT_EMAIL,
+      subject: reportName,
+      body: 'Attached: ' + FORM_TITLE + ' report.\n\n' +
+        'Date: ' + dateStr + '\nM/C No.: ' + machineNo + '\nPart Name: ' + partName,
+      attachments: [pdfBlob]
+    });
+  } catch (e) {
+    var html = buildReportHtml_(sheet, minRow, maxRow);
+    MailApp.sendEmail({
+      to: REPORT_EMAIL,
+      subject: reportName,
+      htmlBody: html
+    });
+  }
 }
 
 /**
@@ -351,4 +381,5 @@ function submitInspection(payload, finalize) {
 function forceAuthAllScopes() {
   SpreadsheetApp.getActiveSpreadsheet();
   MailApp.getRemainingDailyQuota();
+  UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
 }
