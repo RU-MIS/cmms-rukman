@@ -250,23 +250,61 @@ function buildReportHtml_(sheet, minRow, maxRow) {
 }
 
 /**
- * Exports just this session's rows straight from the live sheet as a PDF.
- * r1/r2/c1/c2 select the Check Point row range; fzr=true reprints the
- * frozen header rows (RUKMAN UDYOG band + DAY/NIGHT + column headers) at
- * the top of the export automatically, matching the paper form's layout.
+ * Builds a small standalone spreadsheet holding just this session's title
+ * band + header rows + Check Point rows, exports THE WHOLE THING as a PDF
+ * (no partial-range/frozen-row export tricks, which dropped the title band
+ * and shrank the table to a corner of a huge blank page), then deletes the
+ * temp file. Returns the PDF blob.
  */
 function buildReportPdfBlob_(sheet, minRow, maxRow, reportName) {
   var totalCols = totalCols_();
-  var url = 'https://docs.google.com/spreadsheets/d/' + sheet.getParent().getId() + '/export' +
-    '?format=pdf&gid=' + sheet.getSheetId() +
-    '&size=A3&portrait=false&fitw=true&gridlines=true' +
-    '&printtitle=false&sheetnames=false&pagenum=UNDEFINED' +
-    '&fzr=true' +
-    '&r1=' + (minRow - 1) + '&r2=' + maxRow + '&c1=0&c2=' + totalCols;
-  var response = UrlFetchApp.fetch(url, {
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
-  });
-  return response.getBlob().setName(reportName + '.pdf');
+  var groupRow = sheet.getRange(3, 1, 1, totalCols).getValues()[0];
+  var headerRow = sheet.getRange(4, 1, 1, totalCols).getValues()[0];
+  var bodyRows = sheet.getRange(minRow, 1, maxRow - minRow + 1, totalCols).getValues();
+
+  var tempSs = SpreadsheetApp.create(reportName);
+  try {
+    var tempSheet = tempSs.getSheets()[0];
+
+    tempSheet.getRange(1, 1, 1, totalCols).merge()
+      .setValue('RUKMAN UDYOG')
+      .setFontWeight('bold').setFontSize(14).setHorizontalAlignment('center')
+      .setBackground('#111111').setFontColor('#ffffff');
+    tempSheet.getRange(2, 1, 1, totalCols).merge()
+      .setValue(FORM_TITLE.toUpperCase() + '  (' + DOC_CODE + ')')
+      .setFontWeight('bold').setHorizontalAlignment('center')
+      .setBackground('#111111').setFontColor('#ffffff');
+
+    tempSheet.getRange(3, 1, 1, totalCols).setValues([groupRow]);
+    tempSheet.getRange(4, 1, 1, totalCols).setValues([headerRow]);
+    allSlotsInOrder_().forEach(function (s, i) {
+      tempSheet.getRange(3, slotValueCol_(i), 1, 2).merge().setHorizontalAlignment('center');
+    });
+    tempSheet.getRange(3, 1, 2, totalCols).setFontWeight('bold');
+
+    tempSheet.getRange(5, 1, bodyRows.length, totalCols).setValues(bodyRows);
+
+    var fullRange = tempSheet.getRange(1, 1, 4 + bodyRows.length, totalCols);
+    fullRange.setBorder(true, true, true, true, true, true);
+    tempSheet.autoResizeColumns(1, totalCols);
+    tempSheet.setFrozenRows(4);
+    SpreadsheetApp.flush();
+
+    var url = 'https://docs.google.com/spreadsheets/d/' + tempSs.getId() + '/export' +
+      '?format=pdf&gid=' + tempSheet.getSheetId() +
+      '&size=A3&portrait=false&fitw=true&fith=true&gridlines=true' +
+      '&printtitle=false&sheetnames=false&pagenum=UNDEFINED';
+    var response = UrlFetchApp.fetch(url, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+    });
+    return response.getBlob().setName(reportName + '.pdf');
+  } finally {
+    try {
+      DriveApp.getFileById(tempSs.getId()).setTrashed(true);
+    } catch (e) {
+      // Cleanup failure shouldn't fail the report - a stray temp sheet is harmless.
+    }
+  }
 }
 
 /**
@@ -382,4 +420,5 @@ function forceAuthAllScopes() {
   SpreadsheetApp.getActiveSpreadsheet();
   MailApp.getRemainingDailyQuota();
   UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
+  DriveApp.getRootFolder();
 }
