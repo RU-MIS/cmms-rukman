@@ -274,36 +274,50 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
   var TEMP_FIXED = ['S. NO.', 'CHECK POINTS', 'SPECIFICATIONS', 'CHECKING FREQUENCY', 'CHECKING MODE'];
   var lastFixedCol = TEMP_FIXED.length;
   var slots = allSlotsInOrder_();
-  // dataGridCols is the real table width (fixed columns + one per slot). The
-  // doc-code/rev-info corner labels get their OWN extra column beyond this,
-  // so their long text never forces the last slot column to stretch wide
-  // and fall out of alignment with the rest of the grid.
+  // dataGridCols is the ONLY width the whole sheet uses - no extra columns
+  // anywhere. Every column gets an explicit pixel width below (instead of
+  // autoResizeColumns, which was inflating some columns and cramping
+  // others), so nothing balloons or drifts out of alignment.
   var dataGridCols = lastFixedCol + slots.length;
-  var cornerCol = dataGridCols + 1;
-  var tempTotalCols = cornerCol;
+  var tempTotalCols = dataGridCols;
 
   function tempSlotCol(i) { return lastFixedCol + i + 1; }
 
   var tempSs = SpreadsheetApp.create(reportName);
   var ts = tempSs.getSheets()[0];
 
-  // Row 1: RUKMAN UDYOG / doc code in its own dedicated corner column.
-  ts.getRange(1, 1, 1, dataGridCols).merge()
+  // The doc-code/rev-info box borrows the grid's own last 2 columns (the
+  // last 2 time-slot columns) for just these 2 header rows - a genuine
+  // 2-column x 2-row merged box, split by a divider line between the two
+  // rows, exactly like the paper form's top-right corner box.
+  var docBoxStartCol = dataGridCols - 1;
+  // The main title band runs from column 2 (column 1 is reserved for the
+  // logo, rows 1-2) up to just before the doc-code box.
+  var titleStartCol = 2;
+  var titleWidth = docBoxStartCol - titleStartCol;
+
+  // Row 1-2, column 1: RUKMAN UDYOG logo, merged across both rows.
+  ts.getRange(1, 1, 2, 1).merge();
+  var logoBlob = Utilities.newBlob(Utilities.base64Decode(LOGO_BASE64_PNG), 'image/png', 'ru-logo.png');
+  var logoImage = ts.insertImage(logoBlob, 1, 1);
+  logoImage.setWidth(48).setHeight(38);
+
+  // Row 1: RUKMAN UDYOG title / doc code box (top half).
+  ts.getRange(1, titleStartCol, 1, titleWidth).merge()
     .setValue('RUKMAN UDYOG')
     .setFontWeight('bold').setFontSize(16).setHorizontalAlignment('center');
-  ts.getRange(1, cornerCol)
-    .setValue(DOC_CODE).setFontWeight('bold').setHorizontalAlignment('center');
+  ts.getRange(1, docBoxStartCol, 1, 2).merge()
+    .setValue(DOC_CODE).setFontWeight('bold').setFontSize(9).setHorizontalAlignment('center');
 
-  // Row 2: black title band / rev info in the corner column.
-  ts.getRange(2, 1, 1, dataGridCols).merge()
+  // Row 2: black title band / doc code box (bottom half - rev info).
+  ts.getRange(2, titleStartCol, 1, titleWidth).merge()
     .setValue(REPORT_TITLE)
     .setFontWeight('bold').setFontSize(12).setHorizontalAlignment('center')
     .setBackground('#111111').setFontColor('#ffffff');
-  ts.getRange(2, cornerCol)
-    .setValue(REV_INFO).setFontWeight('bold').setHorizontalAlignment('center');
+  ts.getRange(2, docBoxStartCol, 1, 2).merge()
+    .setValue(REV_INFO).setFontWeight('bold').setFontSize(8).setHorizontalAlignment('center');
 
-  // Row 3: Date / M-C No. / Part Name info boxes (Part Name box absorbs the
-  // corner column too, so this row still reads as full width).
+  // Row 3: Date / M-C No. / Part Name info boxes.
   ts.getRange(3, 1, 1, 3).merge().setValue('Date :- ' + dateStr).setFontWeight('bold');
   ts.getRange(3, 4, 1, 2).merge().setValue('M/C No. :- ' + machineNo).setFontWeight('bold');
   ts.getRange(3, tempSlotCol(0), 1, tempTotalCols - tempSlotCol(0) + 1).merge()
@@ -320,11 +334,14 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
   ts.getRange(5, tempSlotCol(SLOTS.length), 1, SLOTS.length).merge()
     .setValue('Night/B-Shift').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#eef4ff');
 
-  // Row 6: column headers - only the real grid columns.
+  // Row 6: column headers - only the real grid columns. Fixed/narrow
+  // columns (Checking Frequency/Mode) wrap their header text onto 2 lines
+  // on purpose, same as the narrow boxes on the paper form.
   var headerRow = TEMP_FIXED.slice();
   slots.forEach(function (s) { headerRow.push(s.slot); });
   ts.getRange(6, 1, 1, dataGridCols).setValues([headerRow])
-    .setFontWeight('bold').setBackground('#f5f5f5').setHorizontalAlignment('center');
+    .setFontWeight('bold').setBackground('#f5f5f5').setHorizontalAlignment('center')
+    .setVerticalAlignment('middle').setWrap(true);
 
   // Data rows: S.No., Check Point, Specification, Freq., Mode, then just the
   // slot VALUES (OK/Not OK/number) - no separate sign column per slot.
@@ -336,7 +353,7 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
     }
     return out;
   });
-  ts.getRange(dataStartRow, 1, dataRows.length, dataGridCols).setValues(dataRows).setHorizontalAlignment('center');
+  ts.getRange(dataStartRow, 1, dataRows.length, dataGridCols).setValues(dataRows).setHorizontalAlignment('center').setWrap(true);
   ts.getRange(dataStartRow, 2, dataRows.length, 2).setHorizontalAlignment('left');
 
   // Checking Frequency / Checking Mode are the same for every row in this
@@ -344,8 +361,7 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
   ts.getRange(dataStartRow, 4, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
   ts.getRange(dataStartRow, 5, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
 
-  // Remarks footer row - value cell absorbs the corner column so the row
-  // still spans the full width.
+  // Remarks footer row.
   var remarksRow = dataStartRow + dataRows.length;
   var remarksValue = bodyRows[0][remarksCol_() - 1] || '';
   ts.getRange(remarksRow, 1, 1, lastFixedCol).merge().setValue('REMARKS:-').setFontWeight('bold');
@@ -361,7 +377,7 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
     ts.getRange(signRow, tempSlotCol(i)).setValue(signVal).setHorizontalAlignment('center');
   }
 
-  // NOTE lines - span the full width including the corner column.
+  // NOTE lines - span the full width.
   var note1Row = signRow + 1;
   ts.getRange(note1Row, 1, 1, tempTotalCols).merge()
     .setValue('NOTE: Retain one inspected ok. sample dully signed by QC Incharge')
@@ -372,13 +388,20 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
 
   var lastRow = note1Row + 1;
   ts.getRange(1, 1, lastRow, tempTotalCols).setBorder(true, true, true, true, true, true);
-  // Auto-size only the real grid columns from their actual content, then
-  // make the dedicated corner column match a normal slot column's width
-  // instead of letting it balloon to fit "REV.:00/10.09.2025" - that text
-  // may clip slightly, which is a fair trade for a correctly aligned grid.
-  ts.autoResizeColumns(1, dataGridCols);
-  SpreadsheetApp.flush();
-  ts.setColumnWidth(cornerCol, ts.getColumnWidth(tempSlotCol(0)));
+
+  // Explicit column widths for every column - fixed values instead of
+  // autoResizeColumns, which was making the S.No./first slot columns
+  // balloon unpredictably. Checking Frequency/Mode are deliberately narrow
+  // (their header wraps to 2 lines, like the paper form's narrow boxes).
+  ts.setColumnWidth(1, 55);   // S. NO. (also holds the logo)
+  ts.setColumnWidth(2, 130);  // CHECK POINTS
+  ts.setColumnWidth(3, 160);  // SPECIFICATIONS
+  ts.setColumnWidth(4, 65);   // CHECKING FREQUENCY
+  ts.setColumnWidth(5, 60);   // CHECKING MODE
+  for (var sc = 0; sc < slots.length; sc++) {
+    ts.setColumnWidth(tempSlotCol(sc), 62); // one time-slot column - all equal
+  }
+
   ts.setFrozenRows(6);
   SpreadsheetApp.flush();
 
