@@ -219,16 +219,42 @@ automated tests listed in spec §50–51.
 
 ---
 
-## 7. Own-Factory Lot Receipt (pending Q-02 / Q-08)
+## 7. Own Factory — Lot Allotment and Lot Receipt (W6)
 
-**Today:** separate FACTORY workbook (not provided): `REC ENTRY` (date, FROM
-`FACTORY`, TO godown, LOT `GT19`, item, box, qty) and `TOTAL ENTRY` (lot
-status PENDING / LOT ORDER COMPLETED).
+**Today:** `FACTORY PO` form → `PO ENTRY` (date, `GAGATOSE` → `FACTORY`, lot
+no typed, item, box, qty = box × qty/box). `FACTORY REC` form → `REC ENTRY`
+(FROM factory, TO `B-336`/`WAREHOUSE`, date, lot, item, box, qty). `TOTAL
+ENTRY` computes received / balance / status per lot + item. No rate, no
+amount.
 
-Provisional design: `production_lots` behave like job-work order lines
-(ordered vs received vs pending); receipt posts `PRODUCTION_RECEIPT` IN to the
-godown. **Ledger/accounting: none until Q-08 is answered** (if the factory is a
-paid party, it follows §5 exactly with the factory as the job worker).
+### 7.1 Lot allotment (Production Order)
+| Step | Detail |
+|---|---|
+| Entities | `production_orders` (factory, lot no, date), `production_order_lines` (FG item, boxes → base_qty) |
+| Validation | factory godown active; ≥ 1 line; item once per lot; lot no + cycle unique (Q-37) |
+| Stock / ledger / accounting | **none** |
+| Function | `fn_production_order_confirm` |
+
+### 7.2 Lot receipt (Production Receipt)
+```
+Factory : [ FACTORY ▼ ]   To Godown : [ B-336 ▼ ]   Date : [ 22-Sep-2026 ]
+Item    : [ PVC CHINA UPPER-963 ▼ ]   → pending lots of this item only (BR-103)
+
+LOT     ITEM                  ALLOTTED   RECEIVED   PENDING    RECEIVE (Box)
+GT 03   PVC CHINA UPPER-963   …          …          …          [ 10 ]
+```
+| Step | Detail |
+|---|---|
+| Entities | `production_receipts`, `production_receipt_lines` (→ lot line) |
+| Validation | lock lot line; **reject receive > pending** (same rule as §5, Q-04); lot-less receipt only if Q-41 allows |
+| **Stock** | `PRODUCTION_RECEIPT` IN to the TO godown; carton `CONSUMPTION` OUT if Q-19 covers factory receipts |
+| Lot status | pending = 0 on all lines ⇒ `COMPLETED` ("LOT ORDER COMPLETED"); disappears from the pending list |
+| **Party ledger / accounting** | **none** — the factory is in-house (BR-106, pending Q-08). Factory cost is booked through §15.1 (wages, expenses) and RM issued to the factory |
+| Function | `fn_production_receipt_post` (one transaction, same pattern as §5.2) |
+| Cancel | reversing movements; lot pending re-opens automatically (derived) |
+
+The partial-receipt behaviour and tests of §6 apply unchanged, with "lot line"
+in place of "PO line".
 
 ---
 
@@ -374,6 +400,27 @@ Q-25/Q-30 decide whether those are company accounts or capital/drawings.
 | `STAFF`, `FACTORY RENT`, `DAILY EXPENSE`, `PORTER`… | PAYMENT, no party | `<Expense account> Dr` / `Cash/Bank Cr` (PROPOSED — Q-31) |
 | mode `ENTRY` (TDS by BOBY, "FARME", interest, kitty, rate difference) | JOURNAL | account per remark — mapping table required (Q-29) |
 
+### 15.1 Factory payment book (W7)
+
+**Today:** 703 rows paid from `PAPA FACTORT` (factory cash), `CURRENT ICICI
+BANK`, `PAPA BANK`, `GAGAN CASH` to workers and expense heads. Only payments
+are recorded — no earnings/wage calculation (BR-108).
+
+| Sheet pattern | ERP voucher | Accounting (PROPOSED — Q-39, Q-40) |
+|---|---|---|
+| `… BOTTOM MAN`, `… UPPER MAN`, `… FINISH MAN`, `… CUTTING MASTER` | PAYMENT, payee = worker (role WORKER) | `Factory Wages – <group> Dr [worker]` / `Factory Cash or Bank Cr` |
+| `… SALARY`, `… ACC SALARY`, `OFFICE BOY` | PAYMENT, payee = worker | `Factory Salaries Dr [worker]` / `Cash/Bank Cr` |
+| `DAILY EXP FACTORY`, `FOOD EXP LABUR`, `MEDICEN`, `MAINTENANCE EXP FACTORY` | PAYMENT, no party | `Factory Expenses – <head> Dr` / `Cash/Bank Cr` |
+| `CASH PURCHASE FACTORY` (batton, lastick…) | PAYMENT (or cash purchase receipt if the items are stock-tracked) | `Factory Consumables Dr` / `Cash Cr` |
+| `CARTAGE`, `GOVINDA AUTO` | PAYMENT | `Cartage / Freight Dr` / `Cash/Bank Cr` |
+| transfer into `PAPA FACTORT` / `GAGAN CASH` from a bank | CONTRA | `Factory Cash Dr` / `Bank Cr` (§14) |
+
+"Total paid per worker per month" = journal lines with `party_id = worker`
+grouped by month. If Q-39 asks for earnings, a worker earnings entry
+(`Factory Wages Dr / [worker] Cr`) is added and payments then debit the worker,
+giving a balance (earned − paid). No attendance or payroll is built (spec §9).
+
+
 ---
 
 ## 16. Opening balances (migration)
@@ -384,7 +431,8 @@ Q-25/Q-30 decide whether those are company accounts or capital/drawings.
 | RM stock per location | `STOCK DETAIL` E–H | `OPENING` stock movements |
 | Party payable | `OPENING BAL ENTRY!B:C` (27-Apr-2026) | opening journal: `Opening Balance Adjustment Dr` / `[party] Cr` (sign-aware) |
 | Party receivable | `OPENING BAL ENTRY!J:K`, `SALE LEDGER!BF:BG` | opening journal: `[party] Dr` / `Opening Balance Adjustment Cr` |
-| Bank / cash | `PAYMENT LEDGER!AG:AH` | opening journal per account |
+| Bank / cash | W3 `PAYMENT LEDGER!AG:AH`, W7 `PAYMENT LEDGER!BA:BB` (PAPA FACTORT 6 000, GAGAN CASH 11 300, PAPA BANK −3 008) | opening journal per account (ICICI counted once — Q-42) |
+| Open factory lots | W6 `TOTAL ENTRY` rows with status PENDING | `production_orders` with already-received qty as migrated receipts |
 | D-Mart open bills | W4 rows with outstanding | `sales_invoices` (header-only, `is_migrated`) + opening journal |
 
 Cut-over approach (to be confirmed in the migration phase): either (a) import
@@ -408,6 +456,8 @@ open bills). Reconciliation checks (spec §38) are run for both.
 | ADJUST | Creditors [karigar] | Debtors [karigar] | both | — | Q-13 |
 | Cash/Bank contra | Destination | Source | — | — | spec |
 | Bank charges | Bank Charges | Bank | — | — | — |
+| Factory lot receipt | — | — | — | IN (+ carton OUT) | Q-08 |
+| Factory wages / expenses | Factory Wages / Expenses [worker] | Factory Cash / Bank | worker (paid) | — | Q-39 |
 | Stock transfer | — | — | — | OUT + IN | — |
 | Stock adjustment | Stock Adj. / Loss (if valued) | … | — | IN/OUT | Q-18 |
 
@@ -424,6 +474,7 @@ Accounting phase (Q-33).
 | Sale | `fn_sales_invoice_post` | invoice + lines + (stock OUT) + journal (party line) |
 | Purchase | `fn_purchase_receipt_post` | receipt + lines + stock IN + journal (party line) |
 | Job-work receipt | `fn_job_work_receipt_post` | receipt + lines + stock IN + carton OUT + journal + PO status |
+| Factory lot receipt | `fn_production_receipt_post` | receipt + lines + stock IN + carton OUT + lot status |
 | Material issue | `fn_material_issue_approve_post` | status + stock OUT + journal |
 | Payment / receipt | `fn_voucher_post` | voucher + allocations + journal |
 | Stock transfer | `fn_stock_transfer_post` | OUT + IN movements |

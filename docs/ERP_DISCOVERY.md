@@ -14,7 +14,7 @@ Related documents:
 
 ## 1. What was analysed
 
-Five Google Sheets workbooks were exported to `.xlsx` and analysed cell-by-cell
+Seven Google Sheets workbooks were exported to `.xlsx` and analysed cell-by-cell
 (values **and** formulas, data validations, hidden sheets, cross-workbook
 `IMPORTRANGE` links).
 
@@ -25,21 +25,23 @@ Five Google Sheets workbooks were exported to `.xlsx` and analysed cell-by-cell
 | W3 | `NEW - LEDGER & PAYMENT` | 9 | Daily payment book (cash / bank / adjust / entry), bank ledger, party payable ledger, party receivable ledger, opening balances, FG item movement report |
 | W4 | `PO_PAYMENT_RECEIVE_SHEET` | 20 | D-Mart tax-invoice receivable tracker (bill, TDS, received, short amount, debit note) with one tab per month |
 | W5 | `PLANNING_SHEET` | 2 | Dispatch planning: pending D-Mart PO boxes per DC and delivery window |
+| W6 | `NEW - FACTORY ORDERS` | 5 | **Own factory** production lots (`GT01`…`GT27`), lot-wise FG receipts, lot pending/completed status |
+| W7 | `FACTORY PAYMENT` | 11 | **Factory payment book**: worker wages (bottom/upper/finish men, salaries), factory daily expenses, cash purchases, cartage; factory cash accounts `PAPA FACTORT`, `GAGAN CASH`, `PAPA BANK`, `CURRENT ICICI BANK` |
 
 Data period covered: **FY 2025-26 (April 2025) → 22-Sep-2026**. The financial
 year runs **April → March** (invoice series `T/25-26/…`, `T/26-27/…`).
 
-### 1.1 Workbooks referenced but NOT provided
+### 1.1 Workbooks referenced by formulas
 
-The formulas pull data from other Google Sheets via `IMPORTRANGE`. These were
-not in the upload and are **required** before discovery can be called complete:
+The formulas pull data from other Google Sheets via `IMPORTRANGE`. Status after
+the second upload (W6, W7):
 
 | Spreadsheet ID (prefix) | Tabs referenced | Used by | What it appears to be |
 |---|---|---|---|
-| `1JLgeYB2…` | `REC ENTRY` (DATE, FROM, TO, LOT NO., ITEM, BOX, QTY), `TOTAL ENTRY` (LOT, ITEM, BOX, QTY, REC QTY, BAL QTY, BAL BOX, STATUS = `PENDING` / `LOT ORDER COMPLETED`) | W1 `STOCK IN GODOWN`, `Item WISE STOCK`; W2 `SALE INV DATA`; W3 `ITEM WISE OUT-IN` | **In-house FACTORY sheet** — lots `GT19`, `GT21`… produced by the own factory and received into `B-336` / `GAGATOSE` / `WAREHOUSE`. This is the "Factory" half of the Factory/Job-Work module. |
-| `1yD_9rGi…` | `TOTAL ENTRY!B2:L` | W2 `STOCK SHIFTING ENTRY` | Probably the same factory workbook or a copy (currently `#REF!`). |
-| `1MHDJbPA…` | `DAILY PAYMENT ENTRIES!B2:G` filtered on `CURRENT ICICI BANK` | W3 `DAILY PAYMENT ENTRIES` (columns J:O) | A **second payment book** holding ICICI-bank entries that are merged into the bank ledger. |
-| `1DQcmPBe…` | `SALE DATA!A3:J` | W3 `PO DETAILS` (currently `#REF!`) | Unknown — possibly the sale-invoice (tax invoice) register. |
+| `1JLgeYB2…` | `REC ENTRY` (DATE, FROM, TO, LOT NO., ITEM, BOX, QTY), `TOTAL ENTRY` (LOT, ITEM, BOX, QTY, REC QTY, BAL QTY, BAL BOX, STATUS = `PENDING` / `LOT ORDER COMPLETED`) | W1 `STOCK IN GODOWN`, `Item WISE STOCK`; W2 `SALE INV DATA`; W3 `ITEM WISE OUT-IN` | ✅ **Provided as W6** (`NEW - FACTORY ORDERS`, tabs and columns match). Please confirm the ID (Q-02). |
+| `1yD_9rGi…` | `TOTAL ENTRY!B2:L` | W2 `STOCK SHIFTING ENTRY` | Probably W6 or an older copy (currently `#REF!`, not needed if W6 is the live file). |
+| `1MHDJbPA…` | `DAILY PAYMENT ENTRIES!B2:G` filtered on `CURRENT ICICI BANK` | W3 `DAILY PAYMENT ENTRIES` (columns J:O) | ✅ **Very likely W7** (`FACTORY PAYMENT`) — same tab and columns, 174 `CURRENT ICICI BANK` rows, and W7 imports W3 back. An Apps Script `syncDailyPayments` (W7 `ERROR LOG`) syncs the two books. Confirm (Q-02, Q-42). |
+| `1DQcmPBe…` | `SALE DATA!A3:J` | W3 `PO DETAILS` (currently `#REF!`) | ❌ **Still missing** — possibly the sale-invoice (tax invoice) register. Currently `#REF!` in both W3 and W7, so it may be obsolete (Q-02). |
 
 Links to IDs `1gc_qxs4…` (= W1), `1hzpZbFN…` (= W2), `1-G6z4kx…`, `1FrRH4Er…`,
 `1kMNXnWj…` resolve to workbooks already supplied or to themselves.
@@ -73,8 +75,15 @@ visible in formulas (see Q-01).
      more FG items in pairs/boxes. The karigar delivers FG **in multiple partial
      lots**; each receipt is priced at a **per-pair rate** and becomes a
      **payable** to the karigar.
-   - **Own factory** — lots `GT19`, `GT21`, … recorded in the missing
-     factory workbook, received as `FROM: FACTORY` into a godown.
+   - **Own factory** (W6) — the company allots **production lots** (`GT01`…
+     `GT27`, each lot = one or more FG items with boxes/pairs) to `FACTORY`
+     (the list also has `MUSHIR FACTORY`). The factory delivers each lot in
+     **partial receipts** into `B-336` (104 of 105 receipts). Lots carry **no
+     rate and no amount** — no payable is created. The factory's costs are
+     paid directly from its own payment book (W7): piece-rate/salary payments
+     to named workers (`ROFF BOTTOM MAN`, `MUSHIR UPPER MAN`, `AMEEN FINISH
+     MAN`, `BUNTY CUTTING MASTER`, `MIRAJ-SALARY` …), `DAILY EXP FACTORY`,
+     `FOOD EXP LABUR`, `CASH PURCHASE FACTORY`, `CARTAGE`, `MEDICEN`.
 4. **Raw material (RM)** — rexine, sole sheets, EVA, buckles, thread,
    cartons, etc. — is **purchased** from suppliers (CITY, BOBY, JAIN BAJAJ,
    PATTI WALA, …) into RM locations (`RAW MATERIAL`, `OFFICE`, `B-336`, …)
@@ -124,6 +133,11 @@ real concept, and keep the sheet label only as a migration reference.
 | `SALE LEDGER` (W3) | **Party receivable ledger report (RM bills)** | RM issue bills − ADJUST entries. |
 | `PAYMENT LEDGER` (W3) | **Bank / cash book report** | Running balance per mode/account. |
 | `MAIN SHEET` + monthly tabs (W4) | **Customer (D-Mart) invoice outstanding register** | Bill, TDS, received, less amount, debit note. |
+| `FACTORY PO` / `PO ENTRY` (W6) | **Production Order (factory lot allotment)** | Lot no `GT19` / `GT 19`; no rate. |
+| `FACTORY REC` / `REC ENTRY` (W6) | **Production Receipt** (FG from own factory) | Partial receipts per lot + item. |
+| `TOTAL ENTRY` (W6) | **Production lot pending/completed view** | |
+| W7 `DAILY PAYMENT ENTRIES` | **Factory payment vouchers** (wages, expenses) | Payees = workers / expense heads. |
+| `PAPA FACTORT` (mode) | **Factory cash account** *(inferred, Q-40)* | Spelling kept as legacy name. |
 | `GODWN` / `GODOWN` / `REC IN` / `RECEIVING IN` / `TO (GODOWN)` | **Location (godown)** | Includes true warehouses **and** cutting job-worker locations. |
 | `QTY` / `PO Qty` | **Quantity in base unit** (pairs for FG) | |
 | `BOX` | **Packing quantity** (FG) | `BOX = QTY ÷ QTY/BOX` of that item. |
@@ -197,6 +211,29 @@ a UI screen, not data; it becomes a web form).
 |---|---|---|---|---|
 | `Sheet1` | TRANSACTION copy | 104 | Copy of pending D-Mart PO lines (IMPORTRANGE of `SALE PO`). | Not migrated (source = `sales_order_lines`) |
 | `PLANING SHEET` | REPORT | 8 DC blocks | For up to 8 DCs, a date window each: boxes to deliver per FG item (by delivery date), and total boxes per item. | Report `rpt_dispatch_plan` |
+
+### 4.6 W6 — `NEW - FACTORY ORDERS` (own factory)
+
+| Tab | Class | Rows used | What it holds / does | Maps to |
+|---|---|---|---|---|
+| `FACTORY PO` | ENTRY FORM + LOOKUP | form rows 1-23 | Lot allotment form: FROM `GAGATOSE`, TO `FACTORY` / `MUSHIR FACTORY`, date, **lot no** (typed), items, **box** → qty = box × qty/box. Side panel shows lots/boxes already allotted for the chosen item. R:S = FG item + qty/box (IMPORTRANGE of W1 `STOCK IN GODOWN`). | Form → `production_orders` |
+| `PO ENTRY` | TRANSACTION + DETAIL (flat) | 50 lines | Date, from, to, lot no, item, box, qty. | `production_orders` + `production_order_lines` |
+| `FACTORY REC` | ENTRY FORM | form | Receipt form: FROM factory, TO `WAREHOUSE`/`B-336`, date = TODAY(), items, box → qty. Side panel: **pending lots for the chosen item** (`TOTAL ENTRY` status PENDING) with balance boxes. | Form → `production_receipts` |
+| `REC ENTRY` | TRANSACTION + DETAIL (flat) | 105 lines | Date, from, to, lot no, item, box, qty. Q:W = same data re-ordered for W1/W2/W3 imports. | `production_receipts` + lines + `stock_movements` (PRODUCTION_RECEIPT) |
+| `TOTAL ENTRY` | CALCULATION / REPORT | 50 lots-lines | Per lot + item: allotted qty, received qty = `SUMIFS(REC ENTRY qty, item, lot)`, balance qty, balance box, status `LOT ORDER COMPLETED` if balance = 0 else `PENDING`. | View `v_production_order_line_status` |
+
+### 4.7 W7 — `FACTORY PAYMENT` (factory payment book)
+
+| Tab | Class | Rows used | What it holds / does | Maps to |
+|---|---|---|---|---|
+| `DAILY PAYMENT` | ENTRY FORM + REPORT | form | Same payment form as W3; KPIs **cash in hand of `PAPA FACTORT`** and of **`GAGAN CASH`** (from 16-May-2026, + opening), amount in Hindi words. | Form → `vouchers`; KPIs → `fn_cash_bank_book` |
+| `DAILY PAYMENT ENTRIES` | TRANSACTION (single-entry) | 703 rows, 16-May → 19-Sep-2026 | Date, party (worker / expense head), mode (`PAPA FACTORT` 339, `CURRENT ICICI BANK` 174, `PAPA BANK` 113, `GAGAN CASH` 77), remark, IN, OUT. `SYNC_KEY` column for the Apps Script sync. | `vouchers` (PAYMENT, mostly expense) |
+| `PAYMENT LEDGER` | REPORT + CONFIGURATION | 1 125 | Cash/bank book for a selected mode; merges **W3's** entries (X:AC) with W7's own (AJ:AO). BA:BB = opening: ICICI 258 550.49, PAPA BANK −3 008, **PAPA FACTORT 6 000**, GAGAN CASH 11 300. | `accounts` + opening journals; report |
+| `PURCHASE LEDGER ENTRY` | REPORT + LOOKUP | 69 names | Month-wise **paid-amount statement per worker** (no earnings side). Q = list of worker names. | Report `rpt_payee_statement` |
+| `OPENING BAL ENTRY`, `SALE LEDGER`, `PO DETAILS` | REPORT (copies of W3) | — | Copied from W3; most formulas are `#REF!`/`#N/A`. | Not migrated |
+| `SALE INVOICE DETAIL`, `AUDIT LOG` | — | empty | — | Not migrated |
+| `ERROR LOG` | LOG | 1 | `syncDailyPayments` error "Missing Target Header : DATE" (18-Jul-2026). | Evidence of Apps Script sync |
+| `Form responses 1` | CONFIGURATION | header only | Google Form "Karigar Name / Mode of Pay / Amount" — unused. | Not migrated |
 
 ---
 
@@ -343,6 +380,38 @@ Each rule has an ID so that later code, tests and questions can reference it.
 - **BR-91** Stock OUT from that godown (FG) and **reduces the payable**.
 - **BR-92** Series `DNGT - NNN`, but the stored rows have **no number**.
 
+### 5.9 Own factory (W6, W7)
+
+- **BR-100** A factory **lot** = lot no + FG item + allotted boxes; qty =
+  box × qty/box (item-specific, BR-02). A lot can contain several items
+  (e.g. `GT19`: TRANSPARENT-139 and SAMOSA-5012).
+- **BR-101** Lot numbers are **typed**, not generated: formats `GT19` and
+  `GT 19` both exist, and numbers restart (`GT01`–`GT25` then `GT 01`–`GT 27`)
+  → lot no alone is **not unique** (DQ-15, Q-37).
+- **BR-102** Received per lot line = `SUMIFS(receipt qty, item, lot)` — derived,
+  never typed. Balance = allotted − received; status `LOT ORDER COMPLETED` when
+  balance = 0 else `PENDING`. Same pattern as job-work POs (BR-12…14).
+- **BR-103** The receipt form lists only **pending lots of the chosen item**
+  (= spec §20 pending-list behaviour).
+- **BR-104** Over-receipt is not blocked by formula, but none exists in the
+  data. 8 lot lines are still pending (e.g. `GT 27 / SAMOSA-5012` 0 of 1 296).
+- **BR-105** 4 receipt rows have **no lot** (`MULTI HERITAGE JUTI PLAIN`,
+  `ROYAL JUTI PRINT PATAVA`, `THREAD JUTI`, `BLOCK HEEL BUCKLE`) — direct
+  factory receipts (Q-41).
+- **BR-106** Factory receipt = **stock IN** into the TO godown (W1
+  `STOCK IN GODOWN` adds `REC ENTRY` qty for `B-336`/`WAREHOUSE`) and counts
+  for carton consumption (BR-55, DQ-04). **No party ledger, no amount.**
+- **BR-107** Factory issue of RM: RM bills to party `FACTORY` at rate 0
+  (BR-36) — stock OUT only.
+- **BR-108** Factory costs are **payments only** (W7): no wage calculation,
+  attendance or piece counting exists in the sheets — each row is a paid
+  amount to a worker name or expense head. Month-wise "total paid" per worker
+  is the only worker report.
+- **BR-109** Factory cash accounts: `PAPA FACTORT` (factory cash, opening
+  6 000), `GAGAN CASH` (opening 11 300), `PAPA BANK` (opening −3 008),
+  `CURRENT ICICI BANK` (opening 258 550.49 — the same ICICI account as W3).
+  Cash in hand is computed only from **16-May-2026** onward.
+
 ---
 
 ## 6. Masters inferred from the sheets
@@ -358,6 +427,9 @@ Each rule has an ID so that later code, tests and questions can reference it.
 | DC locations (D-Mart) | `SALE PO!AK`, `MAIN SHEET!Y` | 11 | |
 | Party-item rates | `STOCK DETAIL!AI:AN`, last-rate lookups | — | |
 | Carton mapping FG → carton RM | `SALE INV DATA!X` | ~20 | |
+| Factory workers / expense heads | W7 `DAILY PAYMENT ENTRIES!C`, `PURCHASE LEDGER ENTRY!Q` | 71 | Bottom / upper / finish men, cutting master, salaried staff, expense heads (Q-39). |
+| Factories | W6 data validation | 2 | `FACTORY`, `MUSHIR FACTORY` (Q-38). |
+| Factory cash accounts | W7 `PAYMENT LEDGER!BA:BB` | 4 | `PAPA FACTORT`, `GAGAN CASH`, `PAPA BANK`, `CURRENT ICICI BANK` (+ openings). |
 
 ---
 
@@ -379,6 +451,10 @@ Each rule has an ID so that later code, tests and questions can reference it.
 | DQ-12 | Month tabs typed separately after April | W4 tabs from MAY onward are not formula views. | Import every month tab; de-duplicate by bill no. |
 | DQ-13 | `EXTRA RECEIVED` lines disappear from pending, `revise` flags on sale PO | — | Business meaning to confirm (Q-04, Q-22). |
 | DQ-14 | Name trailing spaces / case | `RM ` vs `RM`, `upi` vs `UPI`. | Normalise on import. |
+| DQ-15 | Factory lot numbers not unique | `GT19` (Mar-26) and `GT 19` (later); `GT01…` and `GT 01…`. Receipts are summed by lot + item over all time. | Two different lots with the same normalised number would merge; import must keep them separate (Q-37). |
+| DQ-16 | Factory receipts without lot | 4 rows (BR-105). | Need a rule for lot-less receipts. |
+| DQ-17 | Two payment books share accounts | ICICI bank and `PAPA BANK` rows exist in both W3 and W7, synced by script. | Import must de-duplicate so the bank balance is not counted twice (Q-42). |
+| DQ-18 | Worker names inconsistent | `SOHEAL BOTTOM Man`, `ROHIT NEW BOOTOM MAN`, `VIJAY  SALARY` (double space), `REKHA SALERY`. | Normalise on import. |
 
 ---
 
@@ -388,7 +464,9 @@ Each rule has an ID so that later code, tests and questions can reference it.
 |---|---|---|---|---|
 | Job-Work PO | `PURCHASE PO` → `PURCHASE PO ENTRY` | `job_work_orders`, `job_work_order_lines` | `fn_job_work_order_confirm` | TRANSACTION_FLOWS §4 |
 | JW FG receipt (partial) | `PURCHASE REC` → `PURCHASE REC ENTRY` | `job_work_receipts`, `…_lines`, `stock_movements`, `journal_entries` | `fn_job_work_receipt_post` | §5, §6 |
-| Factory lot receipt | missing workbook `REC ENTRY` | `production_lots`, `production_receipts` (pending Q-08) | `fn_production_receipt_post` | §7 |
+| Factory lot allotment | W6 `FACTORY PO` → `PO ENTRY` | `production_orders`, `production_order_lines` | `fn_production_order_confirm` | §7 |
+| Factory lot receipt (partial) | W6 `FACTORY REC` → `REC ENTRY` | `production_receipts`, `…_lines`, `stock_movements` | `fn_production_receipt_post` | §7 |
+| Factory wages & expenses | W7 `DAILY PAYMENT ENTRIES` | `vouchers` (PAYMENT), `journal_entries` | `fn_voucher_post` | §15 |
 | RM issue to JW | `SALE INVOICE` → `BEFORE CONFIRMATION` → `SALE INV DATA` | `material_issues`, `…_lines`, `stock_movements`, `journal_entries` | `fn_material_issue_approve_post` | §8 |
 | FG return / debit note to JW | `DEBIT NOTE` → `DEBIT NOTE ENTRY` | `job_work_returns`, `…_lines`, `stock_movements`, `journal_entries` | `fn_job_work_return_post` | §9 |
 | RM purchase (direct) | `PURCHASE REC` (W2) → `PURCHASE REC DATA` | `purchase_receipts`, `…_lines`, `stock_movements`, `journal_entries` | `fn_purchase_receipt_post` | §3 |
@@ -418,9 +496,10 @@ the database design; 🟡 block a specific module; 🟢 can be decided later.**
 - 🔴 **Q-01** Please share the **Apps Script** code of each workbook
   (Extensions → Apps Script → copy all files). It contains the SUBMIT logic and
   possibly validations not visible in formulas.
-- 🔴 **Q-02** Please share the missing workbooks: the **FACTORY** sheet
-  (`REC ENTRY` / `TOTAL ENTRY` with lots GT19, GT21…), the second **ICICI
-  DAILY PAYMENT ENTRIES** sheet, and whatever holds `SALE DATA`.
+- 🟡 **Q-02** ✅ FACTORY sheet (W6) and factory payment book (W7) received.
+  Please confirm W6 is the sheet `1JLgeYB2…` and W7 is `1MHDJbPA…` (open the
+  file → the ID is in the browser URL). Still missing: whatever holds
+  `SALE DATA` (`1DQcmPBe…`) — or confirm it is no longer used.
 - 🔴 **Q-03** Where are the **D-Mart tax invoices** (`T/26-27/NNN`) created
   today — Tally, Busy, Vyapar, a GST portal, another sheet? Should the new ERP
   **create** these invoices (with GST, HSN, e-way bill) or only **record** them?
@@ -438,9 +517,11 @@ the database design; 🟡 block a specific module; 🟢 can be decided later.**
 - 🟡 **Q-07** Is the job-work rate fixed **on the PO** (PO has a RATE column,
   rarely filled) or decided **at receipt** (last-rate rule)? Can two receipts of
   the same PO line have different rates?
-- 🔴 **Q-08** Own **factory** lots (`GT19`…): Is the factory a separate party
-  (`FACTORY` / `PAPA FACTORT`) that is paid per pair, or an in-house production
-  with no payable? How are lots created and closed?
+- 🔴 **Q-08** Own factory (W6/W7): the sheets show lots **without rate** and
+  factory costs paid directly as wages/expenses (BR-106, BR-108). Confirm:
+  the factory is **in-house** (no per-pair payable to "FACTORY"), and its cost
+  = wages + expenses + RM issued to it. Is a lot ever closed with a shortfall
+  (pending never received)?
 - 🟡 **Q-09** Is a **Job-Work PO document (PDF) sent to the karigar** today
   (`SHARE AND SUBMIT` button + mobile number)? WhatsApp or print?
 
@@ -530,3 +611,26 @@ the database design; 🟡 block a specific module; 🟢 can be decided later.**
   required module?
 - 🟢 **Q-36** Users and roles: who enters data today (names/roles), and who
   approves (Deepak = approver for RM issues)?
+
+### I. Own factory (added after W6 / W7)
+
+- 🔴 **Q-37** Lot numbering: are `GT19` and `GT 19` the **same lot** or a new
+  cycle? Should the ERP generate lot numbers (e.g. `LOT-2026-0001`) and keep
+  the old ones as reference, or must the typed `GT NN` format stay?
+- 🟡 **Q-38** `MUSHIR FACTORY` (in the TO list, never used in data) — a second
+  own factory, or an outside party? (A worker `MUSHIR UPPER MAN` is paid from
+  W7.)
+- 🔴 **Q-39** Factory workers: the spec excludes HRMS/payroll. Proposal: keep
+  each worker as a **payee** (party role `WORKER`) so "total paid per worker
+  per month" still works, and book payments to expense accounts (Factory
+  Wages – Bottom / Upper / Finish / Cutting, Salary). No attendance, no wage
+  calculation. OK? Or should piece-rate **earnings** (pairs made × rate) also
+  be recorded, so a worker balance (earned − paid) exists?
+- 🟡 **Q-40** `PAPA FACTORT` = factory petty-cash box? `GAGAN CASH` = cash held
+  by Gagan? `PAPA BANK` = a family bank account? Are they **company**
+  accounts (in the balance sheet) or owner's personal accounts?
+- 🟡 **Q-41** Factory receipts without a lot (BR-105): allowed in the ERP
+  (direct production receipt), or must every receipt reference a lot?
+- 🔴 **Q-42** W3 and W7 both contain ICICI / PAPA BANK rows, synced by Apps
+  Script. Which book is the **master** for which account, so that migration
+  imports every entry exactly once?

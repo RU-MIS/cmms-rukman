@@ -70,7 +70,8 @@ in heavy reports.
    └ lines               │     └ lines                  └ lines
  job_work_returns        │                            customer_credit_notes
    └ lines               │
- production_lots (factory, pending Q-08)
+ production_orders ─ lines (own factory lots)
+ production_receipts ─ lines
                          ▼
              stock_movements  ◄── stock_transfers / stock_adjustments
                          
@@ -166,7 +167,7 @@ enforced per company.
 
 ### 4.2 `party_roles`
 (`party_id`, `role`) with `role` ∈ `CUSTOMER`, `SUPPLIER`, `JOB_WORKER`,
-`CUTTER`, `TRANSPORTER`, `FACTORY`. A karigar who buys RM and sells FG is
+`CUTTER`, `TRANSPORTER`, `WORKER` (factory worker, payee only — §6.8). A karigar who buys RM and sells FG is
 **one party with role JOB_WORKER** (no duplicate master — spec §10).
 
 ### 4.3 `party_addresses` / `party_contacts`
@@ -213,7 +214,7 @@ Simple masters (`code`, `name`, `parent_id` for categories). RM "item type"
 | | |
 |---|---|
 | Purpose | Every stock location (spec §13). |
-| Fields | `code` (B-336, WAREHOUSE, MANGOLPURI, OFFICE, RAW-MATERIAL, VINOD-DOODH, CB, GAGATOSE…), `name`, `godown_type` ∈ OWN_STORE, FACTORY, **PARTY_LOCATION** (material lying with a cutter/job worker), `party_id` (for PARTY_LOCATION), `allow_negative boolean` default false, `is_active` |
+| Fields | `code` (B-336, WAREHOUSE, MANGOLPURI, OFFICE, RAW-MATERIAL, VINOD-DOODH, CB, GAGATOSE, FACTORY, MUSHIR-FACTORY…), `name`, `godown_type` ∈ OWN_STORE, FACTORY, **PARTY_LOCATION** (material lying with a cutter/job worker), `party_id` (for PARTY_LOCATION), `allow_negative boolean` default false, `is_active` |
 | Indexes | unique(`company_id`,`code`) |
 
 ### 4.10 `party_item_rates`
@@ -238,7 +239,9 @@ Sundry Debtors (control), Sundry Creditors (control), Job-Work Charges,
 Purchase – Raw Material, Sales – Finished Goods, Material Issued to Job
 Workers (Q-11), Input GST (CGST/SGST/IGST), Output GST, TDS Receivable,
 Bank Charges, Rate Difference / Short Receipt (Q-23), Capital, Drawings,
-Opening Balance Adjustment, Round Off. The complete list waits for Q-32.
+Opening Balance Adjustment, Round Off, **Factory Wages** (Bottom / Upper /
+Finish / Cutting), **Factory Salaries**, **Factory Expenses** (daily, food,
+maintenance, medicine), **Cartage** (Q-39). The complete list waits for Q-32.
 
 **Party sub-ledgers:** every `journal_entry_line` that hits a control account
 also carries `party_id`, so customer/vendor ledgers are simply
@@ -320,10 +323,39 @@ Debit note to karigar, `DNGT - NNN` (sheet `DEBIT NOTE ENTRY`). Header:
 `base_qty`, `rate`, `amount`. Whether a return **re-opens** pending qty on
 the PO is part of Q-05 (default: no).
 
-### 6.6 `production_lots` / `production_receipts` (own factory — pending Q-08)
-Placeholder until the FACTORY workbook is analysed: `lot_no` (GT19…),
-`item_id`, `planned_base_qty`, `status` (PENDING / LOT_ORDER_COMPLETED);
-receipts reference the lot and post `PRODUCTION_RECEIPT` movements.
+### 6.6 `production_orders` ⓒⓣ + `production_order_lines` (own factory lots — W6)
+| | |
+|---|---|
+| Purpose | Lot allotted to the own factory (W6 `PO ENTRY`). Same shape as a job-work order, but **no party payable and no rate**. |
+| Header FK | `factory_godown_id` → `godowns` (type FACTORY: `FACTORY`, `MUSHIR FACTORY` — Q-38), `default_receipt_godown_id` |
+| Header fields | `lot_no` (display, e.g. `GT 19`; **not unique on its own** — Q-37), `doc_no` from sequence (unique), `lot_cycle` (optional, distinguishes `GT19` from `GT 19`), `status` ∈ OPEN, PARTIALLY_RECEIVED, COMPLETED (= sheet "LOT ORDER COMPLETED"), SHORT_CLOSED, CANCELLED |
+| Line fields | `item_id` (FG), `qty` (boxes typed), `unit_id`, `factor_to_base`, `planned_base_qty`, `short_closed_base_qty` |
+| Constraints | unique(`order_id`,`item_id`); `planned_base_qty > 0` |
+| Not stored | received / pending — derived in `v_production_order_line_status` |
+
+### 6.7 `production_receipts` ⓒⓣ + `production_receipt_lines` (W6 `REC ENTRY`)
+| | |
+|---|---|
+| Header FK | `factory_godown_id` (from), `godown_id` (to: B-336 / WAREHOUSE) |
+| Line FK | `order_line_id` → `production_order_lines` (**nullable only if Q-41 allows lot-less receipts**), `item_id`, `unit_id` |
+| Line fields | `qty`, `factor_to_base`, `base_qty` |
+| Rule | same locking / pending check as job-work receipts (§6.3) |
+| Stock | `PRODUCTION_RECEIPT` IN to `godown_id` (+ carton `CONSUMPTION` if Q-19 applies to factory receipts) |
+| Ledger | **none** (no rate, BR-106) |
+
+RM given to the factory (W2 bills to party `FACTORY`, rate 0) becomes a
+**stock transfer** to the FACTORY godown or a `material_issues` row with
+zero amount — decided with Q-08.
+
+### 6.8 Factory workers (no HRMS — spec §9)
+Workers from W7 are `parties` with role **`WORKER`** (payee only), optionally
+`worker_group` ∈ BOTTOM, UPPER, FINISH, CUTTING, SALARY, OTHER. They get **no**
+attendance, salary structure or payroll tables. Payments are `vouchers`
+(PAYMENT) debiting a factory expense account with `party_id` = worker, so
+"total paid per worker per month" (W7 `PURCHASE LEDGER ENTRY`) is a report on
+journal lines. If Q-39 asks for earnings tracking, a simple
+`worker_earnings` document (worker, date, item, pairs, rate, amount →
+`Factory Wages Dr / [worker] Cr`) is added — still not payroll.
 
 ---
 
@@ -408,6 +440,7 @@ dates in closed periods.
 | `v_job_work_pending` | `PURCHASE REC` side panel | rows of the above with pending > 0 (spec §20) |
 | `v_sales_order_line_status` | `SALE PO`, `PO TRACKING SHEET` | ordered, dispatched, pending, delivered |
 | `fn_dispatch_plan(dc[], from, to)` | `PLANING SHEET` | pending boxes by DC/item/delivery date |
+| `v_production_order_line_status` | W6 `TOTAL ENTRY`, `FACTORY REC` side panel | allotted, received, pending, status per lot line |
 | `fn_item_planning(item)` | `Item WISE STOCK` | stock + open demand + JW pending + factory pending → balance to order; cartons required |
 | `fn_party_ledger(party, from, to)` | `PURCHASE LEDGER ENTRY`, `SALE LEDGER` | opening, debit, credit, running balance from `journal_entry_lines` |
 | `v_bill_outstanding`, `fn_party_outstanding` | W4 `MAIN SHEET`, `OPENING BAL ENTRY!O:Q` | bills − allocations − notes, ageing |
@@ -461,6 +494,7 @@ materialized views only if measured necessary (spec §31).
 | `fn_job_work_order_confirm(id)` | status → OPEN, doc no | ≥ 1 line, party is JOB_WORKER |
 | `fn_job_work_receipt_post(payload)` | receipt + lines, `JOB_WORK_RECEIPT` movements, carton `CONSUMPTION` movements (Q-19), journal, order status update | pending ≥ qty per line, godown active, period open, rate rule (Q-06/07) |
 | `fn_material_issue_submit/approve/post` | issue + lines, `JOB_WORK_ISSUE` movements, journal | stock available (Q-18), APPROVE permission |
+| `fn_production_order_confirm` / `fn_production_receipt_post` | lot + lines; receipt + lines, `PRODUCTION_RECEIPT` movements (+ carton), lot status | pending ≥ qty per lot line |
 | `fn_job_work_return_post` | return + lines, `JOB_WORK_RETURN` movements, journal | stock available |
 | `fn_purchase_receipt_post` | receipt + lines, `PURCHASE_RECEIPT` movements, journal, PO status | PO pending (if linked) |
 | `fn_stock_transfer_post` | paired OUT/IN movements | stock available at source |
