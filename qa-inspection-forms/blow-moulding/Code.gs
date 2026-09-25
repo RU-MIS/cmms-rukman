@@ -8,6 +8,8 @@
 
 var FORM_TITLE = 'In-Process Inspection - Blow Moulding';
 var DOC_CODE = 'F/QA/3A';
+var REPORT_TITLE = 'IN-PROCESS INSPECTION REPORT-BLOW MOULDING';
+var REV_INFO = 'REV.:00/10.09.2025';
 var SHEET_NAME = 'Blow Moulding Log';
 var CHECKING_FREQ = 'Every Two Hours';
 var REPORT_EMAIL = 'qms1@rukmanudyog.com';
@@ -250,11 +252,13 @@ function buildReportHtml_(sheet, minRow, maxRow) {
 }
 
 /**
- * Builds a standalone spreadsheet laid out like the PAPER FORM (S.No. column,
- * a single Date/M-C/Part header line, a "TIME" super-header over merged
- * Day/A-Shift & Night/B-Shift bands, and Checking Freq./Checking Mode merged
- * into one cell down the whole table) - not just a printout of the data
- * sheet's own columns - and exports it as a PDF.
+ * Builds a standalone spreadsheet laid out exactly like the paper form's
+ * printed layout: logo/title band with doc code + rev info in the corner,
+ * a Date / M-C No. / Part Name info row, a "Time" super-header over merged
+ * Day/A-Shift & Night/B-Shift bands, one column per time slot (no separate
+ * sign sub-column), a single Remarks footer row, a single QA Inspector Sign
+ * footer row (one signer per time-slot column), and the two NOTE lines -
+ * then exports it as a PDF.
  *
  * The temp spreadsheet is intentionally NOT deleted afterwards: Apps
  * Script's DriveApp always demands the full (Google "restricted") Drive
@@ -266,71 +270,98 @@ function buildReportHtml_(sheet, minRow, maxRow) {
 function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machineNo, partName) {
   var totalCols = totalCols_();
   var bodyRows = sheet.getRange(minRow, 1, maxRow - minRow + 1, totalCols).getValues();
-  var tz = Session.getScriptTimeZone();
 
-  var TEMP_FIXED = ['S.No.', 'Check Points', 'Specification', 'Checking Freq.', 'Checking Mode'];
-  var TEMP_TAIL = ['Remarks', 'Status', 'Last Submitted'];
+  var TEMP_FIXED = ['S. NO.', 'CHECK POINTS', 'SPECIFICATIONS', 'CHECKING FREQUENCY', 'CHECKING MODE'];
+  var lastFixedCol = TEMP_FIXED.length;
   var slots = allSlotsInOrder_();
-  var tempTotalCols = TEMP_FIXED.length + slots.length * 2 + TEMP_TAIL.length;
+  var tempTotalCols = lastFixedCol + slots.length; // one column per slot - no separate sign column
 
-  function tempSlotValueCol(i) { return TEMP_FIXED.length + i * 2 + 1; }
-  var tempRemarksCol = TEMP_FIXED.length + slots.length * 2 + 1;
+  function tempSlotCol(i) { return lastFixedCol + i + 1; }
 
   var tempSs = SpreadsheetApp.create(reportName);
   var ts = tempSs.getSheets()[0];
 
-  ts.getRange(1, 1, 1, tempTotalCols).merge()
+  // Row 1: RUKMAN UDYOG / doc code in the corner.
+  ts.getRange(1, 1, 1, tempTotalCols - 1).merge()
     .setValue('RUKMAN UDYOG')
-    .setFontWeight('bold').setFontSize(16).setHorizontalAlignment('center')
-    .setFontColor('#111111');
-  ts.getRange(2, 1, 1, tempTotalCols).merge()
-    .setValue(FORM_TITLE.toUpperCase() + '  (' + DOC_CODE + ')')
+    .setFontWeight('bold').setFontSize(16).setHorizontalAlignment('center');
+  ts.getRange(1, tempTotalCols)
+    .setValue(DOC_CODE).setFontWeight('bold').setHorizontalAlignment('center');
+
+  // Row 2: black title band / rev info in the corner.
+  ts.getRange(2, 1, 1, tempTotalCols - 1).merge()
+    .setValue(REPORT_TITLE)
     .setFontWeight('bold').setFontSize(12).setHorizontalAlignment('center')
     .setBackground('#111111').setFontColor('#ffffff');
-  ts.getRange(3, 1, 1, tempTotalCols).merge()
-    .setValue('DATE: ' + dateStr + '      M/C No.: ' + machineNo + '      PART NAME: ' + partName)
-    .setFontWeight('bold').setHorizontalAlignment('center').setBackground('#f2f2f2');
+  ts.getRange(2, tempTotalCols)
+    .setValue(REV_INFO).setFontWeight('bold').setHorizontalAlignment('center');
 
-  // "TIME" super-header, then Day/A-Shift & Night/B-Shift bands beneath it.
-  ts.getRange(4, tempSlotValueCol(0), 1, slots.length * 2).merge()
-    .setValue('TIME').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#e8e8e8');
-  var perShiftCols = SLOTS.length * 2;
-  ts.getRange(5, tempSlotValueCol(0), 1, perShiftCols).merge()
+  // Row 3: Date / M-C No. / Part Name info boxes.
+  ts.getRange(3, 1, 1, 3).merge().setValue('Date :- ' + dateStr).setFontWeight('bold');
+  ts.getRange(3, 4, 1, 2).merge().setValue('M/C No. :- ' + machineNo).setFontWeight('bold');
+  ts.getRange(3, tempSlotCol(0), 1, slots.length).merge().setValue('Part Name :- ' + partName).setFontWeight('bold');
+
+  // Row 4: "Time" super-header.
+  ts.getRange(4, tempSlotCol(0), 1, slots.length).merge()
+    .setValue('Time').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#e8e8e8');
+
+  // Row 5: Day/A-Shift, Night/B-Shift bands.
+  ts.getRange(5, tempSlotCol(0), 1, SLOTS.length).merge()
     .setValue('Day/A-Shift').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#eef4ff');
-  ts.getRange(5, tempSlotValueCol(SLOTS.length), 1, perShiftCols).merge()
+  ts.getRange(5, tempSlotCol(SLOTS.length), 1, SLOTS.length).merge()
     .setValue('Night/B-Shift').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#eef4ff');
 
+  // Row 6: column headers.
   var headerRow = TEMP_FIXED.slice();
-  slots.forEach(function (s) {
-    headerRow.push(s.slot);
-    headerRow.push('QA Inspector Sign');
-  });
-  headerRow = headerRow.concat(TEMP_TAIL);
+  slots.forEach(function (s) { headerRow.push(s.slot); });
   ts.getRange(6, 1, 1, tempTotalCols).setValues([headerRow])
-    .setFontWeight('bold').setBackground('#f5f5f5');
+    .setFontWeight('bold').setBackground('#f5f5f5').setHorizontalAlignment('center');
 
+  // Data rows: S.No., Check Point, Specification, Freq., Mode, then just the
+  // slot VALUES (OK/Not OK/number) - no separate sign column per slot.
+  var dataStartRow = 7;
   var dataRows = bodyRows.map(function (row, idx) {
     var out = [idx + 1, row[4], row[5], row[6], row[7]];
     for (var i = 0; i < slots.length; i++) {
       out.push(row[FIXED_HEADERS.length + i * 2] || '');
-      out.push(row[FIXED_HEADERS.length + i * 2 + 1] || '');
     }
-    out.push(row[remarksCol_() - 1] || '');
-    out.push(row[statusCol_() - 1] || '');
-    var lastSub = row[lastSubmittedCol_() - 1];
-    out.push(Object.prototype.toString.call(lastSub) === '[object Date]'
-      ? Utilities.formatDate(lastSub, tz, 'dd-MMM-yyyy HH:mm') : (lastSub || ''));
     return out;
   });
-  ts.getRange(7, 1, dataRows.length, tempTotalCols).setValues(dataRows);
+  ts.getRange(dataStartRow, 1, dataRows.length, tempTotalCols).setValues(dataRows).setHorizontalAlignment('center');
+  ts.getRange(dataStartRow, 2, dataRows.length, 2).setHorizontalAlignment('left');
 
-  // Checking Freq. / Checking Mode are the same for every row in this
+  // Checking Frequency / Checking Mode are the same for every row in this
   // session, so merge them into one tall cell like the paper form does.
-  ts.getRange(7, 4, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
-  ts.getRange(7, 5, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
+  ts.getRange(dataStartRow, 4, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
+  ts.getRange(dataStartRow, 5, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
 
-  ts.getRange(1, 1, 6 + dataRows.length, tempTotalCols)
-    .setBorder(true, true, true, true, true, true);
+  // Remarks footer row.
+  var remarksRow = dataStartRow + dataRows.length;
+  var remarksValue = bodyRows[0][remarksCol_() - 1] || '';
+  ts.getRange(remarksRow, 1, 1, lastFixedCol).merge().setValue('REMARKS:-').setFontWeight('bold');
+  ts.getRange(remarksRow, tempSlotCol(0), 1, slots.length).merge().setValue(remarksValue);
+
+  // QA Inspector Sign footer row - one signer per time-slot column, read
+  // from the first Check Point row (the signer is the same for every
+  // checkpoint within a single slot submission).
+  var signRow = remarksRow + 1;
+  ts.getRange(signRow, 1, 1, lastFixedCol).merge().setValue('QA INSPECTOR SIGN.').setFontWeight('bold');
+  for (var i = 0; i < slots.length; i++) {
+    var signVal = bodyRows[0][slotSignCol_(i) - 1] || '';
+    ts.getRange(signRow, tempSlotCol(i)).setValue(signVal).setHorizontalAlignment('center');
+  }
+
+  // NOTE lines.
+  var note1Row = signRow + 1;
+  ts.getRange(note1Row, 1, 1, tempTotalCols).merge()
+    .setValue('NOTE: Retain one inspected ok. sample dully signed by QC Incharge')
+    .setFontSize(9).setHorizontalAlignment('left');
+  ts.getRange(note1Row + 1, 1, 1, tempTotalCols).merge()
+    .setValue('Retain one sample dully signed by Prod. & QA incharge (if deviation required)')
+    .setFontSize(9).setHorizontalAlignment('left');
+
+  var lastRow = note1Row + 1;
+  ts.getRange(1, 1, lastRow, tempTotalCols).setBorder(true, true, true, true, true, true);
   ts.autoResizeColumns(1, tempTotalCols);
   ts.setFrozenRows(6);
   SpreadsheetApp.flush();
