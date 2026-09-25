@@ -458,5 +458,8 @@ function forceAuthAllScopes() {
   SpreadsheetApp.getActiveSpreadsheet();
   MailApp.getRemainingDailyQuota();
   UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
-  DriveApp.getRootFolder();
+  // drive.file only grants access to files this script itself creates, so
+  // exercise it the same way emailFinalReport_ does: create, then delete.
+  var testFile = SpreadsheetApp.create('temp-auth-test');
+  DriveApp.getFileById(testFile.getId()).setTrashed(true);
 }
