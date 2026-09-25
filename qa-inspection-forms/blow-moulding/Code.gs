@@ -23,7 +23,7 @@ var SHIFTS = ['Day/A-Shift', 'Night/B-Shift'];
 // type: 'select' -> OK/NG dropdown, 'number' -> numeric input.
 var CHECKPOINTS = [
   { key: 'appearance', label: 'Appearance', spec: 'Should be as per sample', mode: 'Visual', type: 'select' },
-  { key: 'weight', label: 'Weight', spec: 'As per Part IS 1/3', mode: 'Visual', type: 'number' },
+  { key: 'weight', label: 'Weight', spec: 'As per Part IS 1/3', mode: 'Visual', type: 'text' },
   { key: 'airProblem', label: 'Air Problem', spec: 'Not Required', mode: 'Visual', type: 'select' },
   { key: 'lowWeight', label: 'Low Weight', spec: 'Not Required', mode: 'Visual', type: 'select' },
   { key: 'highWeight', label: 'High Weight', spec: 'Not Required', mode: 'Visual', type: 'select' },

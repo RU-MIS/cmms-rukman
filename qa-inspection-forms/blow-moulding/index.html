@@ -135,6 +135,8 @@
         var inputHtml;
         if (cp.type === 'number') {
           inputHtml = '<input type="number" step="any" data-key="' + cp.key + '" id="cp_' + cp.key + '">';
+        } else if (cp.type === 'text') {
+          inputHtml = '<input type="text" data-key="' + cp.key + '" id="cp_' + cp.key + '" placeholder="e.g. 100 GSM or 1.2 KGS">';
         } else {
           inputHtml = '<select data-key="' + cp.key + '" id="cp_' + cp.key + '">' +
             '<option value="">Select</option>' +
