@@ -407,7 +407,9 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
 
   var url = 'https://docs.google.com/spreadsheets/d/' + tempSs.getId() + '/export' +
     '?format=pdf&gid=' + ts.getSheetId() +
-    '&size=A3&portrait=false&fitw=true&fith=true&gridlines=true' +
+    '&size=A4&portrait=false&fitw=true&fith=true&scale=4&gridlines=true' +
+    '&horizontal_alignment=CENTER&vertical_alignment=MIDDLE' +
+    '&top_margin=0.20&bottom_margin=0.20&left_margin=0.20&right_margin=0.20' +
     '&printtitle=false&sheetnames=false&pagenum=UNDEFINED';
   var response = UrlFetchApp.fetch(url, {
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
