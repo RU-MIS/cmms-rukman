@@ -254,7 +254,14 @@ function buildReportHtml_(sheet, minRow, maxRow) {
  * a single Date/M-C/Part header line, a "TIME" super-header over merged
  * Day/A-Shift & Night/B-Shift bands, and Checking Freq./Checking Mode merged
  * into one cell down the whole table) - not just a printout of the data
- * sheet's own columns - exports it as a PDF, then deletes the temp file.
+ * sheet's own columns - and exports it as a PDF.
+ *
+ * The temp spreadsheet is intentionally NOT deleted afterwards: Apps
+ * Script's DriveApp always demands the full (Google "restricted") Drive
+ * scope to delete a file, even one the script itself just created, and
+ * that scope keeps getting blocked outright for this account. Leaving a
+ * small named "<report name>" sheet behind in Drive is harmless - delete
+ * them manually from Drive occasionally if they build up.
  */
 function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machineNo, partName) {
   var totalCols = totalCols_();
@@ -270,80 +277,72 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
   var tempRemarksCol = TEMP_FIXED.length + slots.length * 2 + 1;
 
   var tempSs = SpreadsheetApp.create(reportName);
-  try {
-    var ts = tempSs.getSheets()[0];
+  var ts = tempSs.getSheets()[0];
 
-    ts.getRange(1, 1, 1, tempTotalCols).merge()
-      .setValue('RUKMAN UDYOG')
-      .setFontWeight('bold').setFontSize(16).setHorizontalAlignment('center')
-      .setFontColor('#111111');
-    ts.getRange(2, 1, 1, tempTotalCols).merge()
-      .setValue(FORM_TITLE.toUpperCase() + '  (' + DOC_CODE + ')')
-      .setFontWeight('bold').setFontSize(12).setHorizontalAlignment('center')
-      .setBackground('#111111').setFontColor('#ffffff');
-    ts.getRange(3, 1, 1, tempTotalCols).merge()
-      .setValue('DATE: ' + dateStr + '      M/C No.: ' + machineNo + '      PART NAME: ' + partName)
-      .setFontWeight('bold').setHorizontalAlignment('center').setBackground('#f2f2f2');
+  ts.getRange(1, 1, 1, tempTotalCols).merge()
+    .setValue('RUKMAN UDYOG')
+    .setFontWeight('bold').setFontSize(16).setHorizontalAlignment('center')
+    .setFontColor('#111111');
+  ts.getRange(2, 1, 1, tempTotalCols).merge()
+    .setValue(FORM_TITLE.toUpperCase() + '  (' + DOC_CODE + ')')
+    .setFontWeight('bold').setFontSize(12).setHorizontalAlignment('center')
+    .setBackground('#111111').setFontColor('#ffffff');
+  ts.getRange(3, 1, 1, tempTotalCols).merge()
+    .setValue('DATE: ' + dateStr + '      M/C No.: ' + machineNo + '      PART NAME: ' + partName)
+    .setFontWeight('bold').setHorizontalAlignment('center').setBackground('#f2f2f2');
 
-    // "TIME" super-header, then Day/A-Shift & Night/B-Shift bands beneath it.
-    ts.getRange(4, tempSlotValueCol(0), 1, slots.length * 2).merge()
-      .setValue('TIME').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#e8e8e8');
-    var perShiftCols = SLOTS.length * 2;
-    ts.getRange(5, tempSlotValueCol(0), 1, perShiftCols).merge()
-      .setValue('Day/A-Shift').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#eef4ff');
-    ts.getRange(5, tempSlotValueCol(SLOTS.length), 1, perShiftCols).merge()
-      .setValue('Night/B-Shift').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#eef4ff');
+  // "TIME" super-header, then Day/A-Shift & Night/B-Shift bands beneath it.
+  ts.getRange(4, tempSlotValueCol(0), 1, slots.length * 2).merge()
+    .setValue('TIME').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#e8e8e8');
+  var perShiftCols = SLOTS.length * 2;
+  ts.getRange(5, tempSlotValueCol(0), 1, perShiftCols).merge()
+    .setValue('Day/A-Shift').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#eef4ff');
+  ts.getRange(5, tempSlotValueCol(SLOTS.length), 1, perShiftCols).merge()
+    .setValue('Night/B-Shift').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#eef4ff');
 
-    var headerRow = TEMP_FIXED.slice();
-    slots.forEach(function (s) {
-      headerRow.push(s.slot);
-      headerRow.push('QA Inspector Sign');
-    });
-    headerRow = headerRow.concat(TEMP_TAIL);
-    ts.getRange(6, 1, 1, tempTotalCols).setValues([headerRow])
-      .setFontWeight('bold').setBackground('#f5f5f5');
+  var headerRow = TEMP_FIXED.slice();
+  slots.forEach(function (s) {
+    headerRow.push(s.slot);
+    headerRow.push('QA Inspector Sign');
+  });
+  headerRow = headerRow.concat(TEMP_TAIL);
+  ts.getRange(6, 1, 1, tempTotalCols).setValues([headerRow])
+    .setFontWeight('bold').setBackground('#f5f5f5');
 
-    var dataRows = bodyRows.map(function (row, idx) {
-      var out = [idx + 1, row[4], row[5], row[6], row[7]];
-      for (var i = 0; i < slots.length; i++) {
-        out.push(row[FIXED_HEADERS.length + i * 2] || '');
-        out.push(row[FIXED_HEADERS.length + i * 2 + 1] || '');
-      }
-      out.push(row[remarksCol_() - 1] || '');
-      out.push(row[statusCol_() - 1] || '');
-      var lastSub = row[lastSubmittedCol_() - 1];
-      out.push(Object.prototype.toString.call(lastSub) === '[object Date]'
-        ? Utilities.formatDate(lastSub, tz, 'dd-MMM-yyyy HH:mm') : (lastSub || ''));
-      return out;
-    });
-    ts.getRange(7, 1, dataRows.length, tempTotalCols).setValues(dataRows);
-
-    // Checking Freq. / Checking Mode are the same for every row in this
-    // session, so merge them into one tall cell like the paper form does.
-    ts.getRange(7, 4, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
-    ts.getRange(7, 5, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
-
-    ts.getRange(1, 1, 6 + dataRows.length, tempTotalCols)
-      .setBorder(true, true, true, true, true, true);
-    ts.autoResizeColumns(1, tempTotalCols);
-    ts.setFrozenRows(6);
-    SpreadsheetApp.flush();
-
-    var url = 'https://docs.google.com/spreadsheets/d/' + tempSs.getId() + '/export' +
-      '?format=pdf&gid=' + ts.getSheetId() +
-      '&size=A3&portrait=false&fitw=true&fith=true&gridlines=true' +
-      '&printtitle=false&sheetnames=false&pagenum=UNDEFINED';
-    var response = UrlFetchApp.fetch(url, {
-      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
-    });
-    return response.getBlob().setName(reportName + '.pdf');
-  } finally {
-    try {
-      DriveApp.getFileById(tempSs.getId()).setTrashed(true);
-    } catch (e) {
-      // Cleanup failure shouldn't fail the report - a stray temp sheet is harmless.
+  var dataRows = bodyRows.map(function (row, idx) {
+    var out = [idx + 1, row[4], row[5], row[6], row[7]];
+    for (var i = 0; i < slots.length; i++) {
+      out.push(row[FIXED_HEADERS.length + i * 2] || '');
+      out.push(row[FIXED_HEADERS.length + i * 2 + 1] || '');
     }
-  }
+    out.push(row[remarksCol_() - 1] || '');
+    out.push(row[statusCol_() - 1] || '');
+    var lastSub = row[lastSubmittedCol_() - 1];
+    out.push(Object.prototype.toString.call(lastSub) === '[object Date]'
+      ? Utilities.formatDate(lastSub, tz, 'dd-MMM-yyyy HH:mm') : (lastSub || ''));
+    return out;
+  });
+  ts.getRange(7, 1, dataRows.length, tempTotalCols).setValues(dataRows);
+
+  // Checking Freq. / Checking Mode are the same for every row in this
+  // session, so merge them into one tall cell like the paper form does.
+  ts.getRange(7, 4, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
+  ts.getRange(7, 5, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
+
+  ts.getRange(1, 1, 6 + dataRows.length, tempTotalCols)
+    .setBorder(true, true, true, true, true, true);
+  ts.autoResizeColumns(1, tempTotalCols);
+  ts.setFrozenRows(6);
+  SpreadsheetApp.flush();
+
+  var url = 'https://docs.google.com/spreadsheets/d/' + tempSs.getId() + '/export' +
+    '?format=pdf&gid=' + ts.getSheetId() +
+    '&size=A3&portrait=false&fitw=true&fith=true&gridlines=true' +
+    '&printtitle=false&sheetnames=false&pagenum=UNDEFINED';
+  var response = UrlFetchApp.fetch(url, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+  });
+  return response.getBlob().setName(reportName + '.pdf');
 }
 
 /**
@@ -458,8 +457,4 @@ function forceAuthAllScopes() {
   SpreadsheetApp.getActiveSpreadsheet();
   MailApp.getRemainingDailyQuota();
   UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
-  // drive.file only grants access to files this script itself creates, so
-  // exercise it the same way emailFinalReport_ does: create, then delete.
-  var testFile = SpreadsheetApp.create('temp-auth-test');
-  DriveApp.getFileById(testFile.getId()).setTrashed(true);
 }
