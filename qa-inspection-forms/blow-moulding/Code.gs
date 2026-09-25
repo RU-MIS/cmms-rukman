@@ -274,47 +274,56 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
   var TEMP_FIXED = ['S. NO.', 'CHECK POINTS', 'SPECIFICATIONS', 'CHECKING FREQUENCY', 'CHECKING MODE'];
   var lastFixedCol = TEMP_FIXED.length;
   var slots = allSlotsInOrder_();
-  var tempTotalCols = lastFixedCol + slots.length; // one column per slot - no separate sign column
+  // dataGridCols is the real table width (fixed columns + one per slot). The
+  // doc-code/rev-info corner labels get their OWN extra column beyond this,
+  // so their long text never forces the last slot column to stretch wide
+  // and fall out of alignment with the rest of the grid.
+  var dataGridCols = lastFixedCol + slots.length;
+  var cornerCol = dataGridCols + 1;
+  var tempTotalCols = cornerCol;
 
   function tempSlotCol(i) { return lastFixedCol + i + 1; }
 
   var tempSs = SpreadsheetApp.create(reportName);
   var ts = tempSs.getSheets()[0];
 
-  // Row 1: RUKMAN UDYOG / doc code in the corner.
-  ts.getRange(1, 1, 1, tempTotalCols - 1).merge()
+  // Row 1: RUKMAN UDYOG / doc code in its own dedicated corner column.
+  ts.getRange(1, 1, 1, dataGridCols).merge()
     .setValue('RUKMAN UDYOG')
     .setFontWeight('bold').setFontSize(16).setHorizontalAlignment('center');
-  ts.getRange(1, tempTotalCols)
+  ts.getRange(1, cornerCol)
     .setValue(DOC_CODE).setFontWeight('bold').setHorizontalAlignment('center');
 
-  // Row 2: black title band / rev info in the corner.
-  ts.getRange(2, 1, 1, tempTotalCols - 1).merge()
+  // Row 2: black title band / rev info in the corner column.
+  ts.getRange(2, 1, 1, dataGridCols).merge()
     .setValue(REPORT_TITLE)
     .setFontWeight('bold').setFontSize(12).setHorizontalAlignment('center')
     .setBackground('#111111').setFontColor('#ffffff');
-  ts.getRange(2, tempTotalCols)
+  ts.getRange(2, cornerCol)
     .setValue(REV_INFO).setFontWeight('bold').setHorizontalAlignment('center');
 
-  // Row 3: Date / M-C No. / Part Name info boxes.
+  // Row 3: Date / M-C No. / Part Name info boxes (Part Name box absorbs the
+  // corner column too, so this row still reads as full width).
   ts.getRange(3, 1, 1, 3).merge().setValue('Date :- ' + dateStr).setFontWeight('bold');
   ts.getRange(3, 4, 1, 2).merge().setValue('M/C No. :- ' + machineNo).setFontWeight('bold');
-  ts.getRange(3, tempSlotCol(0), 1, slots.length).merge().setValue('Part Name :- ' + partName).setFontWeight('bold');
+  ts.getRange(3, tempSlotCol(0), 1, tempTotalCols - tempSlotCol(0) + 1).merge()
+    .setValue('Part Name :- ' + partName).setFontWeight('bold');
 
-  // Row 4: "Time" super-header.
+  // Row 4: "Time" super-header - spans only the real slot columns, not the
+  // dedicated corner column.
   ts.getRange(4, tempSlotCol(0), 1, slots.length).merge()
     .setValue('Time').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#e8e8e8');
 
-  // Row 5: Day/A-Shift, Night/B-Shift bands.
+  // Row 5: Day/A-Shift, Night/B-Shift bands - also only the real slot columns.
   ts.getRange(5, tempSlotCol(0), 1, SLOTS.length).merge()
     .setValue('Day/A-Shift').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#eef4ff');
   ts.getRange(5, tempSlotCol(SLOTS.length), 1, SLOTS.length).merge()
     .setValue('Night/B-Shift').setFontWeight('bold').setHorizontalAlignment('center').setBackground('#eef4ff');
 
-  // Row 6: column headers.
+  // Row 6: column headers - only the real grid columns.
   var headerRow = TEMP_FIXED.slice();
   slots.forEach(function (s) { headerRow.push(s.slot); });
-  ts.getRange(6, 1, 1, tempTotalCols).setValues([headerRow])
+  ts.getRange(6, 1, 1, dataGridCols).setValues([headerRow])
     .setFontWeight('bold').setBackground('#f5f5f5').setHorizontalAlignment('center');
 
   // Data rows: S.No., Check Point, Specification, Freq., Mode, then just the
@@ -327,7 +336,7 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
     }
     return out;
   });
-  ts.getRange(dataStartRow, 1, dataRows.length, tempTotalCols).setValues(dataRows).setHorizontalAlignment('center');
+  ts.getRange(dataStartRow, 1, dataRows.length, dataGridCols).setValues(dataRows).setHorizontalAlignment('center');
   ts.getRange(dataStartRow, 2, dataRows.length, 2).setHorizontalAlignment('left');
 
   // Checking Frequency / Checking Mode are the same for every row in this
@@ -335,15 +344,16 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
   ts.getRange(dataStartRow, 4, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
   ts.getRange(dataStartRow, 5, dataRows.length, 1).merge().setVerticalAlignment('middle').setHorizontalAlignment('center');
 
-  // Remarks footer row.
+  // Remarks footer row - value cell absorbs the corner column so the row
+  // still spans the full width.
   var remarksRow = dataStartRow + dataRows.length;
   var remarksValue = bodyRows[0][remarksCol_() - 1] || '';
   ts.getRange(remarksRow, 1, 1, lastFixedCol).merge().setValue('REMARKS:-').setFontWeight('bold');
-  ts.getRange(remarksRow, tempSlotCol(0), 1, slots.length).merge().setValue(remarksValue);
+  ts.getRange(remarksRow, tempSlotCol(0), 1, tempTotalCols - tempSlotCol(0) + 1).merge().setValue(remarksValue);
 
   // QA Inspector Sign footer row - one signer per time-slot column, read
   // from the first Check Point row (the signer is the same for every
-  // checkpoint within a single slot submission).
+  // checkpoint within a single slot submission). Corner column stays blank.
   var signRow = remarksRow + 1;
   ts.getRange(signRow, 1, 1, lastFixedCol).merge().setValue('QA INSPECTOR SIGN.').setFontWeight('bold');
   for (var i = 0; i < slots.length; i++) {
@@ -351,7 +361,7 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
     ts.getRange(signRow, tempSlotCol(i)).setValue(signVal).setHorizontalAlignment('center');
   }
 
-  // NOTE lines.
+  // NOTE lines - span the full width including the corner column.
   var note1Row = signRow + 1;
   ts.getRange(note1Row, 1, 1, tempTotalCols).merge()
     .setValue('NOTE: Retain one inspected ok. sample dully signed by QC Incharge')
@@ -362,7 +372,13 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
 
   var lastRow = note1Row + 1;
   ts.getRange(1, 1, lastRow, tempTotalCols).setBorder(true, true, true, true, true, true);
-  ts.autoResizeColumns(1, tempTotalCols);
+  // Auto-size only the real grid columns from their actual content, then
+  // make the dedicated corner column match a normal slot column's width
+  // instead of letting it balloon to fit "REV.:00/10.09.2025" - that text
+  // may clip slightly, which is a fair trade for a correctly aligned grid.
+  ts.autoResizeColumns(1, dataGridCols);
+  SpreadsheetApp.flush();
+  ts.setColumnWidth(cornerCol, ts.getColumnWidth(tempSlotCol(0)));
   ts.setFrozenRows(6);
   SpreadsheetApp.flush();
 
