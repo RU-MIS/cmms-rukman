@@ -94,19 +94,26 @@ function getSheet_() {
   return sheet;
 }
 
+/**
+ * No merged cells anywhere in this header - on purpose. A merged cell
+ * that spans across where you later want to freeze columns makes Sheets
+ * refuse the freeze ("can't freeze columns which contain only part of a
+ * merged cell"), which is exactly what was happening here. Every banner/
+ * label below is just plain per-column text and background color; a
+ * label that logically covers 2 columns (DAY/NIGHT, the title bands)
+ * only has a value in its first cell and an empty second cell, which
+ * Sheets visually overflows across for the same look without an actual
+ * merge blocking anything.
+ */
 function buildHeaders_(sheet) {
   var all = allSlotsInOrder_();
   var totalCols = totalCols_();
 
   // Row 1-2: title band, like the paper form's "RUKMAN UDYOG" / form name bar.
-  sheet.getRange(1, 1, 1, totalCols).merge()
-    .setValue('RUKMAN UDYOG')
-    .setFontWeight('bold').setFontSize(14).setHorizontalAlignment('center')
-    .setBackground('#111111').setFontColor('#ffffff');
-  sheet.getRange(2, 1, 1, totalCols).merge()
-    .setValue(FORM_TITLE.toUpperCase() + '  (' + DOC_CODE + ')')
-    .setFontWeight('bold').setHorizontalAlignment('center')
-    .setBackground('#111111').setFontColor('#ffffff');
+  sheet.getRange(1, 1, 1, totalCols).setBackground('#111111').setFontColor('#ffffff');
+  sheet.getRange(1, 1).setValue('RUKMAN UDYOG').setFontWeight('bold').setFontSize(14);
+  sheet.getRange(2, 1, 1, totalCols).setBackground('#111111').setFontColor('#ffffff');
+  sheet.getRange(2, 1).setValue(FORM_TITLE.toUpperCase() + '  (' + DOC_CODE + ')').setFontWeight('bold');
 
   // Row 3-4: DAY/NIGHT group labels + actual column headers.
   var row1 = new Array(totalCols).fill('');
@@ -121,14 +128,24 @@ function buildHeaders_(sheet) {
 
   sheet.getRange(3, 1, 1, totalCols).setValues([row1]);
   sheet.getRange(4, 1, 1, totalCols).setValues([row2]);
-
-  all.forEach(function (s, i) {
-    var vCol = slotValueCol_(i);
-    sheet.getRange(3, vCol, 1, 2).merge().setHorizontalAlignment('center');
-  });
   sheet.getRange(3, 1, 2, totalCols).setFontWeight('bold');
   sheet.setFrozenRows(HEADER_ROWS);
   sheet.setFrozenColumns(4);
+}
+
+/**
+ * ONE-TIME FIX - run this once from the Apps Script editor (function
+ * dropdown > select fixExistingHeaderMerges > Run) if this sheet's header
+ * was already created by an older version of buildHeaders_ that merged
+ * cells, and freezing columns now fails with "can't freeze columns which
+ * contain only part of a merged cell". Un-merges the header rows and
+ * rewrites them flat. Safe to run more than once; doesn't touch data rows.
+ */
+function fixExistingHeaderMerges() {
+  var sheet = getSheet_();
+  var totalCols = totalCols_();
+  sheet.getRange(1, 1, HEADER_ROWS, totalCols).breakApart();
+  buildHeaders_(sheet);
 }
 
 /**
