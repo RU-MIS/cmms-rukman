@@ -76,7 +76,7 @@
       <input type="date" id="date">
 
       <label for="machineNo">M/C No.</label>
-      <input type="text" id="machineNo" placeholder="e.g. BM-01">
+      <input type="text" id="machineNo" placeholder="e.g. IM-01">
 
       <label for="partName">Part Name</label>
       <input type="text" id="partName" placeholder="Part name">
@@ -135,6 +135,8 @@
         var inputHtml;
         if (cp.type === 'number') {
           inputHtml = '<input type="number" step="any" data-key="' + cp.key + '" id="cp_' + cp.key + '">';
+        } else if (cp.type === 'text') {
+          inputHtml = '<input type="text" data-key="' + cp.key + '" id="cp_' + cp.key + '" placeholder="Enter value">';
         } else {
           inputHtml = '<select data-key="' + cp.key + '" id="cp_' + cp.key + '">' +
             '<option value="">Select</option>' +
@@ -238,8 +240,8 @@
           var msg = finalize ? 'Saved. Marked as Report Generated.' : 'Saved. Marked as Submitted.';
           if (finalize) {
             msg += res.emailSent
-              ? ' PDF emailed to qms1@rukmanudyog.com.'
-              : ' (Could not email PDF: ' + (res.emailError || 'unknown error') + ')';
+              ? ' Report emailed to qms1@rukmanudyog.com.'
+              : ' (Could not email report: ' + (res.emailError || 'unknown error') + ')';
           }
           slotArea.innerHTML = '<div class="done-banner">' + msg + '</div>' + slotArea.innerHTML;
         })
