@@ -533,6 +533,9 @@ function emailFinalReport_(sheet, map, dateStr, machineNo, partName) {
       attachments: [pdfBlob]
     });
   } catch (e) {
+    // Logged so the real cause shows up in Executions -> click the run ->
+    // Logs, instead of silently vanishing into the HTML fallback.
+    console.error('buildReportPdfBlob_ failed, falling back to HTML: ' + e.message + '\n' + e.stack);
     var html = buildReportHtml_(sheet, minRow, maxRow);
     MailApp.sendEmail({
       to: REPORT_EMAIL,
