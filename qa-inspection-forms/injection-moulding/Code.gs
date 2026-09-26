@@ -318,6 +318,18 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
   function tempSlotCol(i) { return lastFixedCol + i + 1; }
 
   var tempSs = SpreadsheetApp.create(reportName);
+  try {
+    return buildAndExportReportPdf_(tempSs, reportName, dateStr, machineNo, partName,
+      bodyRows, TEMP_FIXED, lastFixedCol, slots, dataGridCols, tempTotalCols, tempSlotCol);
+  } finally {
+    // Runs even if something above throws (e.g. a bad logo blob), so a
+    // failed PDF never leaves an orphaned temp sheet sitting in Drive.
+    deleteTempFile_(tempSs.getId());
+  }
+}
+
+function buildAndExportReportPdf_(tempSs, reportName, dateStr, machineNo, partName,
+    bodyRows, TEMP_FIXED, lastFixedCol, slots, dataGridCols, tempTotalCols, tempSlotCol) {
   var ts = tempSs.getSheets()[0];
 
   // The doc-code/rev-info box borrows the grid's own last 2 columns (the
@@ -455,7 +467,6 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
   });
   var pdfBlob = response.getBlob().setName(reportName + '.pdf');
   saveReportToDrive_(pdfBlob);
-  deleteTempFile_(tempSs.getId());
   return pdfBlob;
 }
 
