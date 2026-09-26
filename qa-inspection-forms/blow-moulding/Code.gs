@@ -13,6 +13,7 @@ var REV_INFO = 'REV.:00/10.09.2025';
 var SHEET_NAME = 'Blow Moulding Log';
 var CHECKING_FREQ = 'Every Two Hours';
 var REPORT_EMAIL = 'qms1@rukmanudyog.com';
+var REPORT_FOLDER_NAME = 'QA Reports - Blow Moulding';
 var HEADER_ROWS = 4; // 2 title rows (RUKMAN UDYOG + form name) + 2 column-header rows
 
 // Time slots, in order, for one shift. Both shifts use the same 6 slots.
@@ -417,8 +418,43 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
   });
   var pdfBlob = response.getBlob().setName(reportName + '.pdf');
+  saveReportToDrive_(pdfBlob);
   deleteTempFile_(tempSs.getId());
   return pdfBlob;
+}
+
+/**
+ * Finds (or creates, the first time) a dedicated Drive folder to keep a
+ * permanent copy of every generated report PDF in, separate from the
+ * disposable temp spreadsheet. The folder's ID is cached in Script
+ * Properties after the first run, so it's only created once.
+ */
+function getReportFolderId_() {
+  var props = PropertiesService.getScriptProperties();
+  var folderId = props.getProperty('REPORT_FOLDER_ID');
+  if (folderId) { return folderId; }
+  var folder = Drive.Files.create({
+    name: REPORT_FOLDER_NAME,
+    mimeType: 'application/vnd.google-apps.folder'
+  });
+  props.setProperty('REPORT_FOLDER_ID', folder.id);
+  return folder.id;
+}
+
+/**
+ * Saves a permanent copy of the report PDF into the dedicated Drive
+ * folder, in addition to it being emailed. Never lets a failure here
+ * break report emailing - if Drive access isn't set up yet, the PDF just
+ * doesn't get a Drive copy this one time.
+ */
+function saveReportToDrive_(pdfBlob) {
+  try {
+    if (typeof Drive === 'undefined' || !Drive.Files) { return; }
+    var folderId = getReportFolderId_();
+    Drive.Files.create({ name: pdfBlob.getName(), parents: [folderId] }, pdfBlob);
+  } catch (e) {
+    // Not fatal - the email attachment is still the primary copy.
+  }
 }
 
 /**
