@@ -258,14 +258,16 @@ function buildReportHtml_(sheet, minRow, maxRow) {
  * Day/A-Shift & Night/B-Shift bands, one column per time slot (no separate
  * sign sub-column), a single Remarks footer row, a single QA Inspector Sign
  * footer row (one signer per time-slot column), and the two NOTE lines -
- * then exports it as a PDF.
+ * then exports it as a PDF and deletes the temp spreadsheet.
  *
- * The temp spreadsheet is intentionally NOT deleted afterwards: Apps
- * Script's DriveApp always demands the full (Google "restricted") Drive
- * scope to delete a file, even one the script itself just created, and
- * that scope keeps getting blocked outright for this account. Leaving a
- * small named "<report name>" sheet behind in Drive is harmless - delete
- * them manually from Drive occasionally if they build up.
+ * DriveApp.getFileById(...).setTrashed(true) can't be used for the delete:
+ * Apps Script's built-in DriveApp always demands the full (Google
+ * "restricted") Drive scope internally, no matter what's declared in the
+ * manifest, and that broad scope keeps getting blocked outright for this
+ * account. The Advanced Drive Service (the "Drive" object below, enabled
+ * via appsscript.json's enabledAdvancedServices) talks to the Drive API
+ * directly instead, so it respects the narrower "drive.file" scope - which
+ * only covers files this app itself created, exactly what's needed here.
  */
 function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machineNo, partName) {
   var totalCols = totalCols_();
@@ -414,7 +416,28 @@ function buildReportPdfBlob_(sheet, minRow, maxRow, reportName, dateStr, machine
   var response = UrlFetchApp.fetch(url, {
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
   });
-  return response.getBlob().setName(reportName + '.pdf');
+  var pdfBlob = response.getBlob().setName(reportName + '.pdf');
+  deleteTempFile_(tempSs.getId());
+  return pdfBlob;
+}
+
+/**
+ * Deletes a file this script itself created, via the Advanced Drive
+ * Service (drive.file scope). Never lets a failure here break report
+ * emailing - if Drive access isn't set up yet, the temp sheet is just
+ * left behind in Drive instead of the whole submission failing.
+ */
+function deleteTempFile_(fileId) {
+  try {
+    if (typeof Drive === 'undefined' || !Drive.Files) { return; }
+    if (typeof Drive.Files.remove === 'function') {
+      Drive.Files.remove(fileId);
+    } else if (typeof Drive.Files.delete === 'function') {
+      Drive.Files.delete(fileId);
+    }
+  } catch (e) {
+    // Leave the temp sheet in Drive this one time - not fatal.
+  }
 }
 
 /**
@@ -529,4 +552,7 @@ function forceAuthAllScopes() {
   SpreadsheetApp.getActiveSpreadsheet();
   MailApp.getRemainingDailyQuota();
   UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
+  if (typeof Drive !== 'undefined' && Drive.Files) {
+    Drive.Files.list({ pageSize: 1 });
+  }
 }
