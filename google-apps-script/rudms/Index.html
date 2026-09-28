@@ -234,7 +234,7 @@
       </div>
       <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
         <div id="dropZone" class="drop-zone border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer transition">
-          <input id="fileInput" type="file" class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.svg,.dwg,.dxf,.step,.stp,.stl,.obj,.txt,.html,.htm,.xml,.json,.rtf,.zip,.mp3,.mp4,.mov">
+          <input id="fileInput" type="file" class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.svg,.avif,.bmp,.dwg,.dxf,.step,.stp,.stl,.obj,.txt,.html,.htm,.xml,.json,.rtf,.zip,.mp3,.mp4,.mov">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mx-auto mb-2 text-slate-400"><path d="M12 3v12m0-12 4 4m-4-4-4 4"/><path d="M20 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg>
           <p class="text-sm text-slate-600"><span class="text-brand-600 font-medium">Click to browse</span> or drag and drop</p>
           <p class="text-xs text-slate-400 mt-1">PDF, Word, Excel, Images, CAD (.dwg .dxf .step .stl .obj)</p>
@@ -576,7 +576,9 @@
 
   var CAD_3D_EXT = ['stl', 'obj'];
   var CAD_UNSUPPORTED_EXT = ['dwg', 'dxf', 'step', 'stp'];
-  var IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+  // avif and bmp render the same way as the rest - the <img> tag decodes
+  // them natively in every current browser, no library needed.
+  var IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp'];
   var PDF_EXT = ['pdf'];
   // Rendered fully in-browser (no Google/Drive access needed) via SheetJS
   // and mammoth.js - see openPreview() below. SheetJS's "full" build reads
@@ -2065,6 +2067,7 @@
     ppt: ['📙', 'bg-orange-50 text-orange-600'], pptx: ['📙', 'bg-orange-50 text-orange-600'],
     png: ['🖼️', 'bg-purple-50 text-purple-600'], jpg: ['🖼️', 'bg-purple-50 text-purple-600'],
     jpeg: ['🖼️', 'bg-purple-50 text-purple-600'], gif: ['🖼️', 'bg-purple-50 text-purple-600'], webp: ['🖼️', 'bg-purple-50 text-purple-600'],
+    avif: ['🖼️', 'bg-purple-50 text-purple-600'], bmp: ['🖼️', 'bg-purple-50 text-purple-600'],
     dwg: ['📐', 'bg-slate-100 text-slate-600'], dxf: ['📐', 'bg-slate-100 text-slate-600'],
     step: ['🧩', 'bg-slate-100 text-slate-600'], stp: ['🧩', 'bg-slate-100 text-slate-600'],
     stl: ['🧊', 'bg-brand-50 text-brand-600'], obj: ['🧊', 'bg-brand-50 text-brand-600']

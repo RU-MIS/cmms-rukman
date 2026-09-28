@@ -106,12 +106,25 @@ Google Sites page via `<iframe>`.
   server rather than a direct `drive.google.com` link, so any signed-in
   visitor can download a file regardless of their own Drive access.
 - **Previews**:
-  - Images and PDFs → fetched through the server and rendered from a data
-    URI (same mechanism as CAD below), **not** Drive's `/preview` iframe.
-    That iframe needs the *viewing browser itself* to have Drive-level
-    access to the file, which no RUDMS visitor has anymore now that login
-    is username/password rather than Google identity - so it was switched
-    to the server-proxied approach to keep working for everyone.
+  - Images (`.png`, `.jpg`/`.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`,
+    `.bmp`) and PDFs → fetched through the server and rendered from a
+    data URI (same mechanism as CAD below), **not** Drive's `/preview`
+    iframe. That iframe needs the *viewing browser itself* to have
+    Drive-level access to the file, which no RUDMS visitor has anymore
+    now that login is username/password rather than Google identity - so
+    it was switched to the server-proxied approach to keep working for
+    everyone. All seven image formats decode natively in every current
+    browser via the `<img>` tag - no extra library needed.
+  - **Not supported, by design**: `.heic`/`.heif` (iPhone photos) would
+    need a heavy WASM decoder that would visibly lag, especially on
+    phones; `.ai` (Illustrator) and `.eps` have no reliable lightweight
+    renderer (Illustrator's own vector data, and full PostScript
+    interpretation, are both well beyond what a single Apps Script file
+    should take on); and camera RAW (`.raw`/`.cr2`/`.nef`) is a large,
+    manufacturer-proprietary format that genuinely needs heavy
+    processing to decode. All of these fall back to the generic "no
+    inline preview, download instead" message - re-exporting to `.jpg`
+    or `.png` before uploading gets full in-browser preview instead.
   - `.xls` / `.xlsx` / `.ods` → rendered as a real HTML table entirely in
     the browser via [SheetJS](https://sheetjs.com/) - no Google/Drive
     access needed at all, so this works the same for every signed-in
