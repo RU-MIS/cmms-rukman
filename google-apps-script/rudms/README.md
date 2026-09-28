@@ -107,14 +107,22 @@ Google Sites page via `<iframe>`.
   visitor can download a file regardless of their own Drive access.
 - **Previews**:
   - Images (`.png`, `.jpg`/`.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`,
-    `.bmp`) and PDFs → fetched through the server and rendered from a
-    data URI (same mechanism as CAD below), **not** Drive's `/preview`
-    iframe. That iframe needs the *viewing browser itself* to have
-    Drive-level access to the file, which no RUDMS visitor has anymore
-    now that login is username/password rather than Google identity - so
-    it was switched to the server-proxied approach to keep working for
-    everyone. All seven image formats decode natively in every current
-    browser via the `<img>` tag - no extra library needed.
+    `.bmp`) → fetched through the server and rendered from a data URI
+    (same mechanism as CAD below), **not** Drive's `/preview` iframe.
+    That iframe needs the *viewing browser itself* to have Drive-level
+    access to the file, which no RUDMS visitor has anymore now that login
+    is username/password rather than Google identity - so it was switched
+    to the server-proxied approach to keep working for everyone. All
+    seven image formats decode natively in every current browser via the
+    `<img>` tag - no extra library needed.
+  - `.pdf` → rendered page-by-page onto `<canvas>` elements via
+    [PDF.js](https://mozilla.github.io/pdf.js/) rather than a browser
+    `<embed>`/native-plugin viewer. The native-viewer approach used to be
+    here but isn't reliable: it depends on the browser's own PDF plugin,
+    which mobile Safari/Chrome frequently don't expose for a
+    data-URI-embedded PDF (this page also runs inside Apps Script's own
+    sandboxed iframe on top of that). PDF.js draws the pixels itself, so
+    it renders identically on desktop and phone alike.
   - **Not supported, by design**: `.heic`/`.heif` (iPhone photos) would
     need a heavy WASM decoder that would visibly lag, especially on
     phones; `.ai` (Illustrator) and `.eps` have no reliable lightweight
