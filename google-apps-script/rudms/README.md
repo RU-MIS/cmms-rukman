@@ -112,10 +112,20 @@ Google Sites page via `<iframe>`.
     access to the file, which no RUDMS visitor has anymore now that login
     is username/password rather than Google identity - so it was switched
     to the server-proxied approach to keep working for everyone.
-  - Word/Excel/PowerPoint → **honest limitation**: Google's own preview
-    (the only realistic renderer for these formats) needs that same
-    Drive-level access nobody has now. The portal shows a clear "download
+  - `.xls` / `.xlsx` → rendered as a real HTML table entirely in the
+    browser via [SheetJS](https://sheetjs.com/) - no Google/Drive access
+    needed at all, so this works the same for every signed-in visitor.
+    Multi-sheet workbooks get a tab per sheet.
+  - `.docx` → rendered as formatted HTML entirely in the browser via
+    [mammoth.js](https://github.com/mwilliamson/mammoth.js) - same
+    no-Drive-access story as Excel above.
+  - Old-format `.doc`, and `.ppt`/`.pptx` → **honest limitation**: no
+    solid lightweight in-browser renderer exists for these (mammoth.js
+    only understands modern `.docx`, not binary `.doc`; PowerPoint has no
+    good simple client-side option). The portal shows a clear "download
     to open in its native app" message instead of a broken/blank iframe.
+    Re-saving a `.doc` as `.docx` before uploading gets it the in-browser
+    preview too.
   - `.stl` and `.obj` → rendered live in an interactive WebGL viewer
     (Three.js + `STLLoader`/`OBJLoader` + `OrbitControls`) — rotate with
     drag, zoom with scroll, no download needed.

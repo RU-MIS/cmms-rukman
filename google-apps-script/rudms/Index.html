@@ -31,6 +31,8 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -59,6 +61,17 @@
     .toast { animation: slideIn .2s ease-out; }
     @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     #cadCanvasWrap canvas { touch-action: none; }
+    #excelSheetTableWrap table { border-collapse: collapse; font-size: 12px; }
+    #excelSheetTableWrap td, #excelSheetTableWrap th { border: 1px solid #e2e8f0; padding: 4px 8px; white-space: nowrap; }
+    .docx-preview { font-size: 14px; line-height: 1.65; }
+    .docx-preview h1 { font-size: 1.4rem; font-weight: 700; margin: 1rem 0 0.5rem; }
+    .docx-preview h2 { font-size: 1.15rem; font-weight: 600; margin: 0.875rem 0 0.5rem; }
+    .docx-preview h3 { font-size: 1rem; font-weight: 600; margin: 0.75rem 0 0.4rem; }
+    .docx-preview p { margin: 0.5rem 0; }
+    .docx-preview ul, .docx-preview ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+    .docx-preview table { border-collapse: collapse; margin: 0.5rem 0; }
+    .docx-preview table td, .docx-preview table th { border: 1px solid #e2e8f0; padding: 4px 8px; }
+    .docx-preview img { max-width: 100%; }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 h-screen overflow-hidden">
@@ -564,7 +577,13 @@
   var CAD_UNSUPPORTED_EXT = ['dwg', 'dxf', 'step', 'stp'];
   var IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
   var PDF_EXT = ['pdf'];
-  var OFFICE_ONLY_EXT = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+  // Rendered fully in-browser (no Google/Drive access needed) via SheetJS
+  // and mammoth.js - see openPreview() below.
+  var EXCEL_EXT = ['xls', 'xlsx'];
+  var WORD_EXT = ['docx']; // mammoth.js only understands the modern .docx format, not old binary .doc.
+  // No good lightweight in-browser renderer exists for these - old-format
+  // .doc and PowerPoint both stay download-only.
+  var OFFICE_ONLY_EXT = ['doc', 'ppt', 'pptx'];
 
   // ---------------------------------------------------------------------
   // Init
@@ -1710,11 +1729,27 @@
       return;
     }
 
+    if (EXCEL_EXT.indexOf(ext) !== -1) {
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        renderExcelPreview(res.base64);
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
+    if (WORD_EXT.indexOf(ext) !== -1) {
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        renderWordPreview(res.base64);
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
     if (OFFICE_ONLY_EXT.indexOf(ext) !== -1) {
       body.innerHTML = '<div class="text-center text-slate-500 max-w-sm px-6">' +
         fileIcon(ext, 'w-12 h-12 mx-auto mb-3') +
         '<p class="font-medium text-slate-700">In-browser preview not available</p>' +
-        '<p class="text-sm mt-1">Word/Excel/PowerPoint preview needs Drive-level access this login doesn\'t have. Download the file to open it in its native app.</p>' +
+        '<p class="text-sm mt-1">' + (ext === 'doc' ? 'Old-format .doc files aren\'t supported by the in-browser previewer (only modern .docx is) - re-save as .docx for preview, or d' : 'PowerPoint preview isn\'t available in-browser - d') + 'ownload the file to open it in its native app.</p>' +
       '</div>';
       return;
     }
@@ -1742,6 +1777,67 @@
 
   function previewError(msg) {
     return '<div class="text-center text-red-500 text-sm px-6">Could not load preview: ' + escapeHtml(String(msg)) + '</div>';
+  }
+
+  /** Renders an .xls/.xlsx file entirely client-side via SheetJS - no Google/Drive access needed. */
+  function renderExcelPreview(base64) {
+    var body = document.getElementById('previewBody');
+    var wb;
+    try {
+      wb = XLSX.read(base64, { type: 'base64' });
+    } catch (err) {
+      body.innerHTML = previewError('Could not read this spreadsheet (' + String(err) + ').');
+      return;
+    }
+
+    var sheetNames = wb.SheetNames;
+    if (!sheetNames.length) {
+      body.innerHTML = '<div class="text-center text-slate-500 text-sm px-6">This spreadsheet has no sheets to show.</div>';
+      return;
+    }
+
+    var tabsHtml = sheetNames.length > 1
+      ? '<div class="flex gap-1 px-3 pt-2 border-b border-slate-200 bg-white overflow-x-auto shrink-0">' +
+          sheetNames.map(function (name, i) {
+            return '<button data-sheet-tab="' + i + '" class="excel-sheet-tab shrink-0 px-3 py-1.5 text-xs font-medium rounded-t-lg ' +
+              (i === 0 ? 'bg-slate-100 text-brand-600' : 'text-slate-500 hover:bg-slate-50') + '">' + escapeHtml(name) + '</button>';
+          }).join('') +
+        '</div>'
+      : '';
+
+    body.innerHTML = '<div class="w-full h-full flex flex-col bg-white">' + tabsHtml +
+      '<div id="excelSheetTableWrap" class="flex-1 overflow-auto p-3"></div></div>';
+
+    function renderSheet(index) {
+      var html = XLSX.utils.sheet_to_html(wb.Sheets[sheetNames[index]], { editable: false });
+      document.getElementById('excelSheetTableWrap').innerHTML = html;
+    }
+    renderSheet(0);
+
+    body.querySelectorAll('[data-sheet-tab]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        body.querySelectorAll('[data-sheet-tab]').forEach(function (b) {
+          b.classList.remove('bg-slate-100', 'text-brand-600');
+          b.classList.add('text-slate-500');
+        });
+        btn.classList.add('bg-slate-100', 'text-brand-600');
+        btn.classList.remove('text-slate-500');
+        renderSheet(+btn.getAttribute('data-sheet-tab'));
+      });
+    });
+  }
+
+  /** Renders a .docx file entirely client-side via mammoth.js - no Google/Drive access needed. */
+  function renderWordPreview(base64) {
+    var body = document.getElementById('previewBody');
+    var bytes = Uint8Array.from(atob(base64), function (c) { return c.charCodeAt(0); });
+
+    mammoth.convertToHtml({ arrayBuffer: bytes.buffer }).then(function (result) {
+      body.innerHTML = '<div class="w-full h-full overflow-auto bg-white p-6">' +
+        '<div class="docx-preview max-w-3xl mx-auto">' + result.value + '</div></div>';
+    }).catch(function (err) {
+      body.innerHTML = previewError(String(err));
+    });
   }
 
   function render3DModel(ext, base64) {
