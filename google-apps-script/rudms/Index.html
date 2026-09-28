@@ -33,6 +33,7 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -233,7 +234,7 @@
       </div>
       <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
         <div id="dropZone" class="drop-zone border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer transition">
-          <input id="fileInput" type="file" class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.dwg,.dxf,.step,.stp,.stl,.obj">
+          <input id="fileInput" type="file" class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.svg,.dwg,.dxf,.step,.stp,.stl,.obj,.txt,.html,.htm,.xml,.json,.rtf,.zip,.mp3,.mp4,.mov">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mx-auto mb-2 text-slate-400"><path d="M12 3v12m0-12 4 4m-4-4-4 4"/><path d="M20 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg>
           <p class="text-sm text-slate-600"><span class="text-brand-600 font-medium">Click to browse</span> or drag and drop</p>
           <p class="text-xs text-slate-400 mt-1">PDF, Word, Excel, Images, CAD (.dwg .dxf .step .stl .obj)</p>
@@ -578,12 +579,23 @@
   var IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
   var PDF_EXT = ['pdf'];
   // Rendered fully in-browser (no Google/Drive access needed) via SheetJS
-  // and mammoth.js - see openPreview() below.
-  var EXCEL_EXT = ['xls', 'xlsx'];
+  // and mammoth.js - see openPreview() below. SheetJS's "full" build reads
+  // .ods (LibreOffice/OpenOffice Calc) the same way it reads .xls/.xlsx.
+  var EXCEL_EXT = ['xls', 'xlsx', 'ods'];
+  var CSV_EXT = ['csv']; // plain-text, so read as a string rather than base64 binary.
   var WORD_EXT = ['docx']; // mammoth.js only understands the modern .docx format, not old binary .doc.
   // No good lightweight in-browser renderer exists for these - old-format
   // .doc and PowerPoint both stay download-only.
   var OFFICE_ONLY_EXT = ['doc', 'ppt', 'pptx'];
+  var AUDIO_EXT = ['mp3'];
+  var VIDEO_EXT = ['mp4', 'mov']; // .mov plays via the native <video> tag only for browser-supported codecs (typically H.264); some Apple-specific codecs won't play.
+  var PLAIN_TEXT_EXT = ['txt'];
+  // Shown as read-only source text, never rendered as live markup - an
+  // uploaded .html/.xml file could otherwise run arbitrary script in the
+  // page's own origin.
+  var CODE_TEXT_EXT = ['html', 'htm', 'xml', 'json'];
+  var RTF_EXT = ['rtf']; // best-effort plain-text extraction; formatting (bold/italic/etc.) is not preserved.
+  var ZIP_EXT = ['zip']; // shows the file listing inside, not a preview of each entry.
 
   // ---------------------------------------------------------------------
   // Init
@@ -1732,7 +1744,15 @@
     if (EXCEL_EXT.indexOf(ext) !== -1) {
       callServer('getFileContentForPreview', f.fileId).then(function (res) {
         if (!res.success) { body.innerHTML = previewError(res.error); return; }
-        renderExcelPreview(res.base64);
+        renderSpreadsheetPreview(res.base64, false);
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
+    if (CSV_EXT.indexOf(ext) !== -1) {
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        renderSpreadsheetPreview(res.base64, true);
       }).catch(function (err) { body.innerHTML = previewError(String(err)); });
       return;
     }
@@ -1741,6 +1761,46 @@
       callServer('getFileContentForPreview', f.fileId).then(function (res) {
         if (!res.success) { body.innerHTML = previewError(res.error); return; }
         renderWordPreview(res.base64);
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
+    if (RTF_EXT.indexOf(ext) !== -1) {
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        renderRtfPreview(res.base64);
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
+    if (PLAIN_TEXT_EXT.indexOf(ext) !== -1 || CODE_TEXT_EXT.indexOf(ext) !== -1) {
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        renderTextPreview(res.base64, ext === 'json');
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
+    if (ZIP_EXT.indexOf(ext) !== -1) {
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        renderZipPreview(res.base64);
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
+    if (AUDIO_EXT.indexOf(ext) !== -1) {
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        body.innerHTML = '<audio controls class="w-full max-w-md mx-4" src="data:' + res.mimeType + ';base64,' + res.base64 + '"></audio>';
+      }).catch(function (err) { body.innerHTML = previewError(String(err)); });
+      return;
+    }
+
+    if (VIDEO_EXT.indexOf(ext) !== -1) {
+      callServer('getFileContentForPreview', f.fileId).then(function (res) {
+        if (!res.success) { body.innerHTML = previewError(res.error); return; }
+        body.innerHTML = '<video controls class="max-w-full max-h-full" src="data:' + res.mimeType + ';base64,' + res.base64 + '"></video>';
       }).catch(function (err) { body.innerHTML = previewError(String(err)); });
       return;
     }
@@ -1779,12 +1839,24 @@
     return '<div class="text-center text-red-500 text-sm px-6">Could not load preview: ' + escapeHtml(String(msg)) + '</div>';
   }
 
-  /** Renders an .xls/.xlsx file entirely client-side via SheetJS - no Google/Drive access needed. */
-  function renderExcelPreview(base64) {
+  /**
+   * Decodes the base64 content getFileContentForPreview() returns into a
+   * proper UTF-8 string (not naive atob(), which mangles anything outside
+   * plain ASCII) - shared by every text-based preview below.
+   */
+  function base64ToText(base64) {
+    var binary = atob(base64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+
+  /** Renders an .xls/.xlsx/.ods/.csv file entirely client-side via SheetJS - no Google/Drive access needed. */
+  function renderSpreadsheetPreview(base64, isCsv) {
     var body = document.getElementById('previewBody');
     var wb;
     try {
-      wb = XLSX.read(base64, { type: 'base64' });
+      wb = isCsv ? XLSX.read(base64ToText(base64), { type: 'string' }) : XLSX.read(base64, { type: 'base64' });
     } catch (err) {
       body.innerHTML = previewError('Could not read this spreadsheet (' + String(err) + ').');
       return;
@@ -1837,6 +1909,76 @@
         '<div class="docx-preview max-w-3xl mx-auto">' + result.value + '</div></div>';
     }).catch(function (err) {
       body.innerHTML = previewError(String(err));
+    });
+  }
+
+  /**
+   * Best-effort .rtf -> plain text: strips RTF control words/groups and
+   * unescapes hex character codes. No formatting (bold/italic/tables) is
+   * preserved - a real RTF renderer is much heavier than this system
+   * needs for what's usually just a text document.
+   */
+  function rtfToPlainText(rtf) {
+    var text = rtf;
+    text = text.replace(/\{\\(?:fonttbl|colortbl|stylesheet|info|pict|object|header|footer)[^{}]*\}/gi, '');
+    text = text.replace(/\\par[d]?\b ?/g, '\n');
+    text = text.replace(/\\line\b ?/g, '\n');
+    text = text.replace(/\\tab\b ?/g, '\t');
+    text = text.replace(/\\'([0-9a-fA-F]{2})/g, function (m, hex) { return String.fromCharCode(parseInt(hex, 16)); });
+    text = text.replace(/\\[a-zA-Z]+-?\d*[ ]?/g, '');
+    text = text.replace(/[{}]/g, '');
+    text = text.replace(/\\\\/g, '\\').replace(/\\\{/g, '{').replace(/\\\}/g, '}');
+    return text.trim();
+  }
+
+  /** Renders an .rtf file as plain text (formatting not preserved - see rtfToPlainText). */
+  function renderRtfPreview(base64) {
+    var body = document.getElementById('previewBody');
+    var plain = rtfToPlainText(base64ToText(base64));
+    body.innerHTML = '<div class="w-full h-full overflow-auto bg-white">' +
+      '<p class="text-xs text-amber-600 bg-amber-50 border-b border-amber-100 px-4 py-2">Showing as plain text - RTF formatting (bold, italic, tables) isn\'t preserved in this preview.</p>' +
+      '<pre class="p-4 text-xs leading-relaxed whitespace-pre-wrap break-words"></pre></div>';
+    body.querySelector('pre').textContent = plain;
+  }
+
+  /**
+   * Renders .txt/.html/.htm/.xml/.json as read-only source text - never as
+   * live markup. Rendering an uploaded .html/.xml file's content directly
+   * into the page would let it run arbitrary script in RUDMS's own origin,
+   * so this always uses textContent (never innerHTML) for the file's body.
+   */
+  function renderTextPreview(base64, isJson) {
+    var body = document.getElementById('previewBody');
+    var text = base64ToText(base64);
+    if (isJson) {
+      try { text = JSON.stringify(JSON.parse(text), null, 2); } catch (err) { /* leave as-is if not valid JSON */ }
+    }
+    body.innerHTML = '<pre class="w-full h-full overflow-auto bg-white p-4 text-xs leading-relaxed whitespace-pre-wrap break-words"></pre>';
+    body.querySelector('pre').textContent = text;
+  }
+
+  /** Lists a .zip archive's contents via JSZip - not a preview of each file inside, just what's there. */
+  function renderZipPreview(base64) {
+    var body = document.getElementById('previewBody');
+    var bytes = Uint8Array.from(atob(base64), function (c) { return c.charCodeAt(0); });
+
+    JSZip.loadAsync(bytes).then(function (zip) {
+      var entries = [];
+      zip.forEach(function (relPath, entry) { entries.push({ path: relPath, dir: entry.dir }); });
+      entries.sort(function (a, b) { return a.path.localeCompare(b.path); });
+
+      var rows = entries.map(function (e) {
+        return '<div class="flex items-center gap-2 px-3 py-2 text-sm">' +
+          (e.dir ? folderIcon() : fileIcon((e.path.split('.').pop() || '').toLowerCase(), 'w-4 h-4 text-slate-400 shrink-0')) +
+          '<span class="truncate">' + escapeHtml(e.path) + '</span>' +
+        '</div>';
+      }).join('');
+
+      body.innerHTML = '<div class="w-full h-full overflow-auto bg-white p-4">' +
+        '<p class="text-xs text-slate-400 mb-2">' + entries.length + ' item' + (entries.length === 1 ? '' : 's') + ' inside - download to extract.</p>' +
+        '<div class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">' + (rows || '<p class="text-sm text-slate-400 text-center py-6">Empty archive.</p>') + '</div></div>';
+    }).catch(function (err) {
+      body.innerHTML = previewError('Could not read this archive (' + String(err) + ').');
     });
   }
 

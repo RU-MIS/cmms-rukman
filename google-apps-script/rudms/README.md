@@ -112,20 +112,42 @@ Google Sites page via `<iframe>`.
     access to the file, which no RUDMS visitor has anymore now that login
     is username/password rather than Google identity - so it was switched
     to the server-proxied approach to keep working for everyone.
-  - `.xls` / `.xlsx` → rendered as a real HTML table entirely in the
-    browser via [SheetJS](https://sheetjs.com/) - no Google/Drive access
-    needed at all, so this works the same for every signed-in visitor.
-    Multi-sheet workbooks get a tab per sheet.
+  - `.xls` / `.xlsx` / `.ods` → rendered as a real HTML table entirely in
+    the browser via [SheetJS](https://sheetjs.com/) - no Google/Drive
+    access needed at all, so this works the same for every signed-in
+    visitor. Multi-sheet workbooks get a tab per sheet. `.csv` uses the
+    same library, read as plain text rather than binary.
   - `.docx` → rendered as formatted HTML entirely in the browser via
     [mammoth.js](https://github.com/mwilliamson/mammoth.js) - same
     no-Drive-access story as Excel above.
+  - `.txt`, `.html`/`.htm`, `.xml`, `.json` → shown as read-only source
+    text (JSON pretty-printed). Deliberately rendered via `textContent`,
+    never as live markup - an uploaded `.html`/`.xml` file's content is
+    never executed as a page, only displayed as text, so it can't run
+    script in RUDMS's own origin.
+  - `.rtf` → best-effort plain-text extraction (control words/groups
+    stripped client-side). Formatting like bold/italic/tables is not
+    preserved - a full RTF renderer is much heavier than this system
+    needs for what's usually a text document.
+  - `.zip` → lists the archive's contents (file names, via
+    [JSZip](https://stuk.github.io/jszip/)) rather than previewing each
+    file inside - download to extract and open individual files.
+  - `.mp3` → the browser's native `<audio>` player, no library needed.
+  - `.mp4` / `.mov` → the browser's native `<video>` player, no library
+    needed. `.mov` plays only for browser-supported codecs (typically
+    H.264) - some Apple-specific codecs won't play; download still works
+    regardless. Both go through the same base64 round-trip as everything
+    else here, so very large video files will be slow to preview (see
+    "Large files" under production hardening below).
   - Old-format `.doc`, and `.ppt`/`.pptx` → **honest limitation**: no
     solid lightweight in-browser renderer exists for these (mammoth.js
     only understands modern `.docx`, not binary `.doc`; PowerPoint has no
     good simple client-side option). The portal shows a clear "download
     to open in its native app" message instead of a broken/blank iframe.
     Re-saving a `.doc` as `.docx` before uploading gets it the in-browser
-    preview too.
+    preview too. `.psd` and `.rar` have the same story for the same
+    reason - no realistic lightweight in-browser option - and fall back
+    to the generic "no inline preview, download instead" message.
   - `.stl` and `.obj` → rendered live in an interactive WebGL viewer
     (Three.js + `STLLoader`/`OBJLoader` + `OrbitControls`) — rotate with
     drag, zoom with scroll, no download needed.
