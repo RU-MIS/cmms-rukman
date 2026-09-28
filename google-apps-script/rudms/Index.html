@@ -245,6 +245,15 @@
           <p id="selectedFileName" class="text-sm font-medium text-slate-800 mt-3 hidden"></p>
         </div>
 
+        <div id="uploadDuplicateWarning" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-3.5">
+          <p class="text-sm font-medium text-amber-800 mb-0.5">Duplicate file</p>
+          <p id="uploadDuplicateMessage" class="text-sm text-amber-700 mb-3"></p>
+          <div class="flex gap-2">
+            <button id="uploadDuplicateDeleteBtn" type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50">Delete existing file &amp; upload this instead</button>
+            <button id="uploadDuplicateCancelBtn" type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-amber-300 hover:bg-amber-100 text-amber-800">Cancel</button>
+          </div>
+        </div>
+
         <div>
           <label class="text-xs font-medium text-slate-500 mb-1 block">Category</label>
           <div class="flex gap-2">
@@ -992,7 +1001,7 @@
       btn.addEventListener('click', function () { closeModal(btn.getAttribute('data-close')); });
     });
 
-    document.getElementById('uploadBtn').addEventListener('click', function () { openModal('uploadModal'); });
+    document.getElementById('uploadBtn').addEventListener('click', function () { hideUploadDuplicateWarning(); openModal('uploadModal'); });
     document.getElementById('addCategoryBtn').addEventListener('click', function () { openModal('categoryModal'); });
     document.getElementById('manageAccessBtn').addEventListener('click', function () { openAccessCenter('folders'); });
 
@@ -1032,6 +1041,7 @@
   // Upload modal
   // ---------------------------------------------------------------------
   var pendingUpload = null;
+  var pendingUploadPayload = null; // last-built payload, kept so the duplicate "delete & upload" flow can retry without re-reading the file from disk
 
   function bindUploadModal() {
     var dropZone = document.getElementById('dropZone');
@@ -1050,11 +1060,47 @@
     });
 
     document.getElementById('submitUploadBtn').addEventListener('click', submitUpload);
+
+    document.getElementById('uploadDuplicateDeleteBtn').addEventListener('click', function () {
+      var box = document.getElementById('uploadDuplicateWarning');
+      var existingFileId = box.getAttribute('data-existing-file-id');
+      if (!existingFileId || !pendingUploadPayload) return;
+
+      var btn = this;
+      btn.disabled = true;
+      callServer('deleteFile', existingFileId).then(function (res) {
+        btn.disabled = false;
+        if (!res.success) { showToast(res.error || 'Could not delete the existing file', 'error'); return; }
+        state.files = state.files.filter(function (f) { return f.fileId !== existingFileId; });
+        renderSidebar();
+        hideUploadDuplicateWarning();
+        document.getElementById('uploadProgress').classList.remove('hidden');
+        document.getElementById('submitUploadBtn').disabled = true;
+        performUpload(pendingUploadPayload);
+      }).catch(function (err) {
+        btn.disabled = false;
+        showToast(String(err), 'error');
+      });
+    });
+
+    document.getElementById('uploadDuplicateCancelBtn').addEventListener('click', hideUploadDuplicateWarning);
   }
 
   var MAX_UPLOAD_MB = 25; // google.script.run's message channel gets unreliable well above this
 
+  function showUploadDuplicateWarning(fileName, category, existingFileId) {
+    var box = document.getElementById('uploadDuplicateWarning');
+    document.getElementById('uploadDuplicateMessage').textContent = '"' + fileName + '" already exists in ' + category + '.';
+    box.setAttribute('data-existing-file-id', existingFileId);
+    box.classList.remove('hidden');
+  }
+
+  function hideUploadDuplicateWarning() {
+    document.getElementById('uploadDuplicateWarning').classList.add('hidden');
+  }
+
   function handleFileSelected(file) {
+    hideUploadDuplicateWarning();
     if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
       showToast('"' + file.name + '" is ' + formatSize(file.size) + ' - files over ' + MAX_UPLOAD_MB + ' MB are not supported here. Upload it to Drive directly and paste the link instead.', 'error');
       return;
@@ -1067,6 +1113,7 @@
 
   function submitUpload() {
     if (!pendingUpload) return;
+    hideUploadDuplicateWarning();
     var reader = new FileReader();
     document.getElementById('uploadProgress').classList.remove('hidden');
     document.getElementById('submitUploadBtn').disabled = true;
@@ -1088,52 +1135,69 @@
         editorEmails: splitEmails(document.getElementById('editorEmails').value),
         externalToken: state.authToken
       };
+      pendingUploadPayload = payload;
 
       // Instant client-side check (the server re-checks authoritatively
       // regardless, since state.files can be stale) - saves a round trip
       // for the common case of an obvious duplicate.
-      var isDuplicate = state.files.some(function (f) {
+      var existing = state.files.filter(function (f) {
         return f.category === payload.category && f.fileName.toLowerCase() === payload.fileName.toLowerCase();
-      });
-      if (isDuplicate) {
+      })[0];
+      if (existing) {
         document.getElementById('uploadProgress').classList.add('hidden');
         document.getElementById('submitUploadBtn').disabled = false;
-        showToast('"' + payload.fileName + '" already exists in ' + payload.category + '. Rename the file or delete the existing one first.', 'error');
+        showUploadDuplicateWarning(payload.fileName, payload.category, existing.fileId);
         return;
       }
 
-      callServerNoRetry('uploadFile', payload).then(function (res) {
-        document.getElementById('uploadProgress').classList.add('hidden');
-        if (!res.success) {
-          showToast(res.error || 'Upload failed', 'error');
-          document.getElementById('submitUploadBtn').disabled = false;
-          return;
-        }
-        state.files.unshift(res.file);
-        if (state.categories.indexOf(res.file.category) === -1) {
-          state.categories.push(res.file.category);
-          state.categories.sort();
-          renderSidebar();
-          populateCategorySelect();
-        } else {
-          renderSidebar();
-        }
-        renderCurrentView();
-        resetUploadModal();
-        closeModal('uploadModal');
-        showToast('File uploaded successfully', 'success');
-        (res.warnings || []).forEach(function (w) { showToast(w, 'error'); });
-      }).catch(function (err) {
-        document.getElementById('uploadProgress').classList.add('hidden');
-        document.getElementById('submitUploadBtn').disabled = false;
-        showToast(String(err), 'error');
-      });
+      performUpload(payload);
     };
     reader.readAsDataURL(pendingUpload);
   }
 
+  /**
+   * The actual uploadFile() call, split out from submitUpload() so the
+   * duplicate-warning's "delete existing & upload" button can retry it
+   * directly (once the old file is gone) without re-reading the file
+   * from disk.
+   */
+  function performUpload(payload) {
+    callServerNoRetry('uploadFile', payload).then(function (res) {
+      document.getElementById('uploadProgress').classList.add('hidden');
+      if (!res.success) {
+        document.getElementById('submitUploadBtn').disabled = false;
+        if (res.duplicate) {
+          showUploadDuplicateWarning(payload.fileName, payload.category, res.existingFileId);
+        } else {
+          showToast(res.error || 'Upload failed', 'error');
+        }
+        return;
+      }
+      state.files.unshift(res.file);
+      if (state.categories.indexOf(res.file.category) === -1) {
+        state.categories.push(res.file.category);
+        state.categories.sort();
+        renderSidebar();
+        populateCategorySelect();
+      } else {
+        renderSidebar();
+      }
+      renderCurrentView();
+      resetUploadModal();
+      closeModal('uploadModal');
+      showToast('File uploaded successfully', 'success');
+      (res.warnings || []).forEach(function (w) { showToast(w, 'error'); });
+    }).catch(function (err) {
+      document.getElementById('uploadProgress').classList.add('hidden');
+      document.getElementById('submitUploadBtn').disabled = false;
+      showToast(String(err), 'error');
+    });
+  }
+
   function resetUploadModal() {
     pendingUpload = null;
+    pendingUploadPayload = null;
+    hideUploadDuplicateWarning();
     document.getElementById('fileInput').value = '';
     document.getElementById('selectedFileName').classList.add('hidden');
     document.getElementById('viewerEmails').value = '';

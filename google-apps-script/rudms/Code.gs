@@ -78,16 +78,17 @@ function getOrCreateCategoryFolder(rootFolder, categoryName) {
 /**
  * Case-insensitive exact-name match within a single folder - "logo.png"
  * and "LOGO.PNG" count as duplicates, but "logo.png" and "logo.jpeg"
- * don't (different extension = different file).
+ * don't (different extension = different file). Returns the matching
+ * Drive file (so callers can offer to delete it), or null.
  */
-function fileNameExistsInFolder(folder, fileName) {
+function findFileInFolderByName(folder, fileName) {
   var target = String(fileName).toLowerCase();
   var files = folder.getFiles();
   while (files.hasNext()) {
     var file = files.next();
-    if (!file.isTrashed() && file.getName().toLowerCase() === target) return true;
+    if (!file.isTrashed() && file.getName().toLowerCase() === target) return file;
   }
-  return false;
+  return null;
 }
 
 function listCategoryFolders(rootFolder) {
@@ -269,11 +270,14 @@ function uploadFile(payload) {
     var rootFolder = getRootFolder();
     var categoryFolder = getOrCreateCategoryFolder(rootFolder, payload.category || 'Uncategorized');
 
-    if (fileNameExistsInFolder(categoryFolder, payload.fileName)) {
-      throw new Error(
-        '"' + payload.fileName + '" already exists in ' + categoryFolder.getName() +
-        '. Rename the file or delete the existing one first.'
-      );
+    var existingFile = findFileInFolderByName(categoryFolder, payload.fileName);
+    if (existingFile) {
+      return {
+        success: false,
+        duplicate: true,
+        existingFileId: existingFile.getId(),
+        error: '"' + payload.fileName + '" already exists in ' + categoryFolder.getName() + '.'
+      };
     }
 
     var bytes = Utilities.base64Decode(payload.base64Data);

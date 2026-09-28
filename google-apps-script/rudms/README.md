@@ -38,6 +38,14 @@ Google Sites page via `<iframe>`.
   `DriveApp.addViewer()` / `addEditor()` is called for each email you list.
   You can change access later from a file's "Share / Access" menu, which
   fully re-syncs viewers/editors.
+- **Duplicate prevention**: uploading a file whose name already exists in
+  that same category (case-insensitive - `logo.PNG` and `logo.png` count
+  as the same file, but `logo.png` and `logo.jpeg` don't) is blocked
+  server-side. The Upload window itself shows this inline - right in the
+  same popup, not just a toast - with a **"Delete existing file & upload
+  this instead"** button that removes the old file and immediately
+  retries the upload, so replacing a file is one click instead of a
+  separate trip to delete it first.
 - **Manage Access center**: the header's **Manage Access** button (also
   reachable via the lock icon that appears on hover over any category in
   the sidebar) opens a two-tab panel:
