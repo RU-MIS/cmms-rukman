@@ -5,6 +5,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RUDMS</title>
+  <!--
+    "Add to Home Screen" support: these three tags are what let iPhone
+    Safari open this page fullscreen (no address bar) when launched from
+    a home-screen icon, like a real app. Android Chrome's "Add to Home
+    Screen" also picks up theme-color for the icon's background. There's
+    no proper installable-PWA manifest/service-worker here on purpose -
+    Apps Script serves this page inside its own sandboxed iframe, which
+    is known to break service worker registration, so a real installable
+    PWA isn't reliably possible directly on script.google.com. A tiny
+    separate static shell (hosted anywhere free, e.g. Netlify) that
+    iframes this URL and carries its own manifest.json + service worker
+    is the way to get full "installed app" behavior on both iOS and
+    Android - ask if you want that built.
+  -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RUDMS">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a3652">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -434,6 +453,13 @@
   document.getElementById('brandLogo').src = LOGO_DATA_URI;
   document.getElementById('bootLogo').src = LOGO_DATA_URI;
   document.getElementById('loginLogo').src = LOGO_DATA_URI;
+
+  (function () {
+    var iconLink = document.createElement('link');
+    iconLink.rel = 'apple-touch-icon';
+    iconLink.href = LOGO_DATA_URI;
+    document.head.appendChild(iconLink);
+  })();
 
   // ---------------------------------------------------------------------
   // Server bridge
