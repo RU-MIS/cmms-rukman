@@ -271,3 +271,9 @@ begin
 end;
 $$;
 do $$ begin perform app.create_document_policies(); end $$;
+
+-- Child tables outside the document registry
+create policy sales_order_date_revisions_read on public.sales_order_date_revisions for select to authenticated
+  using (exists (select 1 from public.sales_orders o where o.id = sales_order_id
+                 and app.has_permission(o.company_id, 'sales_order.view')));
+revoke insert, update, delete on public.sales_order_date_revisions from authenticated;

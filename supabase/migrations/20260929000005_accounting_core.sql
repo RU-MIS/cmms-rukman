@@ -238,8 +238,8 @@ set search_path = public, pg_temp
 as $$
 declare v_opening numeric;
 begin
-  select coalesce(sum(debit - credit), 0) into v_opening from public.journal_entry_lines
-   where company_id = p_company_id and account_id = p_account_id and entry_date < p_from;
+  select coalesce(sum(jl.debit - jl.credit), 0) into v_opening from public.journal_entry_lines jl
+   where jl.company_id = p_company_id and jl.account_id = p_account_id and jl.entry_date < p_from;
   entry_date := p_from; entry_no := null; source_table := null; source_doc_no := 'Opening balance';
   party_name := null; narration := null; debit := null; credit := null; balance := v_opening;
   return next;

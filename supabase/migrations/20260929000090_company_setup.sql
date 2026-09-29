@@ -22,6 +22,21 @@ insert into app.default_sequences values
   ('JOB_WORK_RETURN',     'DNGT-', '{PREFIX}{NUMBER}',       1, 'NEVER'),
   ('STOCK_TRANSFER',      'ST-',   '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
   ('STOCK_ADJUSTMENT',    'SA-',   '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
+  ('PRODUCTION_LOT',      'GT ',   '{PREFIX}{NUMBER}',       2, 'NEVER'),
+  ('PRODUCTION_RECEIPT',  'FR-',   '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
+  ('WORKER_EARNING',      'WE-',   '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
+  ('PURCHASE_ORDER',      'PO-',   '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
+  ('PURCHASE_RECEIPT',    'PUR-',  '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
+  ('PURCHASE_RETURN',     'PRT-',  '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
+  ('SERVICE_BILL',        'SB-',   '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
+  ('SALES_ORDER',         'SO-',   '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
+  ('DISPATCH',            'DSP-',  '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
+  ('SALES_RETURN',        'SRT-',  '{PREFIX}{FY}/{NUMBER}',  4, 'FY'),
+  ('VOUCHER_RECEIPT',     'REC-',  '{PREFIX}{FY}/{NUMBER}',  5, 'FY'),
+  ('VOUCHER_PAYMENT',     'PAY-',  '{PREFIX}{FY}/{NUMBER}',  5, 'FY'),
+  ('VOUCHER_CONTRA',      'CON-',  '{PREFIX}{FY}/{NUMBER}',  5, 'FY'),
+  ('VOUCHER_JOURNAL',     'JRN-',  '{PREFIX}{FY}/{NUMBER}',  5, 'FY'),
+  ('VOUCHER_ADJUST',      'ADJ-',  '{PREFIX}{FY}/{NUMBER}',  5, 'FY'),
   ('JOURNAL',             'JV-',   '{PREFIX}{FY}/{NUMBER}',  5, 'FY');
 
 -- Default approval policy per document type (Q-10: RM issue needs approval).
