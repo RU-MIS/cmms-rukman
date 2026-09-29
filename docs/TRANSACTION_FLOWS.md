@@ -81,7 +81,7 @@ the payment received (W4).
 | Step | Detail |
 |---|---|
 | Entities | `dispatches`, `dispatch_lines` (→ order line) |
-| Validation | dispatch base_qty ≤ order line pending (Q-21 — whole line or partial); stock available in godown (Q-18) |
+| Validation | dispatch base_qty ≤ order line pending — **partial dispatch allowed** (Q-21); negative-stock warning (Q-18) |
 | **Stock** | `SALE_ISSUE` OUT from dispatch godown, per line |
 | Order status | pending = 0 on all lines ⇒ `DISPATCHED`; delivered date set ⇒ `DELIVERED` (sheet status 2) |
 | Ledger / accounting | none |
@@ -271,11 +271,11 @@ after approval appended to `SALE INV DATA` with `DEEPAK APPROVAL`.
 | Step | Detail |
 |---|---|
 | Entities | `material_issues` (party, from godown, optional job-work PO link), `material_issue_lines` |
-| Workflow | DRAFT → **PENDING_APPROVAL** (share to approver) → APPROVED ⇒ POSTED (Q-10) |
-| Validation | stock available in the from-godown (Q-18); rate from `party_item_rates` (ISSUE) with party-specific column (DK/NAYAB/PARVEEN/SHIBU/OTHER) or last rate (Q-12) |
+| Workflow | DRAFT → **PENDING_APPROVAL** (share to Deepak ji) → approver checks / corrects the final qty → **APPROVED = POSTED** (Q-10). No stock or ledger effect before approval |
+| Validation | stock warning if it goes negative (Q-18 = warn); default rate = **last rate for this karigar + item + godown**, editable; rate 0 allowed (Q-06, Q-12) |
 | **Stock** | `JOB_WORK_ISSUE` OUT from the godown, on POST |
 | **Party ledger** | karigar **debit** = Σ amount (today's `SALE LEDGER`) |
-| **Accounting (PROPOSED — Q-11, Q-13)** | Option A (not a sale, no GST): `Sundry Debtors/Creditors [karigar] Dr` / `Material Issued to Job Workers Cr`. Option B (GST sale): `Sundry Debtors [karigar] Dr` / `Sales – RM Cr` + `Output GST Cr` |
+| **Accounting (decided — Q-11)** | no GST: `[karigar] Dr (receivable sub-ledger)` / `Material Issued to Job Workers Cr` |
 | Function | `fn_material_issue_submit`, `fn_material_issue_approve_post` (approval requires APPROVE permission; approver ≠ creator configurable) |
 | Issue to own FACTORY (rate 0) | stock OUT only, no ledger (BR-36) — or a transfer to a FACTORY godown (Q-08) |
 
@@ -309,10 +309,23 @@ MATERIAL → ABHISHEK CUTTING).
 | Entities | `stock_transfers` (from godown, to godown), lines |
 | Validation | from ≠ to; stock available at source |
 | **Stock** | `STOCK_TRANSFER_OUT` from source **and** `STOCK_TRANSFER_IN` to destination, same qty, same transaction (spec §34) |
-| Ledger / accounting | none (location change only). If goods go to a cutter who is **paid**, the cutting charge is a separate bill (Q-14) |
+| Ledger / accounting | none (location change only) |
 | Function | `fn_stock_transfer_post` |
 
 ---
+
+### 10.1 Cutting bill (Q-14)
+Material sent to a cutter (MUNNA / UMER / ABHISHEK / PARMANAND CUTTING) is a
+stock transfer to the cutter's location; cut material is issued to karigars
+from there. What the cutter returns/cuts is paid for by a **cutting bill**:
+
+| Step | Detail |
+|---|---|
+| Entities | `service_bills` (party = cutter, lines: item, qty, rate, amount; optional godown) |
+| Stock | none by default (goods stay in our stock at the cutter location); if cut pieces are brought back, a stock transfer back is posted |
+| Party ledger | cutter **credit** (payable / purchase ledger) |
+| Accounting | `Cutting Charges Dr` / `[cutter] Cr` |
+| Function | `fn_service_bill_post` |
 
 ## 11. Customer Receipt (D-Mart) — with TDS, GCN, short amount
 
@@ -358,10 +371,12 @@ voucher: `Bank/Cash Dr` / `[party] Cr`.
 Reduces the karigar's **payable** (purchase ledger) **and** the karigar's
 **receivable** (sale ledger) by the same amount (BR-64).
 
-| Design option (Q-13) | Effect |
-|---|---|
-| **A. One combined party account (recommended)** | RM issue debits and FG receipts credit the **same** party account, so the net balance is automatic. ADJUST is **not needed**; historical ADJUST rows are migrated as informational only (no journal) and the ledger still reconciles. |
-| B. Two accounts per karigar (as today) | ADJUST = JOURNAL voucher: `Sundry Creditors [karigar] Dr` / `Sundry Debtors [karigar] Cr`. No cash/bank effect. |
+**Decided (Q-13): both views.** Each party has two sub-ledgers:
+*Receivable* (RM issue bills — today's SALE LEDGER) and *Payable* (FG / RM
+purchases, cutting bills — today's PURCHASE LEDGER). Reports show each
+sub-ledger separately **and** a combined net ledger. ADJUST remains a
+JOURNAL voucher that sets one off against the other:
+`[karigar] Dr (payable)` / `[karigar] Cr (receivable)` — no cash/bank effect.
 
 Stock effect: none. Function: `fn_voucher_post` (JOURNAL).
 

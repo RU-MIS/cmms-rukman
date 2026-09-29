@@ -208,7 +208,7 @@ Simple masters (`code`, `name`, `parent_id` for categories). RM "item type"
 |---|---|
 | Purpose | Auto-consumption when FG is received, e.g. `CHADDI BOTTOM-4841` → 1 × `CB-4841` per BOX. |
 | FK | `fg_item_id`, `consumed_item_id` → `items`; `per_unit_id` → `units` |
-| Fields | `qty_per_unit`, `applies_to_godown_id` (nullable = all), `applies_to_receipt_type` (JOB_WORK / FACTORY / ANY), `effective_from` (2026-06-15), `effective_to` |
+| Fields | `qty_per_unit`, `applies_to_godown_id` (nullable = all), `applies_to_receipt_type` (JOB_WORK / FACTORY / ANY), `effective_from` (2026-06-15), `effective_to`. Decided (Q-19): applies at **all godowns** and to **job-work and factory** receipts, 1 carton per FG box |
 
 ### 4.9 `godowns` ⓒ
 | | |
@@ -224,6 +224,7 @@ Simple masters (`code`, `name`, `parent_id` for categories). RM "item type"
 | FK | `party_id` (nullable = default "OTHER" rate), `item_id` |
 | Fields | `rate_type` ∈ ISSUE, JOB_WORK, PURCHASE, SALE; `rate`, `per_unit_id`, `effective_from`, `effective_to` |
 | Index | (`company_id`,`rate_type`,`item_id`,`party_id`,`effective_from` desc) |
+| Default rate (Q-12) | on RM issue / RM purchase the form proposes the **last rate used for party + item + godown** (query on posted lines, index (`party_id`,`item_id`,`godown_id`,`doc_date` desc)); this table is only for fixed lists such as the job-work item rate (Q-07) |
 
 ### 4.11 `accounts` ⓒ — Chart of Accounts (cash & bank are accounts, spec §27)
 | | |
@@ -243,8 +244,9 @@ Opening Balance Adjustment, Round Off, **Factory Wages** (Bottom / Upper /
 Finish / Cutting), **Factory Salaries**, **Factory Expenses** (daily, food,
 maintenance, medicine), **Cartage** (Q-39). The complete list waits for Q-32.
 
-**Party sub-ledgers:** every `journal_entry_line` that hits a control account
-also carries `party_id`, so customer/vendor ledgers are simply
+**Party sub-ledgers (Q-13 — both views):** each party has a *receivable*
+(Sundry Debtors) and a *payable* (Sundry Creditors) side; every
+`journal_entry_line` that hits a control account also carries `party_id`, so customer/vendor ledgers are simply
 `journal_entry_lines WHERE party_id = …` (spec §29 — ledger derived, never
 edited).
 
@@ -365,7 +367,8 @@ journal lines. If Q-39 asks for earnings tracking, a simple
 |---|---|---|
 | `purchase_orders` ⓒⓣ + lines | Optional RM PO (spec §15 flow A; unused in sheets, Q-16) | `party_id`; lines `item_id`, `qty`, `base_qty`, `rate`; status OPEN / PARTIALLY_RECEIVED / FULLY_RECEIVED / CLOSED |
 | `purchase_receipts` ⓒⓣ + lines | RM purchase receipt (`PURCHASE REC DATA`); **PO optional** | header `party_id`, `godown_id`, `supplier_bill_no`, `supplier_bill_date`; lines `po_line_id` (nullable), `item_id`, `qty`, `unit_id`, `base_qty`, `rate`, `taxable_amount`, `gst_rate`, `gst_amount`, `amount` |
-| `purchase_returns` ⓒⓣ + lines | Return to supplier (Q-17) | mirror of receipt |
+| `purchase_returns` ⓒⓣ + lines | Return to supplier (Q-17 = yes) | mirror of receipt |
+| `service_bills` ⓒⓣ + lines | Cutting charges and other job-work service bills (Q-14) | `party_id`, lines `item_id`, `qty`, `rate`, `amount`; posts `Cutting Charges Dr / [party] Cr` |
 
 Pending PO qty for RM (if POs are used) is derived exactly like job work.
 
@@ -375,8 +378,9 @@ Pending PO qty for RM (if POs are used) is derived exactly like job work.
 
 | Table | Purpose | Key fields |
 |---|---|---|
-| `sales_orders` ⓒⓣ | D-Mart PO (`SALE PO`) | `party_id` (D-Mart), `ship_to_address_id` (DC), `customer_po_no` (10-digit), `po_date`, `delivery_date`, status OPEN / PARTIALLY_DISPATCHED / DISPATCHED / DELIVERED / CANCELLED; `revision_no` (Q-22) |
+| `sales_orders` ⓒⓣ | D-Mart PO (`SALE PO`) | `party_id` (D-Mart), `ship_to_address_id` (DC), `customer_po_no` (10-digit), `po_date`, `delivery_date` (latest; history in `sales_order_date_revisions`: old/new date, reason, user — Q-22), status OPEN / PARTIALLY_DISPATCHED / DISPATCHED / DELIVERED / CANCELLED; `revision_no` (Q-22) |
 | `sales_order_lines` | PO line | `item_id`, `qty`, `unit_id`, `base_qty`, `rate` (nullable), unique(`order_id`,`item_id`) |
+| `sales_order_date_revisions` | D-Mart "revise" (Q-22) | `sales_order_id`, `field` (PO/delivery date), `old_date`, `new_date`, `reason`, `revised_by/at` |
 | `dispatches` ⓒⓣ + `dispatch_lines` | Goods leaving a godown for a DC | header `godown_id`, `sales_order_id`, `dispatch_date`, `delivered_date`, `vehicle_no`, `transporter_party_id`; lines `order_line_id`, `item_id`, `base_qty` (≤ pending, Q-21) |
 | `customer_bills` ⓒ | **Recorded** Tally invoice `T/26-27/NNN` (Q-03: made in Tally, ERP records only) | `party_id`, `ship_to_address_id` (DC), `bill_no` (unique per company+FY), `bill_date`, `amount`, optional `dispatch_id`; no line items / GST split |
 | `customer_credit_notes` ⓒⓣ | D-Mart GCN / debit note / short payment (Q-23) | `party_id`, `against_invoice_id`, `reason`, `amount`, tax split |
@@ -457,7 +461,7 @@ materialized views only if measured necessary (spec §31).
 |---|---|
 | No duplicate document numbers | unique(`company_id`,`doc_type`,`doc_no`) + `fn_next_doc_no` row lock |
 | No over-receipt (JW / PO) | posting fn locks order line, compares with derived pending |
-| No negative stock (if Q-18 = block) | posting fn locks `stock_balances` rows; godown `allow_negative` override |
+| Negative stock (Q-18 = **warn**) | posting fn computes the new balance from `stock_balances` and returns a warning; company setting can switch to BLOCK |
 | Balanced journals | deferred constraint trigger |
 | Immutable ledgers | trigger blocks UPDATE/DELETE on `stock_movements`, `journal_entry_lines`, `audit_log` |
 | Posted documents immutable | trigger blocks UPDATE of posted headers/lines except status → CANCELLED via `fn_*_cancel` |

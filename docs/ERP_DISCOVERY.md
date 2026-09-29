@@ -487,7 +487,7 @@ Each rule has an ID so that later code, tests and questions can reference it.
 
 ## 9. Answers received (decisions log)
 
-Answers from the business owner, 29-Sep-2026. These override any earlier
+Answers from the business owner, 29-Sep-2026 (Q-01…Q-22). These override any earlier
 assumption in this document set.
 
 | Q | Answer (as given) | Decision for the ERP |
@@ -499,8 +499,23 @@ assumption in this document set.
 | Q-05 | Yes, it happens — allow editing the order for that. | No separate short-close: the order line qty can be **reduced** by editing, but **never below the qty already received**. When it equals received, the line leaves the pending list and the PO becomes FULLY_RECEIVED. |
 | Q-06 | No rate is mentioned when giving job work. A 0-amount entry without rate can also be sent. | Job-Work PO has **no rate**. Documents with **rate 0 / blank are allowed** (amount 0) — no block; shown with a "rate missing" flag in lists so it can be corrected later. |
 | Q-07 | The karigar rate is applied at **receipt**, based on the **FG item**. | Rate is decided at receipt. Default = the **FG item's job-work rate** (item-wise rate list with effective date), editable on the receipt line. Data check: most items have one rate (e.g. `2 PVC PATCH-605` 190, `HB TRANSPARENT-1014` 175), but some differ (`HB CHAIN-0864` 280 / 140, `CHADDI BOTTOM-4841` 250 / 235 / 120) — so the rate stays editable per receipt and the last-used rate is remembered. |
+| Q-08 | The factory is our own **and** job work also exists. | Both production routes stay: **own-factory lots** (W6, no per-pair payable) and **job-work POs** to karigars (W1, payable at receipt). A factory that is paid per pair is simply set up as a job-work party. |
+| Q-09 | PO is downloaded and sent by **email and WhatsApp**. | Every document gets **Download PDF**, **Email** (logged) and **WhatsApp share** (opens WhatsApp with the party's mobile and the PDF link; free — no paid WhatsApp API). |
+| Q-10 | Deepak ji's approval only checks the **final quantity** actually sold (issued). | RM issue flow: DRAFT → PENDING_APPROVAL → approver checks/corrects qty → **APPROVED = POSTED**. Stock and karigar ledger change **only on approval**. |
+| Q-11 | B — only a debit in the karigar's account, **no GST**. | RM issue is **not a GST sale**: `[karigar] Dr` / `Material Issued to Job Workers Cr`, amount = qty × rate. |
+| Q-12 | Every karigar has a different rate; when issuing (selling) or purchasing RM, show the **last rate given**, and rates are **godown-based**. | Default rate = **last rate for party + item + godown** (separately for RM issue and RM purchase), editable. `party_item_rates` stays optional for fixed lists. |
+| Q-13 | Wants **both** options. | Each party has **two sub-ledgers** — *Sale/Receivable* (RM bills) and *Purchase/Payable* (FG/RM purchases) — shown separately (like today's SALE LEDGER / PURCHASE LEDGER) **and** a **combined net ledger** report. The **ADJUST** voucher stays available to set one off against the other. |
+| Q-14 | Both happen: material is **sent and shifted** to cutters; for what comes back we **pay** them, and it shows in the **purchase ledger**. | Cutters = party role CUTTER with a PARTY_LOCATION godown. Material goes by **stock transfer**; cut material is received/used from that location; the cutter's charge is a **cutting bill** (qty × rate) → cutter's payable (purchase ledger). |
+| Q-15 | A — track GST separately (input tax credit). | Purchase receipt lines split taxable + GST: `Purchase Dr` + `Input GST Dr` / `[supplier] Cr`. |
+| Q-16 | Both. | RM Purchase Order is **optional**: receiving works with or without a PO (partial receiving against PO like job work). |
+| Q-17 | Both. | **Purchase returns** to suppliers are supported (stock OUT, supplier debit), besides debit notes to karigars. |
+| Q-18 | B — warning only. | Negative stock is **allowed with a warning** (company setting `negative_stock = WARN`; can be switched to BLOCK later). Current negatives (DQ-01) migrate as they are and show in an exceptions report. |
+| Q-19 | The carton rule applies to **other godowns too** and to **factory receipts** too. | 1 carton per FG **box** received, at the receiving godown, for job-work **and** factory receipts. Effective date 15-Jun-2026 (as in the sheet) unless told otherwise. Fixes DQ-04 (boxes, not pairs). |
+| Q-20 | D-Mart is the only customer now, but the design must allow **other customers**; D-Mart sends sale orders per DC. | Generic customers; each customer has **ship-to locations (DCs)**; sale order = customer + DC. |
+| Q-21 | Yes, partial dispatch happens. | Dispatch lines ≤ pending; order line stays open until fully dispatched. |
+| Q-22 | "revise" = the D-Mart PO **date is changed** (sale/delivery date revised). | Sale order keeps a **date revision history** (old date, new date, reason, user); order lists show "revised" and the latest date. |
 
-Questions Q-08 onward are still open.
+Questions Q-23 onward are still open.
 
 ---
 
@@ -510,7 +525,7 @@ Please answer in any form (Hindi/English, voice note transcribed, one line
 each). IDs are referenced from the other documents. **Items marked 🔴 block
 the database design; 🟡 block a specific module; 🟢 can be decided later.**
 
-> Q-01 … Q-07 are answered — see §9. The text below is kept for reference.
+> Q-01 … Q-22 are answered — see §9. The text below is kept for reference.
 
 ### A. Missing inputs
 
