@@ -1,0 +1,17 @@
+{
+  "name": "rukman-dataflow",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ERP: job work, own factory, inventory, sales orders, payments and double-entry accounting on Supabase/PostgreSQL",
+  "scripts": {
+    "db:test": "bash scripts/db/test-local.sh",
+    "db:reset": "bash scripts/db/reset-local.sh",
+    "db:migrate": "supabase db push",
+    "db:seed": "bash scripts/db/seed.sh",
+    "instance:init": "bash scripts/instance/init.sh",
+    "instance:verify": "bash scripts/instance/verify.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

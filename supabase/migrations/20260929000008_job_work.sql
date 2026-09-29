@@ -291,8 +291,8 @@ declare
   o   public.job_work_orders;
   v_unit uuid; v_factor numeric; v_base numeric; v_received numeric;
 begin
-  select * into ol from public.job_work_order_lines where id = p_order_line_id for update;
-  select * into o from public.job_work_orders where id = ol.order_id for update;
+  select * into ol from public.job_work_order_lines where id = p_order_line_id for no key update;
+  select * into o from public.job_work_orders where id = ol.order_id for no key update;
   if o.id is null or not app.is_member(o.company_id) then
     raise exception 'PO line not found' using errcode = 'P0001';
   end if;
@@ -332,7 +332,7 @@ set search_path = public, app, pg_temp
 as $$
 declare o public.job_work_orders; v_id uuid; v_factor numeric; v_line int;
 begin
-  select * into o from public.job_work_orders where id = p_order_id for update;
+  select * into o from public.job_work_orders where id = p_order_id for no key update;
   if o.id is null or not app.is_member(o.company_id) then
     raise exception 'PO not found' using errcode = 'P0001';
   end if;
@@ -386,7 +386,7 @@ begin
 
   for l in select * from public.job_work_receipt_lines where receipt_id = p_id order by order_line_id loop
     -- Lock the PO line: concurrent receipts of the same line are serialised.
-    select * into ol from public.job_work_order_lines where id = l.order_line_id for update;
+    select * into ol from public.job_work_order_lines where id = l.order_line_id for no key update;
     select * into o from public.job_work_orders where id = ol.order_id;
     select name into v_item from public.items where id = ol.item_id;
     if o.company_id <> h.company_id or o.party_id <> h.party_id then

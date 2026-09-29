@@ -12,7 +12,7 @@ company's Google Sheets system.
 | Phase | State |
 |---|---|
 | Discovery (`docs/ERP_DISCOVERY.md`, `docs/DATABASE_BLUEPRINT.md`, `docs/TRANSACTION_FLOWS.md`, `docs/INSTANCE_ARCHITECTURE.md`) | ✅ complete |
-| PostgreSQL schema & posting functions (`supabase/migrations`) | 🚧 in progress |
+| PostgreSQL schema, posting functions, RLS, tests (`supabase/migrations`, `supabase/tests`) | ✅ done — `npm run db:test` |
 | Web application (Next.js) | ⏳ not started |
 
 ## Stack
@@ -32,6 +32,8 @@ npm run db:test                   # creates a throw-away DB, applies all migrati
 ```
 
 `db:test` never touches a remote database. See `docs/TESTING.md`.
+
+New instance: `docs/INSTANCE_SETUP.md`. Clone for another client: `docs/CLONING.md`.
 
 The previous "BusinessFlow ERP" code (Express/Prisma/MySQL) was removed on
 purpose (decision Q-35); it remains available in git history.

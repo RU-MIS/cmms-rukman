@@ -2,7 +2,7 @@
 -- TEST HELPERS — loaded into the throw-away test database only.
 -- =============================================================================
 create schema if not exists test;
-grant usage on schema test to authenticated;
+grant usage on schema test to authenticated, anon;
 
 -- Act as a user (API request with the authenticated role), or as the database
 -- owner (p_user null) for setup steps.

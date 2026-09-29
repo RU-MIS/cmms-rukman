@@ -284,7 +284,8 @@ begin
   return replace(replace(replace(s.pattern,
            '{PREFIX}', s.prefix),
            '{FY}', v_fy),
-           '{NUMBER}', lpad(v_value::text, s.padding, '0'));
+           '{NUMBER}', case when length(v_value::text) >= s.padding then v_value::text   -- lpad would truncate
+                            else lpad(v_value::text, s.padding, '0') end);
 end;
 $$;
 

@@ -289,8 +289,8 @@ as $$
 declare ol public.purchase_order_lines; o public.purchase_orders;
         v_unit uuid; v_factor numeric; v_base numeric; v_received numeric;
 begin
-  select * into ol from public.purchase_order_lines where id = p_po_line_id for update;
-  select * into o from public.purchase_orders where id = ol.order_id for update;
+  select * into ol from public.purchase_order_lines where id = p_po_line_id for no key update;
+  select * into o from public.purchase_orders where id = ol.order_id for no key update;
   if o.id is null or not app.is_member(o.company_id) then
     raise exception 'PO line not found' using errcode = 'P0001';
   end if;
@@ -343,7 +343,7 @@ begin
 
   for l in select * from public.purchase_receipt_lines where receipt_id = p_id order by po_line_id nulls last, line_no loop
     if l.po_line_id is not null then
-      select * into ol from public.purchase_order_lines where id = l.po_line_id for update;
+      select * into ol from public.purchase_order_lines where id = l.po_line_id for no key update;
       select * into o from public.purchase_orders where id = ol.order_id;
       if o.company_id <> h.company_id or o.party_id <> h.party_id or ol.item_id <> l.item_id then
         raise exception 'PO line does not match this supplier / item' using errcode = 'P0001';

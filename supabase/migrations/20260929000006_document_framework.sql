@@ -51,6 +51,10 @@ end;
 $$;
 
 -- Lock a document header and return its key fields.
+-- Row locks use FOR NO KEY UPDATE throughout: inserting a child row takes a
+-- FOR KEY SHARE lock on the referenced row (FK check). FOR UPDATE would conflict
+-- with that and two users posting against the same PO line would deadlock;
+-- FOR NO KEY UPDATE still serialises the posting functions among themselves.
 create or replace function app.lock_doc(d app.doc_types, p_id uuid,
                                         out company_id uuid, out status text, out created_by uuid,
                                         out doc_date date)
@@ -58,7 +62,7 @@ language plpgsql security definer
 set search_path = public, app, pg_temp
 as $$
 begin
-  execute format('select company_id, status::text, created_by, doc_date from public.%I where id = $1 for update',
+  execute format('select company_id, status::text, created_by, doc_date from public.%I where id = $1 for no key update',
                  d.table_name)
     into company_id, status, created_by, doc_date using p_id;
   if company_id is null then

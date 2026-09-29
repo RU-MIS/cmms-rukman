@@ -275,7 +275,7 @@ set search_path = public, app, pg_temp
 as $$
 declare o public.sales_orders; v_old date;
 begin
-  select * into o from public.sales_orders where id = p_order_id for update;
+  select * into o from public.sales_orders where id = p_order_id for no key update;
   if o.id is null or not app.is_member(o.company_id) then
     raise exception 'Sales order not found' using errcode = 'P0001';
   end if;
@@ -308,8 +308,8 @@ as $$
 declare ol public.sales_order_lines; o public.sales_orders;
         v_unit uuid; v_factor numeric; v_base numeric; v_done numeric;
 begin
-  select * into ol from public.sales_order_lines where id = p_order_line_id for update;
-  select * into o from public.sales_orders where id = ol.order_id for update;
+  select * into ol from public.sales_order_lines where id = p_order_line_id for no key update;
+  select * into o from public.sales_orders where id = ol.order_id for no key update;
   if o.id is null or not app.is_member(o.company_id) then
     raise exception 'Order line not found' using errcode = 'P0001';
   end if;
@@ -347,7 +347,7 @@ declare
   v_doc_no text; v_pending numeric; v_warns text[] := '{}';
 begin
   select * into h from public.dispatches where id = p_id;
-  select * into o from public.sales_orders where id = h.sales_order_id for update;
+  select * into o from public.sales_orders where id = h.sales_order_id for no key update;
   if o.company_id <> h.company_id then
     raise exception 'Sales order belongs to another company' using errcode = 'P0001';
   end if;
@@ -360,7 +360,7 @@ begin
   v_doc_no := app.next_doc_no(h.company_id, 'DISPATCH', h.doc_date);
 
   for l in select * from public.dispatch_lines where dispatch_id = p_id order by order_line_id loop
-    select * into ol from public.sales_order_lines where id = l.order_line_id for update;
+    select * into ol from public.sales_order_lines where id = l.order_line_id for no key update;
     if ol.order_id <> o.id or ol.item_id <> l.item_id then
       raise exception 'Dispatch line does not match the sales order' using errcode = 'P0001';
     end if;
@@ -406,7 +406,7 @@ set search_path = public, app, pg_temp
 as $$
 declare d public.dispatches;
 begin
-  select * into d from public.dispatches where id = p_dispatch_id for update;
+  select * into d from public.dispatches where id = p_dispatch_id for no key update;
   if d.id is null or not app.is_member(d.company_id) then
     raise exception 'Dispatch not found' using errcode = 'P0001';
   end if;
