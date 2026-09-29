@@ -1,7 +1,7 @@
 # Database Blueprint — PostgreSQL (Supabase)
 
 > Phase 2 deliverable. Status: **DRAFT — awaiting answers to the 🔴 questions
-> in [`ERP_DISCOVERY.md` §9](./ERP_DISCOVERY.md#9-questions_requiring_user_confirmation).**
+> in [`ERP_DISCOVERY.md` §10](./ERP_DISCOVERY.md#10-questions_requiring_user_confirmation).**
 > Table names, columns and constraints below are the proposed design; the
 > SQL migrations will be generated from this document only after review.
 
@@ -66,7 +66,7 @@ in heavy reports.
    └ job_work_order_lines      └ lines                └ sales_order_lines
  job_work_receipts ──────┐   purchase_receipts        dispatches
    └ lines (→ order_line)│     └ lines                  └ lines (→ order_line)
- material_issues         │   purchase_returns         sales_invoices
+ material_issues         │   purchase_returns         customer_bills (from Tally)
    └ lines               │     └ lines                  └ lines
  job_work_returns        │                            customer_credit_notes
    └ lines               │
@@ -288,14 +288,14 @@ with `direction`. Requires APPROVE permission. Used to fix DQ-01.
 |---|---|
 | Purpose | Karigar PO `GT-NNN` (sheet `PURCHASE PO ENTRY`). |
 | FK | `party_id` (role JOB_WORKER), `default_godown_id` |
-| Fields | `lot_no` (spec §18), `expected_date`, `status` ∈ DRAFT, OPEN, PARTIALLY_RECEIVED, FULLY_RECEIVED, SHORT_CLOSED (Q-05), CANCELLED |
+| Fields | `lot_no` (spec §18), `expected_date`, `status` ∈ DRAFT, OPEN, PARTIALLY_RECEIVED, FULLY_RECEIVED, CANCELLED (no separate short-close — Q-05: edit line qty instead) |
 | Indexes | unique(`company_id`,`doc_no`); (`company_id`,`party_id`,`status`) |
 
 ### 6.2 `job_work_order_lines`
 | | |
 |---|---|
 | FK | `order_id`, `item_id` (FG), `unit_id` |
-| Fields | `line_no`, `qty`, `factor_to_base`, `ordered_base_qty`, `rate` (nullable, Q-07), `short_closed_base_qty` default 0 |
+| Fields | `line_no`, `qty`, `factor_to_base`, `ordered_base_qty` (**editable** after confirmation via `fn_job_work_order_line_edit` — may go up, or down but never below received; each change audited — Q-04/Q-05). **No rate on the PO** (Q-06). |
 | Constraints | unique(`order_id`,`item_id`) (BR-10); `ordered_base_qty > 0` |
 | **Not stored** | received / pending — derived (spec §16, BR-12) |
 
@@ -307,7 +307,7 @@ with `direction`. Requires APPROVE permission. Used to fix DQ-01.
 | Line FK | `receipt_id`, `order_line_id` → `job_work_order_lines` (NOT NULL, BR-18), `item_id`, `unit_id` |
 | Line fields | `qty`, `factor_to_base`, `base_qty`, `rate` (per base unit — per pair), `amount` |
 | Indexes | (`order_line_id`) — drives the pending calculation |
-| Rule | Posting function locks the order line (`SELECT … FOR UPDATE`) and rejects `base_qty > pending` (spec §21, Q-04). |
+| Rule | Posting function locks the order line (`SELECT … FOR UPDATE`) and rejects `base_qty > pending` (spec §21, Q-04). Rate: default from `party_item_rates` (type JOB_WORK, **item-wise**, party NULL) → editable; rate 0 allowed with `rate_missing` flag (Q-06/Q-07). |
 
 ### 6.4 `material_issues` ⓒⓣ + `material_issue_lines`
 | | |
@@ -328,8 +328,8 @@ the PO is part of Q-05 (default: no).
 |---|---|
 | Purpose | Lot allotted to the own factory (W6 `PO ENTRY`). Same shape as a job-work order, but **no party payable and no rate**. |
 | Header FK | `factory_godown_id` → `godowns` (type FACTORY: `FACTORY`, `MUSHIR FACTORY` — Q-38), `default_receipt_godown_id` |
-| Header fields | `lot_no` (display, e.g. `GT 19`; **not unique on its own** — Q-37), `doc_no` from sequence (unique), `lot_cycle` (optional, distinguishes `GT19` from `GT 19`), `status` ∈ OPEN, PARTIALLY_RECEIVED, COMPLETED (= sheet "LOT ORDER COMPLETED"), SHORT_CLOSED, CANCELLED |
-| Line fields | `item_id` (FG), `qty` (boxes typed), `unit_id`, `factor_to_base`, `planned_base_qty`, `short_closed_base_qty` |
+| Header fields | `lot_no` (display, e.g. `GT 19`; **not unique on its own** — Q-37), `doc_no` from sequence (unique), `lot_cycle` (optional, distinguishes `GT19` from `GT 19`), `status` ∈ OPEN, PARTIALLY_RECEIVED, COMPLETED (= sheet "LOT ORDER COMPLETED"), CANCELLED |
+| Line fields | `item_id` (FG), `qty` (boxes typed), `unit_id`, `factor_to_base`, `planned_base_qty` (editable like job-work lines, Q-04/Q-05) |
 | Constraints | unique(`order_id`,`item_id`); `planned_base_qty > 0` |
 | Not stored | received / pending — derived in `v_production_order_line_status` |
 
@@ -378,12 +378,11 @@ Pending PO qty for RM (if POs are used) is derived exactly like job work.
 | `sales_orders` ⓒⓣ | D-Mart PO (`SALE PO`) | `party_id` (D-Mart), `ship_to_address_id` (DC), `customer_po_no` (10-digit), `po_date`, `delivery_date`, status OPEN / PARTIALLY_DISPATCHED / DISPATCHED / DELIVERED / CANCELLED; `revision_no` (Q-22) |
 | `sales_order_lines` | PO line | `item_id`, `qty`, `unit_id`, `base_qty`, `rate` (nullable), unique(`order_id`,`item_id`) |
 | `dispatches` ⓒⓣ + `dispatch_lines` | Goods leaving a godown for a DC | header `godown_id`, `sales_order_id`, `dispatch_date`, `delivered_date`, `vehicle_no`, `transporter_party_id`; lines `order_line_id`, `item_id`, `base_qty` (≤ pending, Q-21) |
-| `sales_invoices` ⓒⓣ + lines | Tax invoice `T/26-27/NNN` (Q-03) | `party_id`, `ship_to_address_id`, `dispatch_id` (nullable), `place_of_supply`, `taxable_amount`, `cgst`, `sgst`, `igst`, `round_off`, `total`; lines `item_id`, `hsn`, `qty`, `rate`, `discount`, `taxable`, `gst_rate`, tax amounts |
+| `customer_bills` ⓒ | **Recorded** Tally invoice `T/26-27/NNN` (Q-03: made in Tally, ERP records only) | `party_id`, `ship_to_address_id` (DC), `bill_no` (unique per company+FY), `bill_date`, `amount`, optional `dispatch_id`; no line items / GST split |
 | `customer_credit_notes` ⓒⓣ | D-Mart GCN / debit note / short payment (Q-23) | `party_id`, `against_invoice_id`, `reason`, `amount`, tax split |
 | `sales_returns` ⓒⓣ + lines | Goods returned by customer | stock IN `SALE_RETURN` |
 
-Whether dispatch and invoice are **one document** or two is decided by Q-03 /
-Q-24; the tables allow both (invoice may reference a dispatch).
+Tax invoices stay in Tally (Q-03). A full `sales_invoices` table (GST lines) is **not** built in phase 1; it can be added later without changing dispatches or receipts.
 
 ---
 
@@ -403,7 +402,7 @@ For JOURNAL and multi-line vouchers: `account_id`, `party_id`, `debit`,
 ### 9.3 `voucher_allocations` (spec §26 — partial payments)
 | | |
 |---|---|
-| FK | `voucher_id`; exactly one of `sales_invoice_id`, `job_work_receipt_id`, `purchase_receipt_id`, `material_issue_id` (bill references) |
+| FK | `voucher_id`; exactly one of `customer_bill_id`, `job_work_receipt_id`, `purchase_receipt_id`, `material_issue_id` (bill references) |
 | Fields | `amount` > 0, `tds_amount`, `short_amount` |
 | Rule | Sum of allocations ≤ voucher amount; unallocated remainder = **advance** (spec §26 customer/vendor advance). |
 | Outstanding | bill total − Σ allocations − credit notes → view `v_bill_outstanding`. |
@@ -436,7 +435,7 @@ dates in closed periods.
 |---|---|---|
 | `v_stock_balance` | `STOCK IN GODOWN`, `STOCK DETAIL` | Σ `signed_base_qty` by company, item, godown |
 | `fn_stock_ledger(item, godown, from, to)` | `ITEM WISE DATA`, `ITEM WISE OUT-IN` | opening + movements + running balance |
-| `v_job_work_order_line_status` | `PO ENTRY SALE` | ordered, received (Σ posted receipt lines), returned, short-closed, **pending = ordered − received − short_closed**, status |
+| `v_job_work_order_line_status` | `PO ENTRY SALE` | ordered, received (Σ posted receipt lines), returned, **pending = ordered (current, after edits) − received**, status |
 | `v_job_work_pending` | `PURCHASE REC` side panel | rows of the above with pending > 0 (spec §20) |
 | `v_sales_order_line_status` | `SALE PO`, `PO TRACKING SHEET` | ordered, dispatched, pending, delivered |
 | `fn_dispatch_plan(dc[], from, to)` | `PLANING SHEET` | pending boxes by DC/item/delivery date |
@@ -499,7 +498,7 @@ materialized views only if measured necessary (spec §31).
 | `fn_purchase_receipt_post` | receipt + lines, `PURCHASE_RECEIPT` movements, journal, PO status | PO pending (if linked) |
 | `fn_stock_transfer_post` | paired OUT/IN movements | stock available at source |
 | `fn_dispatch_post` | dispatch + lines, `SALE_ISSUE` movements, SO status | SO pending, stock available |
-| `fn_sales_invoice_post` | invoice + lines, journal | GST calc, place of supply |
+| `fn_customer_bill_record` | bill header (+ journal if Q-33 = full accounting) | bill no unique |
 | `fn_voucher_post` | voucher + lines + allocations, journal | allocation ≤ bill outstanding, balanced |
 | `fn_<doc>_cancel(id, reason)` | reversal movements + reversal journal, status CANCELLED | CANCEL permission, dependent documents (e.g. cannot cancel a receipt that is allocated) |
 

@@ -9,7 +9,7 @@
 > **Accounting lines marked "PROPOSED" are not taken from the sheets** (the
 > sheets are single-entry). They follow the default patterns in the Master
 > Specification §28 and are **not final** until the linked question in
-> [`ERP_DISCOVERY.md` §9](./ERP_DISCOVERY.md#9-questions_requiring_user_confirmation)
+> [`ERP_DISCOVERY.md` §10](./ERP_DISCOVERY.md#10-questions_requiring_user_confirmation)
 > is answered. Nothing will be implemented against a PROPOSED line without
 > confirmation.
 
@@ -62,11 +62,12 @@ DRAFT ──submit──► PENDING_APPROVAL ──approve──► POSTED ─�
 
 ---
 
-## 2. Sales — D-Mart PO → Dispatch → Tax Invoice
+## 2. Sales — D-Mart PO → Dispatch → Bill (recorded from Tally)
 
 **Today:** `SALE PO` rows (PO no, DC, item, req qty, box, delivery date).
-Status `OK` + godown + dispatch date ⇒ full line leaves stock. Invoice is
-made outside the sheets (Q-03). Receivable tracked in W4.
+Status `OK` + godown + dispatch date ⇒ full line leaves stock. The **tax
+invoice is made in Tally** (Q-03); the sheets only record bill no, amount and
+the payment received (W4).
 
 ### 2.1 Sales Order (D-Mart PO)
 | Step | Detail |
@@ -83,18 +84,18 @@ made outside the sheets (Q-03). Receivable tracked in W4.
 | Validation | dispatch base_qty ≤ order line pending (Q-21 — whole line or partial); stock available in godown (Q-18) |
 | **Stock** | `SALE_ISSUE` OUT from dispatch godown, per line |
 | Order status | pending = 0 on all lines ⇒ `DISPATCHED`; delivered date set ⇒ `DELIVERED` (sheet status 2) |
-| Ledger / accounting | none at dispatch (revenue at invoice) — **PROPOSED**, see Q-24 |
+| Ledger / accounting | none |
 | Function | `fn_dispatch_post` |
 
-### 2.3 Tax Invoice (spec §14 atomic unit)
+### 2.3 Customer Bill (recorded, not generated — Q-03)
 | Step | Detail |
 |---|---|
-| Entities | `sales_invoices`, `sales_invoice_lines` (from dispatch lines when linked) |
-| Validation | GST by place of supply; invoice series `T/{FY}/NNN`; dispatch not already invoiced |
-| **Stock** | none if dispatch already posted; if invoice is created **without** a dispatch (direct invoice), the same function writes `SALE_ISSUE` movements |
-| **Party ledger** | D-Mart debit = invoice total |
-| **Accounting (PROPOSED — Q-03)** | `Sundry Debtors [D-Mart] Dr` total / `Sales – FG Cr` taxable / `Output CGST+SGST or IGST Cr` tax / `Round Off Dr/Cr` |
-| Function | `fn_sales_invoice_post` — invoice + lines + (stock) + journal in one transaction |
+| Entities | `customer_bills` (bill no `T/26-27/NNN` as made in Tally, date, DC, amount, optional link to dispatch) |
+| Validation | bill no unique per company + FY |
+| **Stock** | none (stock left at dispatch) |
+| **Party ledger** | D-Mart **debit** = bill amount → basis for outstanding (replaces W4) |
+| **Accounting** | if full accounting is chosen (Q-33): `Sundry Debtors [D-Mart] Dr` / `Sales (as per Tally) Cr` total. GST is accounted in Tally, not here |
+| Function | `fn_customer_bill_record` |
 
 ### 2.4 Sale return / credit note
 `sales_returns` → `SALE_RETURN` stock IN; `customer_credit_notes` → reverse of
@@ -143,7 +144,8 @@ share to karigar (Q-09).
 | Status | `OPEN` after confirmation |
 | Numbering | `fn_next_doc_no('JOB_WORK_ORDER')` → configurable prefix, e.g. `GT-` (continue after the highest migrated number, DQ-11) |
 | Function | `fn_job_work_order_confirm` |
-| Cancel | allowed only while no receipt is posted; otherwise **short-close** remaining qty (Q-05) |
+| Edit after confirmation (Q-04/Q-05) | line qty can be **increased** (karigar will send more) or **reduced** (karigar will not send the rest) — never below received qty; audited. No rate on the PO (Q-06) |
+| Cancel | allowed only while no receipt is posted |
 
 ---
 
@@ -168,10 +170,11 @@ be typed in box or pairs; both are displayed.
 1. Check permission `job_work_receipt.create`, period open, godown active.
 2. For each line: `SELECT … FROM job_work_order_lines WHERE id = … FOR UPDATE`
    (serialises concurrent receipts of the same line).
-3. Compute pending = ordered − Σ posted receipt base_qty − short_closed.
-4. **Reject if receive base_qty > pending** (spec §21; tolerance per Q-04).
-5. Resolve rate: line rate → party_item_rates (JOB_WORK) → last rate;
-   rate required > 0 unless Q-06 says otherwise.
+3. Compute pending = current ordered qty (after any edits) − Σ posted receipt base_qty.
+4. **Reject if receive base_qty > pending** (spec §21, Q-04). The user must edit the PO qty first if more goods are accepted.
+5. Resolve rate (Q-07): FG item's job-work rate (item-wise list) → last
+   rate used; user may change it. Rate 0 / blank is **allowed** (Q-06) and the
+   receipt is flagged `rate_missing`.
 6. Insert receipt header (doc no from sequence) + lines.
 7. **Stock:** `JOB_WORK_RECEIPT` IN to selected godown: item, godown, qty,
    unit, base_qty, rate, party, PO, lot, date, user (spec §22).
@@ -291,7 +294,7 @@ from godown; reduces payable.
 | **Stock** | `JOB_WORK_RETURN` OUT from godown |
 | **Party ledger** | karigar **debit** = amount (reduces payable) |
 | **Accounting (PROPOSED — Q-13)** | `Sundry Creditors [karigar] Dr` / `Job-Work Charges / Purchase – FG Cr` |
-| PO effect | none by default (pending not re-opened) — confirm in Q-05 |
+| PO effect | none (pending not re-opened); if the karigar must re-make the goods, the PO qty is edited up (Q-04) |
 | Function | `fn_job_work_return_post` |
 
 ---
@@ -433,7 +436,7 @@ giving a balance (earned − paid). No attendance or payroll is built (spec §9)
 | Party receivable | `OPENING BAL ENTRY!J:K`, `SALE LEDGER!BF:BG` | opening journal: `[party] Dr` / `Opening Balance Adjustment Cr` |
 | Bank / cash | W3 `PAYMENT LEDGER!AG:AH`, W7 `PAYMENT LEDGER!BA:BB` (PAPA FACTORT 6 000, GAGAN CASH 11 300, PAPA BANK −3 008) | opening journal per account (ICICI counted once — Q-42) |
 | Open factory lots | W6 `TOTAL ENTRY` rows with status PENDING | `production_orders` with already-received qty as migrated receipts |
-| D-Mart open bills | W4 rows with outstanding | `sales_invoices` (header-only, `is_migrated`) + opening journal |
+| D-Mart open bills | W4 rows with outstanding | `customer_bills` + opening journal |
 
 Cut-over approach (to be confirmed in the migration phase): either (a) import
 **all** historical transactions from Apr-2026 and verify balances, or (b)
@@ -446,7 +449,7 @@ open bills). Reconciliation checks (spec §38) are run for both.
 
 | Event | Dr | Cr | Party ledger | Stock | Question |
 |---|---|---|---|---|---|
-| Sales invoice | Debtors [cust] | Sales, Output GST | cust + | (if direct) OUT | Q-03 |
+| Customer bill (from Tally) | Debtors [cust] | Sales (as per Tally) | cust + | — (at dispatch) | Q-33 |
 | Customer receipt | Bank, TDS Recv, Short/Disc | Debtors [cust] | cust − | — | Q-23 |
 | RM purchase | Purchase RM (+ Input GST) | Creditors [supp] | supp + (Cr) | IN | Q-15 |
 | Vendor payment | Creditors [supp] | Bank/Cash | supp − | — | spec |
@@ -471,7 +474,8 @@ Accounting phase (Q-33).
 
 | Business event | Single function | Rows written together |
 |---|---|---|
-| Sale | `fn_sales_invoice_post` | invoice + lines + (stock OUT) + journal (party line) |
+| Dispatch | `fn_dispatch_post` | dispatch + lines + stock OUT + SO status |
+| Customer bill | `fn_customer_bill_record` | bill + journal (party line) |
 | Purchase | `fn_purchase_receipt_post` | receipt + lines + stock IN + journal (party line) |
 | Job-work receipt | `fn_job_work_receipt_post` | receipt + lines + stock IN + carton OUT + journal + PO status |
 | Factory lot receipt | `fn_production_receipt_post` | receipt + lines + stock IN + carton OUT + lot status |

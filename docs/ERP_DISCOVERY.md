@@ -202,7 +202,7 @@ a UI screen, not data; it becomes a web form).
 
 | Tab | Class | Rows used | What it holds / does | Maps to |
 |---|---|---|---|---|
-| `MAIN SHEET` | TRANSACTION (register) | 52 (FY25-26 Apr–May) | Place (DC), bill date, bill no (`T/25-26/NNN`, with remarks like `NO T/24-25/01`, `OK`), amount, TDS, amount received, received date, less amount, debit note (`GCN/25-26/007`). Y = DC list. | `sales_invoices` (header data), `receipt_allocations`, `customer_credit_notes` |
+| `MAIN SHEET` | TRANSACTION (register) | 52 (FY25-26 Apr–May) | Place (DC), bill date, bill no (`T/25-26/NNN`, with remarks like `NO T/24-25/01`, `OK`), amount, TDS, amount received, received date, less amount, debit note (`GCN/25-26/007`). Y = DC list. | `customer_bills`, `voucher_allocations`, `customer_credit_notes` |
 | `APRIL` … `MARCH`, `APR-26` … `Oct-26` (19 tabs) | TRANSACTION (register) / REPORT | ≤ 50 each | April is a FILTER view of MAIN SHEET; later months are **typed directly** into the month tab. From Jul-26: `LESS AMOUNT = TDS + received − bill`. | Same as above (one-time migration of each month tab) |
 
 ### 4.5 W5 — `PLANNING_SHEET`
@@ -271,7 +271,7 @@ Each rule has an ID so that later code, tests and questions can reference it.
   `EXTRA RECEIVED` also disappear.
 - **BR-16** **Over-receiving is currently NOT blocked** — 1 line
   (`GT-661 / JUNED JUTI / PATCH JUTI-1076`: ordered 1 296, received 1 350).
-  The spec (§21) requires rejection → **Q-04**.
+  The spec (§21) requires rejection → **Q-04: decided — reject; edit the order qty instead (§9).**
 - **BR-17** Receipt rate is **per pair**; the form proposes the **last rate
   used for that party + item**; amount = qty × rate. Receipts with rate 0 /
   blank exist (early data).
@@ -474,7 +474,7 @@ Each rule has an ID so that later code, tests and questions can reference it.
 | Carton consumption | formula only | `stock_movements` (CONSUMPTION) | inside `fn_job_work_receipt_post` (if confirmed) | §6.4 |
 | D-Mart PO | `SALE PO` | `sales_orders`, `sales_order_lines` | `fn_sales_order_confirm` | §2 |
 | D-Mart dispatch | `SALE PO` status OK | `dispatches`, `dispatch_lines`, `stock_movements` | `fn_dispatch_post` | §2 |
-| D-Mart tax invoice | outside the sheets | `sales_invoices`, `…_lines`, `journal_entries` | `fn_sales_invoice_post` | §2 |
+| D-Mart bill (made in Tally, recorded here) | W4 | `customer_bills` | `fn_customer_bill_record` | §2 |
 | D-Mart receipt (TDS, GCN) | payment book + W4 | `vouchers`, `receipt_allocations`, `journal_entries` | `fn_voucher_post` | §11 |
 | Vendor/JW payment | payment book | `vouchers`, `journal_entries` | `fn_voucher_post` | §12 |
 | ADJUST set-off | payment book `ADJUST` | journal voucher | `fn_voucher_post` | §13 |
@@ -485,11 +485,32 @@ Each rule has an ID so that later code, tests and questions can reference it.
 
 ---
 
-## 9. QUESTIONS_REQUIRING_USER_CONFIRMATION
+## 9. Answers received (decisions log)
+
+Answers from the business owner, 29-Sep-2026. These override any earlier
+assumption in this document set.
+
+| Q | Answer (as given) | Decision for the ERP |
+|---|---|---|
+| Q-01 | Apps Script cannot be shared (too large). | Proceed from formulas and data only. Validations not visible in formulas will be confirmed during UAT against the live sheets. |
+| Q-02 | `SALE DATA` is not used. The goal is to rebuild the same working system (by reference) as a web app that can be **hosted for free**. | `SALE DATA` ignored. Hosting target = **free tier** (see `INSTANCE_ARCHITECTURE.md` §11). |
+| Q-03 | Tax invoices are made in **Tally**. The sheets/ERP are used only to record **payment receiving** against them. | ERP does **not** generate GST tax invoices. It records **customer bills** (bill no, date, DC, amount — header only, as in W4) and receipts against them (TDS, less amount, debit note). No GST/sales journal from the ERP; D-Mart outstanding = recorded bills − receipts. |
+| Q-04 | If more FG must be received, we **edit the order and increase the qty**. | **Over-receipt is rejected.** A job-work PO / factory lot line may be **edited** (qty increased) by a user with EDIT permission; every edit is written to `audit_log`. Then the extra qty can be received. |
+| Q-05 | Yes, it happens — allow editing the order for that. | No separate short-close: the order line qty can be **reduced** by editing, but **never below the qty already received**. When it equals received, the line leaves the pending list and the PO becomes FULLY_RECEIVED. |
+| Q-06 | No rate is mentioned when giving job work. A 0-amount entry without rate can also be sent. | Job-Work PO has **no rate**. Documents with **rate 0 / blank are allowed** (amount 0) — no block; shown with a "rate missing" flag in lists so it can be corrected later. |
+| Q-07 | The karigar rate is applied at **receipt**, based on the **FG item**. | Rate is decided at receipt. Default = the **FG item's job-work rate** (item-wise rate list with effective date), editable on the receipt line. Data check: most items have one rate (e.g. `2 PVC PATCH-605` 190, `HB TRANSPARENT-1014` 175), but some differ (`HB CHAIN-0864` 280 / 140, `CHADDI BOTTOM-4841` 250 / 235 / 120) — so the rate stays editable per receipt and the last-used rate is remembered. |
+
+Questions Q-08 onward are still open.
+
+---
+
+## 10. QUESTIONS_REQUIRING_USER_CONFIRMATION
 
 Please answer in any form (Hindi/English, voice note transcribed, one line
 each). IDs are referenced from the other documents. **Items marked 🔴 block
 the database design; 🟡 block a specific module; 🟢 can be decided later.**
+
+> Q-01 … Q-07 are answered — see §9. The text below is kept for reference.
 
 ### A. Missing inputs
 

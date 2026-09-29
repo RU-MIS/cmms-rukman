@@ -269,14 +269,23 @@ may be ported where they fit the new structure.
 
 ---
 
-## 11. Cost profile (spec §53 "low-cost")
+## 11. Hosting — free tier (decided, Q-02)
 
-| Component | Small single-company instance |
-|---|---|
-| Supabase | Free tier possible for trial; Pro plan recommended for production (daily backups, no pause on inactivity) |
-| Vercel | Hobby for trial; Pro if used commercially per Vercel terms |
-| Email | any SMTP (e.g. company mailbox / transactional provider) |
-| Domain | optional |
+The owner wants the app hosted **free**. Chosen stack (all free tiers,
+commercial use allowed):
 
-Each instance is billed to **its own** accounts — another reason there is no
+| Component | Free service | Limits to watch | Mitigation |
+|---|---|---|---|
+| Database + Auth + Storage | **Supabase Free** | 500 MB DB, 1 GB storage, project **pauses after 7 days without activity**, no automatic backups | Daily use keeps it active; **nightly `pg_dump` backup via GitHub Actions** (free) to a private repo / storage; PDFs are generated on demand, not stored forever |
+| Web app hosting | **Cloudflare Pages / Workers Free** (Next.js via the OpenNext Cloudflare adapter) | request and CPU-time limits per day | ERP traffic of one company is far below the limits |
+| Email | company SMTP (e.g. Gmail / Zoho mailbox) | daily send limits of the mailbox | email log shows failures |
+| Domain | optional (free `*.pages.dev` subdomain) | — | — |
+
+Vercel Hobby is **not** used for production because its terms are for
+non-commercial use; the code stays Vercel-compatible (standard Next.js) so an
+instance can move to Vercel Pro or any Node host later without code changes.
+If the data outgrows the free tier, the same instance moves to Supabase Pro
+(paid) by changing nothing but the plan.
+
+Each instance uses **its own** free accounts — another reason there is no
 shared infrastructure.
