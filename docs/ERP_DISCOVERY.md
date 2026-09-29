@@ -1,8 +1,8 @@
 # ERP Discovery — Existing Google Sheets System
 
 > Phase 1 deliverable of the Master Development Specification.
-> Status: **DRAFT — awaiting user review.** No application code is written until
-> the questions at the end of this document are answered.
+> Status: **COMPLETE — all questions answered (§9).** Decisions in §9 override
+> anything earlier in this document. Next step: PostgreSQL migrations.
 
 Related documents:
 
@@ -433,7 +433,10 @@ Each rule has an ID so that later code, tests and questions can reference it.
 
 ---
 
-## 7. Data-quality findings (must be resolved before migration)
+## 7. Data-quality findings
+
+> After Q-26 (no historical data migration) these findings are kept only as
+> lessons for validations in the new system.
 
 | ID | Finding | Evidence | Impact |
 |---|---|---|---|
@@ -487,7 +490,7 @@ Each rule has an ID so that later code, tests and questions can reference it.
 
 ## 9. Answers received (decisions log)
 
-Answers from the business owner, 29-Sep-2026 (Q-01…Q-22). These override any earlier
+Answers from the business owner, 29-Sep-2026 (all questions). These override any earlier
 assumption in this document set.
 
 | Q | Answer (as given) | Decision for the ERP |
@@ -514,8 +517,28 @@ assumption in this document set.
 | Q-20 | D-Mart is the only customer now, but the design must allow **other customers**; D-Mart sends sale orders per DC. | Generic customers; each customer has **ship-to locations (DCs)**; sale order = customer + DC. |
 | Q-21 | Yes, partial dispatch happens. | Dispatch lines ≤ pending; order line stays open until fully dispatched. |
 | Q-22 | "revise" = the D-Mart PO **date is changed** (sale/delivery date revised). | Sale order keeps a **date revision history** (old date, new date, reason, user); order lists show "revised" and the latest date. |
+| Q-23 | Keep the D-Mart receiving register **exactly like the sheet header**; only move the **subtotal to the bottom**; keep the other formulas the same. | Customer-bill register screen columns: Place (DC), Bill date, Bill no, Amount, TDS, Amount received, Received date, Less amount (= TDS + received − amount), Debit note. Totals row at the **bottom**. Month filter replaces the month tabs. In the books, TDS posts to the system account "TDS Receivable" and less amount / debit note to "Rate Difference / Short Receipt" (both renameable). |
+| Q-24 | All three (per PO, per DC, per dispatch). | A customer bill can be linked to **one or many** sale orders and/or dispatches (`customer_bill_links`); no fixed rule. |
+| Q-25 | The owner will create bank accounts himself. | **No bank accounts are seeded.** Admin creates cash / bank accounts (with opening balance) from the UI. |
+| Q-26 | Forget the old data — build the same system using **only the logic**. | **No migration of historical data.** Each instance starts fresh; masters and opening balances are entered (or bulk-uploaded from a template) by the user. Data-quality findings (§7) now only inform validations; migration/reconciliation phases (spec §37–38) are reduced to an optional Excel template import for masters and openings. |
+| Q-27 | Yes. | Barcode stickers are RM items consumed automatically on FG receipt through `item_consumption_rules` (SMALL: 1 per pair, BIG: 2 per box — configurable). |
+| Q-28 | Yes. | **Transport / freight module** included: transporter parties, freight bill per dispatch or receipt (`service_bills` type FREIGHT) → transporter payable. Details to be designed in the Purchase phase. |
+| Q-29 | Not in any. | No special `ENTRY` payment mode. Non-cash adjustments are made with a normal **Journal voucher** choosing any accounts. |
+| Q-30 | Forget it; we will create such accounts ourselves as needed. | Chart of accounts is **user-extendable**; only a minimal system set is seeded. No personal/loan accounts are pre-created. |
+| Q-31 | They are expense accounts and must stay expense accounts. | STAFF, RENT, DAILY EXPENSE, PORTER, etc. are **expense accounts**, not parties. GST PAYMENT goes to the GST liability account. |
+| Q-32 | Forget the Tally chart of accounts. | Seed a minimal standard Indian chart (groups: Capital, Loans, Current Liabilities, Fixed Assets, Current Assets, Sales, Purchase, Direct/Indirect Expenses & Income) + the system accounts in `DATABASE_BLUEPRINT.md` §4.11. |
+| Q-33 | Everything at once. | Full double-entry in phase 1: journal, trial balance, P&L, balance sheet, day book, cash/bank books, party ledgers. Stock valuation method for P&L/BS = weighted average (company setting). |
+| Q-34 | They can also be different firms. | **Multi-company inside one instance from day one** (deployment model B): company switcher; every company has its own GSTIN, bank accounts, sequences, parties and books, isolated by RLS. |
+| Q-35 | Yes. | Old BusinessFlow ERP code (Express/Prisma/MySQL) will be removed in a separate commit when implementation starts; it stays in git history. |
+| Q-36 | Junior workers enter data; seniors approve. | **Maker–checker**: per company and document type, an approval policy says whether approval is required and which role approves; the creator cannot approve their own document. Posting (stock/ledger effect) happens on approval. |
+| Q-37 | `GT19` and `GT 19` are **different lots**. The lot number format must be **settable** (e.g. `GT NN` or anything else). | Lot numbers come from a **configurable sequence** (prefix, separator, padding, start, reset yearly or never — e.g. `GT 01`), unique per company. Old spellings are irrelevant (Q-26). |
+| Q-38 | Outside party. | `MUSHIR FACTORY` is a **job-work party**, not an own factory. Own factory = `FACTORY` only (more can be added). |
+| Q-39 | B — record pairs × rate as well. | **Worker earnings** are recorded: worker, date, lot (optional), FG item, operation (bottom / upper / finish / cutting…), pairs, rate, amount → `Factory Wages Dr / [worker] Cr`. Payments debit the worker. Report: earned − paid per worker per month. Still no attendance / payroll / HRMS. |
+| Q-40 | Personal. | PAPA FACTORT, GAGAN CASH, PAPA BANK are **personal** — not seeded. If the owner wants them in the books, he creates them himself (e.g. as capital/drawings accounts). |
+| Q-41 | Lot is mandatory; while receiving, show **item-wise which lots are pending and how many pairs/pcs**. | Production receipt line **must** reference a lot line. Receive screen: choose item → list of pending lots of that item with ordered, received, pending (pairs and boxes). |
+| Q-42 | The two payment books are **separate**. | Vouchers carry a **book** (e.g. MAIN, FACTORY — user-defined). Each book has its own entry screen, cash/bank accounts, users and reports; the company's accounts still consolidate both. No de-duplication needed (Q-26). |
 
-Questions Q-23 onward are still open.
+**All 42 questions are answered — discovery is complete.**
 
 ---
 
@@ -525,7 +548,7 @@ Please answer in any form (Hindi/English, voice note transcribed, one line
 each). IDs are referenced from the other documents. **Items marked 🔴 block
 the database design; 🟡 block a specific module; 🟢 can be decided later.**
 
-> Q-01 … Q-22 are answered — see §9. The text below is kept for reference.
+> All questions are answered — see §9. The text below is kept for reference.
 
 ### A. Missing inputs
 

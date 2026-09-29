@@ -1,6 +1,9 @@
 # Transaction Flows
 
-> Phase 2 deliverable. Status: **DRAFT — awaiting user review.**
+> Phase 2 deliverable. Status: **FINAL for migration phase** — all questions
+> answered. Decisions: [`ERP_DISCOVERY.md` §9](./ERP_DISCOVERY.md#9-answers-received-decisions-log);
+> design summary: [`DATABASE_BLUEPRINT.md` §0](./DATABASE_BLUEPRINT.md). Where
+> a line below still says PROPOSED, the default shown is now adopted.
 >
 > Every flow lists: how it works in the sheets today, the ERP steps,
 > validations, **stock effect**, **party-ledger effect**, **accounting
@@ -96,6 +99,14 @@ the payment received (W4).
 | **Party ledger** | D-Mart **debit** = bill amount → basis for outstanding (replaces W4) |
 | **Accounting** | if full accounting is chosen (Q-33): `Sundry Debtors [D-Mart] Dr` / `Sales (as per Tally) Cr` total. GST is accounted in Tally, not here |
 | Function | `fn_customer_bill_record` |
+
+### 2.3a Bill register screen (Q-23, Q-24)
+Columns exactly as the sheet: **Place (DC) · Bill date · Bill no · Amount ·
+TDS · Amount received · Received date · Less amount · Debit note**, with
+`Less amount = TDS + Amount received − Amount`. Totals at the **bottom**.
+Filter by month / DC / status replaces the month tabs. A bill may be linked
+to one or many sale orders and/or dispatches (per PO, per DC or per dispatch
+— Q-24).
 
 ### 2.4 Sale return / credit note
 `sales_returns` → `SALE_RETURN` stock IN; `customer_credit_notes` → reverse of
@@ -241,7 +252,7 @@ amount.
 ### 7.2 Lot receipt (Production Receipt)
 ```
 Factory : [ FACTORY ▼ ]   To Godown : [ B-336 ▼ ]   Date : [ 22-Sep-2026 ]
-Item    : [ PVC CHINA UPPER-963 ▼ ]   → pending lots of this item only (BR-103)
+Item    : [ PVC CHINA UPPER-963 ▼ ]   → all pending lots of this item, with pending pairs / boxes (Q-41)
 
 LOT     ITEM                  ALLOTTED   RECEIVED   PENDING    RECEIVE (Box)
 GT 03   PVC CHINA UPPER-963   …          …          …          [ 10 ]
@@ -249,7 +260,7 @@ GT 03   PVC CHINA UPPER-963   …          …          …          [ 10 ]
 | Step | Detail |
 |---|---|
 | Entities | `production_receipts`, `production_receipt_lines` (→ lot line) |
-| Validation | lock lot line; **reject receive > pending** (same rule as §5, Q-04); lot-less receipt only if Q-41 allows |
+| Validation | **lot is mandatory** (Q-41); lock lot line; **reject receive > pending** (Q-04 — edit the lot qty first if more is accepted) |
 | **Stock** | `PRODUCTION_RECEIPT` IN to the TO godown; carton `CONSUMPTION` OUT if Q-19 covers factory receipts |
 | Lot status | pending = 0 on all lines ⇒ `COMPLETED` ("LOT ORDER COMPLETED"); disappears from the pending list |
 | **Party ledger / accounting** | **none** — the factory is in-house (BR-106, pending Q-08). Factory cost is booked through §15.1 (wages, expenses) and RM issued to the factory |
@@ -418,6 +429,16 @@ Q-25/Q-30 decide whether those are company accounts or capital/drawings.
 | `STAFF`, `FACTORY RENT`, `DAILY EXPENSE`, `PORTER`… | PAYMENT, no party | `<Expense account> Dr` / `Cash/Bank Cr` (PROPOSED — Q-31) |
 | mode `ENTRY` (TDS by BOBY, "FARME", interest, kitty, rate difference) | JOURNAL | account per remark — mapping table required (Q-29) |
 
+### 15.0 Decisions (Q-29, Q-31, Q-39, Q-40, Q-42)
+- No `ENTRY` mode — use a Journal voucher (Q-29).
+- STAFF, RENT, DAILY EXPENSE, PORTER… are expense accounts (Q-31).
+- Worker **earnings** are recorded (pairs × rate) and payments debit the
+  worker, so each worker has a balance (Q-39).
+- PAPA FACTORT / GAGAN CASH / PAPA BANK are personal and not pre-created
+  (Q-40).
+- Factory payments live in their own **voucher book** (e.g. FACTORY),
+  separate from the MAIN book (Q-42).
+
 ### 15.1 Factory payment book (W7)
 
 **Today:** 703 rows paid from `PAPA FACTORT` (factory cash), `CURRENT ICICI
@@ -441,22 +462,20 @@ giving a balance (earned − paid). No attendance or payroll is built (spec §9)
 
 ---
 
-## 16. Opening balances (migration)
+## 16. Opening balances (fresh start — Q-26)
 
-| Opening | Sheet source | ERP |
+No historical data is migrated. When a company starts using the ERP:
+
+| Opening | How it is entered | Posting |
 |---|---|---|
-| FG stock per godown | `STOCK IN GODOWN` B, M, Y columns | `OPENING` stock movements dated go-live − 1 (or original date) |
-| RM stock per location | `STOCK DETAIL` E–H | `OPENING` stock movements |
-| Party payable | `OPENING BAL ENTRY!B:C` (27-Apr-2026) | opening journal: `Opening Balance Adjustment Dr` / `[party] Cr` (sign-aware) |
-| Party receivable | `OPENING BAL ENTRY!J:K`, `SALE LEDGER!BF:BG` | opening journal: `[party] Dr` / `Opening Balance Adjustment Cr` |
-| Bank / cash | W3 `PAYMENT LEDGER!AG:AH`, W7 `PAYMENT LEDGER!BA:BB` (PAPA FACTORT 6 000, GAGAN CASH 11 300, PAPA BANK −3 008) | opening journal per account (ICICI counted once — Q-42) |
-| Open factory lots | W6 `TOTAL ENTRY` rows with status PENDING | `production_orders` with already-received qty as migrated receipts |
-| D-Mart open bills | W4 rows with outstanding | `customer_bills` + opening journal |
+| Stock per item per godown | Opening Stock screen or Excel template | `OPENING` stock movements on the go-live date |
+| Party balances (receivable / payable side separately — Q-13) | Party master → opening balance fields, or template | opening journal vs `Opening Balance Adjustment` |
+| Cash / bank accounts | created by the user with opening balance (Q-25) | opening journal |
+| Open job-work POs / factory lots / sale orders | entered as normal documents with the qty still pending | normal posting |
+| Unpaid customer bills | entered in the bill register | customer bill record |
 
-Cut-over approach (to be confirmed in the migration phase): either (a) import
-**all** historical transactions from Apr-2026 and verify balances, or (b)
-import opening balances at a cut-over date + open documents (pending POs,
-open bills). Reconciliation checks (spec §38) are run for both.
+`Opening Balance Adjustment` must net to zero once all openings are entered;
+the trial balance shows it until then.
 
 ---
 

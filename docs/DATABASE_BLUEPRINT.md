@@ -1,11 +1,32 @@
 # Database Blueprint — PostgreSQL (Supabase)
 
-> Phase 2 deliverable. Status: **DRAFT — awaiting answers to the 🔴 questions
-> in [`ERP_DISCOVERY.md` §10](./ERP_DISCOVERY.md#10-questions_requiring_user_confirmation).**
-> Table names, columns and constraints below are the proposed design; the
-> SQL migrations will be generated from this document only after review.
+> Phase 2 deliverable. Status: **FINAL for migration phase** — all questions
+> answered ([`ERP_DISCOVERY.md` §9](./ERP_DISCOVERY.md#9-answers-received-decisions-log)).
+> Section 0 lists the decisions that changed the design; where an older
+> paragraph below disagrees with §0, §0 wins.
 
 ---
+
+## 0. Decisions applied from the answers (override later text)
+
+| # | Decision | Design change |
+|---|---|---|
+| D1 | Multi-company in one instance (Q-34) | Model B active from day one: `companies` many rows, company switcher, RLS on `company_id` everywhere. |
+| D2 | Maker–checker (Q-36, Q-10) | New `approval_policies` (`company_id`, `doc_type`, `requires_approval`, `approver_role_id`). Documents go DRAFT → PENDING_APPROVAL → POSTED; `fn_*_approve` refuses when approver = creator. Stock/ledger effect only at POSTED. |
+| D3 | Configurable numbering incl. lots (Q-37) | `document_sequences` gets `pattern` (e.g. `{PREFIX} {NN}`, `{PREFIX}-{FY}-{NNNN}`), `prefix`, `separator`, `padding`, `start_value`, `reset_policy`. Lot numbers use doc_type `PRODUCTION_LOT`; unique per company. |
+| D4 | No historical data (Q-26) | No `legacy_ref` imports; `legacy_names` columns dropped. Optional Excel template upload for masters and openings only. |
+| D5 | Order qty editable (Q-04/Q-05) | No short-close; `fn_order_line_edit` changes ordered qty (≥ received), audited. |
+| D6 | Tally invoices recorded (Q-03, Q-23, Q-24) | `customer_bills` + `customer_bill_links` (bill ↔ sales orders / dispatches, many-to-many). Register columns as the sheet; totals at bottom. |
+| D7 | Party sub-ledgers (Q-13) | Receivable and payable side per party + combined view; ADJUST journal. |
+| D8 | Worker earnings (Q-39) | New `worker_earnings` document (see §6.8). |
+| D9 | Payment books (Q-42) | New `voucher_books` (`company_id`, `code`, `name`); `vouchers.book_id` NOT NULL; users may be limited to books. |
+| D10 | Accounts user-defined (Q-25, Q-30, Q-32) | Seed only groups + system accounts; no bank/personal accounts seeded. |
+| D11 | Full accounting now (Q-33) | Trial balance, P&L, balance sheet in phase 1; stock valuation = weighted average (setting). |
+| D12 | Negative stock warns (Q-18) | Posting returns warnings; setting can switch to BLOCK. |
+| D13 | Carton + barcode auto-consumption (Q-19, Q-27) | `item_consumption_rules` for all godowns, job-work and factory receipts; per BOX or per PAIR. |
+| D14 | Transport module (Q-28) | Transporter parties; `service_bills` type FREIGHT (and CUTTING, Q-14). |
+| D15 | Lot mandatory on factory receipt (Q-41) | `production_receipt_lines.order_line_id` NOT NULL. |
+| D16 | Last rate per party + item + godown (Q-12) | Rate suggestion query on posted lines; `party_item_rates` for fixed lists (JW item rate). |
 
 ## 1. Design principles
 
@@ -329,8 +350,8 @@ the PO is part of Q-05 (default: no).
 | | |
 |---|---|
 | Purpose | Lot allotted to the own factory (W6 `PO ENTRY`). Same shape as a job-work order, but **no party payable and no rate**. |
-| Header FK | `factory_godown_id` → `godowns` (type FACTORY: `FACTORY`, `MUSHIR FACTORY` — Q-38), `default_receipt_godown_id` |
-| Header fields | `lot_no` (display, e.g. `GT 19`; **not unique on its own** — Q-37), `doc_no` from sequence (unique), `lot_cycle` (optional, distinguishes `GT19` from `GT 19`), `status` ∈ OPEN, PARTIALLY_RECEIVED, COMPLETED (= sheet "LOT ORDER COMPLETED"), CANCELLED |
+| Header FK | `factory_godown_id` → `godowns` (type FACTORY: own factory only; `MUSHIR FACTORY` is a job-work party — Q-38), `default_receipt_godown_id` |
+| Header fields | `lot_no` = `doc_no` from the configurable PRODUCTION_LOT sequence (e.g. `GT 01`), **unique per company** (Q-37), `status` ∈ OPEN, PARTIALLY_RECEIVED, COMPLETED (= sheet "LOT ORDER COMPLETED"), CANCELLED |
 | Line fields | `item_id` (FG), `qty` (boxes typed), `unit_id`, `factor_to_base`, `planned_base_qty` (editable like job-work lines, Q-04/Q-05) |
 | Constraints | unique(`order_id`,`item_id`); `planned_base_qty > 0` |
 | Not stored | received / pending — derived in `v_production_order_line_status` |
@@ -339,7 +360,7 @@ the PO is part of Q-05 (default: no).
 | | |
 |---|---|
 | Header FK | `factory_godown_id` (from), `godown_id` (to: B-336 / WAREHOUSE) |
-| Line FK | `order_line_id` → `production_order_lines` (**nullable only if Q-41 allows lot-less receipts**), `item_id`, `unit_id` |
+| Line FK | `order_line_id` → `production_order_lines` (**NOT NULL** — lot mandatory, Q-41), `item_id`, `unit_id` |
 | Line fields | `qty`, `factor_to_base`, `base_qty` |
 | Rule | same locking / pending check as job-work receipts (§6.3) |
 | Stock | `PRODUCTION_RECEIPT` IN to `godown_id` (+ carton `CONSUMPTION` if Q-19 applies to factory receipts) |
@@ -355,9 +376,12 @@ Workers from W7 are `parties` with role **`WORKER`** (payee only), optionally
 attendance, salary structure or payroll tables. Payments are `vouchers`
 (PAYMENT) debiting a factory expense account with `party_id` = worker, so
 "total paid per worker per month" (W7 `PURCHASE LEDGER ENTRY`) is a report on
-journal lines. If Q-39 asks for earnings tracking, a simple
-`worker_earnings` document (worker, date, item, pairs, rate, amount →
-`Factory Wages Dr / [worker] Cr`) is added — still not payroll.
+journal lines. **Decided (Q-39): earnings are recorded.** `worker_earnings` ⓒⓣ +
+`worker_earning_lines` (worker, date, optional lot line, FG item, operation ∈
+BOTTOM / UPPER / FINISH / CUTTING / OTHER, pairs, rate, amount) posts
+`Factory Wages – <operation> Dr / [worker] Cr`; payments then debit the
+worker. Report: earned − paid per worker per month. Still not payroll: no
+attendance, leave, salary structure or statutory deductions.
 
 ---
 

@@ -1,6 +1,7 @@
 # Instance Architecture — Standalone Clones, White-Label, Isolation
 
-> Phase 2 deliverable. Status: **DRAFT — awaiting user review.**
+> Phase 2 deliverable. Status: **FINAL for migration phase.** Decisions: multi-company
+> inside an instance (Q-34), free hosting (Q-02), old code removed (Q-35).
 > Implements Master Specification §2–7, §39–45, §52–53.
 > The step-by-step operator guides (`docs/CLONING.md`, `docs/INSTANCE_SETUP.md`)
 > will be written in the implementation phase from this design.
@@ -129,12 +130,12 @@ product or company name.
 
 ## 4. Deployment models (spec §6)
 
-### Model A — standalone (default, used for Rukman)
+### Model A — standalone, single company
 One deployment · one Supabase project · **one row in `companies`**. The
 company id is read from the DB at login (the user's `user_roles`), never
 from code or env.
 
-### Model B — multi-company in one instance (future)
+### Model B — multi-company in one instance (**used for Rukman from day one — Q-34**)
 Same schema. Several `companies` rows; users get `user_roles` per company;
 the UI shows a company switcher. Isolation by:
 
@@ -261,7 +262,7 @@ The repository currently contains **BusinessFlow ERP** (Express + Prisma +
 specification requires **Supabase (PostgreSQL + Auth + Storage) + Next.js on
 Vercel**, RLS and SQL posting functions, which is a different architecture.
 
-Proposal (pending Q-35): build the new application in the same repository on
+Decided (Q-35 = yes): build the new application in the same repository on
 the Supabase stack and remove the old `backend/` and `frontend/` folders in a
 separate, clearly-labelled commit when the new app reaches parity (history
 remains in git). Reusable pieces (Tailwind UI components, PDF layout ideas)
