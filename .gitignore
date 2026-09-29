@@ -1,42 +1,30 @@
 # Dependencies
 node_modules/
-.pnp
-.pnp.js
 
 # Build output
-dist/
-build/
 .next/
 out/
+dist/
+.open-next/
+.wrangler/
 
-# Environment — NEVER commit this
+# Environment — NEVER commit real values (only .env.example is tracked)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
-# Logs
-logs/
+# Supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# Logs / OS / IDE
 *.log
-npm-debug.log*
-
-# OS files
 .DS_Store
 Thumbs.db
-
-# IDE
 .vscode/
 .idea/
-*.swp
-
-# TypeScript cache
 *.tsbuildinfo
-
-# Test coverage
 coverage/
 
-# App runtime data
-backend/uploads/
-backend/backups/
-
-# Misc
-*.pem
+# Local database backups
+backups/
