@@ -63,16 +63,35 @@ function getRootFolder() {
   return created;
 }
 
-function getOrCreateCategoryFolder(rootFolder, categoryName) {
-  var name = String(categoryName).trim();
-  if (!name) throw new Error('Category name cannot be empty.');
-
-  var iter = rootFolder.getFoldersByName(name);
+function getOrCreateSingleFolder(parentFolder, name) {
+  var iter = parentFolder.getFoldersByName(name);
   while (iter.hasNext()) {
     var folder = iter.next();
     if (!folder.isTrashed()) return folder;
   }
-  return rootFolder.createFolder(name);
+  return parentFolder.createFolder(name);
+}
+
+/**
+ * Walks (creating as needed) a '/'-separated chain of folders starting at
+ * rootFolder - e.g. "RFQ/2024/ClientA" becomes RFQ -> 2024 -> ClientA,
+ * creating whichever levels don't exist yet. This is how nested
+ * subfolders work throughout RUDMS; there is no limit on chain depth.
+ * Returns {folder, path}, where path is rebuilt from each level's actual
+ * (trimmed) name - so it's always the canonical form even if the input
+ * had stray whitespace around a segment.
+ */
+function getOrCreateFolderByPath(rootFolder, path) {
+  var segments = String(path || '').split('/').map(function (s) { return s.trim(); }).filter(Boolean);
+  if (!segments.length) throw new Error('Folder name cannot be empty.');
+
+  var folder = rootFolder;
+  var cleanPath = '';
+  segments.forEach(function (name) {
+    folder = getOrCreateSingleFolder(folder, name);
+    cleanPath = cleanPath ? cleanPath + '/' + name : name;
+  });
+  return { folder: folder, path: cleanPath };
 }
 
 /**
@@ -91,16 +110,35 @@ function findFileInFolderByName(folder, fileName) {
   return null;
 }
 
-function listCategoryFolders(rootFolder) {
-  var names = {};
-  DEFAULT_CATEGORIES.forEach(function (c) { names[c] = true; });
-
-  var iter = rootFolder.getFolders();
+/**
+ * Builds the full nested folder tree under rootFolder (any depth) as
+ * [{name, path, children: [...]}], sorted alphabetically at every level.
+ * `path` is the '/'-separated chain from the top, e.g. "RFQ/2024/ClientA" -
+ * the same format uploadFile()/getAllFiles() use for a file's `category`.
+ */
+function listFolderTree(parentFolder, parentPath) {
+  var subfolders = [];
+  var iter = parentFolder.getFolders();
   while (iter.hasNext()) {
     var folder = iter.next();
-    if (!folder.isTrashed()) names[folder.getName()] = true;
+    if (!folder.isTrashed()) subfolders.push(folder);
   }
-  return Object.keys(names).sort();
+  subfolders.sort(function (a, b) { return a.getName().localeCompare(b.getName()); });
+
+  return subfolders.map(function (folder) {
+    var name = folder.getName();
+    var path = parentPath ? parentPath + '/' + name : name;
+    return { name: name, path: path, children: listFolderTree(folder, path) };
+  });
+}
+
+/** Flattens a folder tree (as returned by listFolderTree) into a plain array of paths, depth-first. */
+function flattenFolderTree(nodes, out) {
+  nodes.forEach(function (node) {
+    out.push(node.path);
+    flattenFolderTree(node.children, out);
+  });
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +234,7 @@ function ensureDefaultCategories() {
     if (!props.getProperty('CATEGORIES_READY')) {
       var rootFolder = getRootFolder();
       DEFAULT_CATEGORIES.forEach(function (c) {
-        getOrCreateCategoryFolder(rootFolder, c);
+        getOrCreateFolderByPath(rootFolder, c);
       });
       props.setProperty('CATEGORIES_READY', 'true');
     }
@@ -207,45 +245,69 @@ function ensureDefaultCategories() {
 }
 
 /**
- * Lists every file across every category folder, reading each file's
- * metadata straight off its own Drive description - no separate index
- * to fall out of sync or fail to load.
+ * Lists every file across every folder at any depth, reading each file's
+ * metadata straight off its own Drive description - no separate index to
+ * fall out of sync or fail to load. Each file's `category` is the full
+ * '/'-separated folder path it lives in (e.g. "RFQ/2024/ClientA").
+ *
+ * Deliberately only recurses INTO the top-level category folders, never
+ * rootFolder's own getFiles() - RUDMS's internal JSON files (contacts,
+ * login accounts, sessions, notify list) live directly in rootFolder
+ * itself, and must never show up as if they were a user's document.
  */
 function getAllFiles() {
   try {
     var rootFolder = getRootFolder();
     var files = [];
-    var folderIter = rootFolder.getFolders();
-    while (folderIter.hasNext()) {
-      var folder = folderIter.next();
-      if (folder.isTrashed()) continue;
-      var categoryName = folder.getName();
+
+    function walkFolder(folder, path) {
       var fileIter = folder.getFiles();
       while (fileIter.hasNext()) {
         var file = fileIter.next();
-        if (file.isTrashed()) continue;
-        files.push(fileToRecord(file, categoryName));
+        if (!file.isTrashed()) files.push(fileToRecord(file, path));
+      }
+      var folderIter = folder.getFolders();
+      while (folderIter.hasNext()) {
+        var sub = folderIter.next();
+        if (sub.isTrashed()) continue;
+        walkFolder(sub, path + '/' + sub.getName());
       }
     }
+
+    var topIter = rootFolder.getFolders();
+    while (topIter.hasNext()) {
+      var topFolder = topIter.next();
+      if (topFolder.isTrashed()) continue;
+      walkFolder(topFolder, topFolder.getName());
+    }
+
     return { success: true, files: files };
   } catch (err) {
     return { success: false, error: err.message };
   }
 }
 
-function getCategories() {
+function getFolderTree() {
   try {
-    return { success: true, categories: listCategoryFolders(getRootFolder()) };
+    var rootFolder = getRootFolder();
+    return { success: true, tree: listFolderTree(rootFolder, '') };
   } catch (err) {
     return { success: false, error: err.message };
   }
 }
 
-function addCategory(categoryName) {
+/**
+ * Creates a folder at the given '/'-separated path, creating any missing
+ * parent levels along the way - e.g. createFolder("RFQ/2024/ClientA")
+ * works even if "2024" doesn't exist under "RFQ" yet. Used both for a
+ * brand-new top-level category and for a subfolder nested inside
+ * whichever folder is currently open in the sidebar.
+ */
+function createFolder(path) {
   try {
     var rootFolder = getRootFolder();
-    getOrCreateCategoryFolder(rootFolder, categoryName);
-    return { success: true, categories: listCategoryFolders(rootFolder) };
+    getOrCreateFolderByPath(rootFolder, path);
+    return { success: true, tree: listFolderTree(rootFolder, '') };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -268,7 +330,8 @@ function uploadFile(payload) {
     }
 
     var rootFolder = getRootFolder();
-    var categoryFolder = getOrCreateCategoryFolder(rootFolder, payload.category || 'Uncategorized');
+    var resolved = getOrCreateFolderByPath(rootFolder, payload.category || 'Uncategorized');
+    var categoryFolder = resolved.folder;
 
     var existingFile = findFileInFolderByName(categoryFolder, payload.fileName);
     if (existingFile) {
@@ -276,7 +339,7 @@ function uploadFile(payload) {
         success: false,
         duplicate: true,
         existingFileId: existingFile.getId(),
-        error: '"' + payload.fileName + '" already exists in ' + categoryFolder.getName() + '.'
+        error: '"' + payload.fileName + '" already exists in ' + resolved.path + '.'
       };
     }
 
@@ -296,7 +359,7 @@ function uploadFile(payload) {
     return {
       success: true,
       warnings: warnings,
-      file: fileToRecord(file, categoryFolder.getName())
+      file: fileToRecord(file, resolved.path)
     };
   } catch (err) {
     return { success: false, error: err.message };
@@ -370,19 +433,21 @@ function mapUsersToEmails(users) {
 }
 
 /**
- * Returns current Drive-level sharing for every category folder, so the
- * "Manage Access" panel can show who already has folder-wide access.
- * Sharing a folder in Drive automatically grants the same access to every
- * file inside it (now and any uploaded later).
+ * Returns current Drive-level sharing for every folder at any depth (each
+ * identified by its full '/'-separated path), so the "Manage Access"
+ * panel can show who already has folder-wide access. Sharing a folder in
+ * Drive automatically grants the same access to every file inside it -
+ * and, since Drive permissions are inherited, every folder nested under
+ * it too - now and anything uploaded/created later.
  */
 function getCategoryAccessOverview() {
   try {
     var rootFolder = getRootFolder();
-    var categories = listCategoryFolders(rootFolder);
-    var result = categories.map(function (name) {
-      var folder = getOrCreateCategoryFolder(rootFolder, name);
+    var paths = flattenFolderTree(listFolderTree(rootFolder, ''), []);
+    var result = paths.map(function (path) {
+      var folder = getOrCreateFolderByPath(rootFolder, path).folder;
       return {
-        name: name,
+        name: path,
         viewers: mapUsersToEmails(folder.getViewers()).join(', '),
         editors: mapUsersToEmails(folder.getEditors()).join(', ')
       };
@@ -394,19 +459,19 @@ function getCategoryAccessOverview() {
 }
 
 /**
- * Sets the given viewer/editor emails as the category folder's Drive
- * sharing list (replacing whatever was there before). When
- * applyToExistingFiles is true, the same emails are also additively
- * stamped onto every file already inside the folder (union with whatever
- * access that file already had) so each file's own metadata displays
- * accurate access - Drive itself already grants folder viewers/editors
- * access to existing and future files in the folder regardless of this
- * flag.
+ * Sets the given viewer/editor emails as the target folder's (identified
+ * by its full '/'-separated path) Drive sharing list (replacing whatever
+ * was there before). When applyToExistingFiles is true, the same emails
+ * are also additively stamped onto every file directly inside that
+ * folder (union with whatever access that file already had) so each
+ * file's own metadata displays accurate access - Drive itself already
+ * grants folder viewers/editors access to existing and future files (and
+ * nested subfolders) regardless of this flag.
  */
-function updateCategoryAccess(categoryName, viewerEmails, editorEmails, applyToExistingFiles) {
+function updateCategoryAccess(categoryPath, viewerEmails, editorEmails, applyToExistingFiles) {
   try {
     var rootFolder = getRootFolder();
-    var folder = getOrCreateCategoryFolder(rootFolder, categoryName);
+    var folder = getOrCreateFolderByPath(rootFolder, categoryPath).folder;
 
     folder.getViewers().forEach(function (u) { try { folder.removeViewer(u); } catch (e) {} });
     folder.getEditors().forEach(function (u) {

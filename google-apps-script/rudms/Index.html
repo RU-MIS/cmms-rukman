@@ -294,15 +294,16 @@
     </div>
   </div>
 
-  <!-- Add Category Modal -->
+  <!-- Add Category / Subfolder Modal -->
   <div id="categoryModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-4">
     <div class="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-        <h2 class="font-semibold text-slate-900">New Category</h2>
+        <h2 id="categoryModalTitle" class="font-semibold text-slate-900">New Category</h2>
         <button data-close="categoryModal" class="text-slate-400 hover:text-slate-600">✕</button>
       </div>
       <div class="p-5">
         <input id="newCategoryInput" type="text" placeholder="e.g. Contracts" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+        <p id="categoryModalHint" class="text-xs text-slate-400 mt-2"></p>
       </div>
       <div class="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50">
         <button data-close="categoryModal" class="px-4 py-2 text-sm rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
@@ -564,8 +565,13 @@
   // ---------------------------------------------------------------------
   var state = {
     files: [],
-    categories: [],
-    currentCategory: '__all__',
+    // Nested folder tree: [{name, path, children: [...]}, ...]. `path` is
+    // the '/'-separated chain from the top (e.g. "RFQ/2024/ClientA") -
+    // the same format a file's `category` field uses, so an exact string
+    // match between the two is how "browsing into a folder" filters files.
+    folderTree: [],
+    expandedFolders: {}, // { [path]: true } - which tree branches are expanded in the sidebar
+    currentCategory: '__all__', // '__all__' or a folder path
     searchQuery: '',
     viewMode: 'grid',
     currentUser: '',
@@ -653,9 +659,9 @@
 
   function loadCategoriesAndFiles() {
     setBootMessage('Loading categories…');
-    return callServer('getCategories').then(function (catRes) {
+    return callServer('getFolderTree').then(function (catRes) {
       if (!catRes.success) throw new Error(catRes.error || 'Failed to load categories');
-      state.categories = catRes.categories || [];
+      state.folderTree = catRes.tree || [];
 
       setBootMessage('Loading files…');
       // Don't let a getAllFiles hiccup block the whole app - the rest
@@ -790,22 +796,54 @@
   // ---------------------------------------------------------------------
   // Rendering
   // ---------------------------------------------------------------------
+  function countFilesInFolder(path) {
+    return state.files.filter(function (f) { return f.category === path; }).length;
+  }
+
+  /**
+   * Renders one level of the nested folder tree, recursing into children.
+   * Top-level nodes (depth 0) are always expanded - there's usually only
+   * a handful of categories; deeper levels start collapsed and remember
+   * their expanded/collapsed state in state.expandedFolders across
+   * re-renders (keyed by folder path).
+   */
+  function renderFolderTreeNodes(nodes, depth) {
+    return nodes.map(function (node) {
+      var hasChildren = node.children && node.children.length > 0;
+      var expanded = depth === 0 || !!state.expandedFolders[node.path];
+      var count = countFilesInFolder(node.path);
+      var indent = 12 + depth * 16;
+
+      var toggleBtn = hasChildren
+        ? '<button data-toggle-tree="' + escapeHtml(node.path) + '" class="shrink-0 w-5 h-5 flex items-center justify-center text-white/40 hover:text-white rounded">' +
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="transition-transform ' + (expanded ? 'rotate-90' : '') + '"><path d="m9 6 6 6-6 6"/></svg>' +
+          '</button>'
+        : '<span class="shrink-0 w-5 h-5"></span>';
+
+      var row = '<div class="group flex items-center gap-0.5">' +
+        toggleBtn +
+        '<button data-category="' + escapeHtml(node.path) + '" style="padding-left:' + indent + 'px" class="sidebar-link flex-1 min-w-0 flex items-center justify-between gap-2 pr-3 py-2 rounded-lg text-sm text-white/80 hover:bg-white/10">' +
+          '<span class="flex items-center gap-2 truncate">' + folderIcon() + '<span class="truncate">' + escapeHtml(node.name) + '</span></span>' +
+          '<span class="count text-xs bg-black/10 rounded-full px-2 py-0.5">' + count + '</span>' +
+        '</button>' +
+        '<button data-add-subfolder="' + escapeHtml(node.path) + '" title="Add a subfolder here" class="shrink-0 p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>' +
+        '</button>' +
+        '<button data-manage-category="' + escapeHtml(node.path) + '" title="Manage who can access this folder" class="shrink-0 p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>' +
+        '</button>' +
+      '</div>';
+
+      var childrenHtml = (hasChildren && expanded) ? renderFolderTreeNodes(node.children, depth + 1) : '';
+      return row + childrenHtml;
+    }).join('');
+  }
+
   function renderSidebar() {
     document.querySelector('[data-category="__all__"] .count').textContent = state.files.length;
 
     var list = document.getElementById('categoryList');
-    list.innerHTML = state.categories.map(function (cat) {
-      var count = state.files.filter(function (f) { return f.category === cat; }).length;
-      return '<div class="group flex items-center gap-0.5">' +
-        '<button data-category="' + escapeHtml(cat) + '" class="sidebar-link flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-white/80 hover:bg-white/10">' +
-          '<span class="flex items-center gap-2 truncate">' + folderIcon() + '<span class="truncate">' + escapeHtml(cat) + '</span></span>' +
-          '<span class="count text-xs bg-black/10 rounded-full px-2 py-0.5">' + count + '</span>' +
-        '</button>' +
-        '<button data-manage-category="' + escapeHtml(cat) + '" title="Manage who can access this folder" class="shrink-0 p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>' +
-        '</button>' +
-      '</div>';
-    }).join('');
+    list.innerHTML = renderFolderTreeNodes(state.folderTree, 0);
 
     list.querySelectorAll('[data-category]').forEach(function (btn) {
       btn.addEventListener('click', function () { selectCategory(btn.getAttribute('data-category')); });
@@ -816,21 +854,57 @@
         openAccessCenter('folders', btn.getAttribute('data-manage-category'));
       });
     });
+    list.querySelectorAll('[data-add-subfolder]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openCategoryModal(btn.getAttribute('data-add-subfolder'));
+      });
+    });
+    list.querySelectorAll('[data-toggle-tree]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var path = btn.getAttribute('data-toggle-tree');
+        state.expandedFolders[path] = !state.expandedFolders[path];
+        renderSidebar();
+        applyActiveHighlight();
+      });
+    });
+
+    applyActiveHighlight();
+  }
+
+  function applyActiveHighlight() {
+    document.querySelectorAll('.sidebar-link').forEach(function (el) {
+      el.classList.toggle('active', el.getAttribute('data-category') === state.currentCategory);
+    });
+  }
+
+  /** Flattens the folder tree into [{path, label}] for the upload dropdown - label is indented to show nesting. */
+  function flattenTreeForSelect(nodes, depth, out) {
+    nodes.forEach(function (node) {
+      out.push({ path: node.path, label: (depth > 0 ? '— '.repeat(depth) : '') + node.name });
+      flattenTreeForSelect(node.children, depth + 1, out);
+    });
+    return out;
   }
 
   function populateCategorySelect() {
     var select = document.getElementById('uploadCategory');
-    select.innerHTML = state.categories.map(function (c) {
-      return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+    var flat = flattenTreeForSelect(state.folderTree, 0, []);
+    select.innerHTML = flat.map(function (f) {
+      return '<option value="' + escapeHtml(f.path) + '">' + escapeHtml(f.label) + '</option>';
     }).join('');
+
+    // Default to whichever folder is currently open in the sidebar, if any.
+    if (state.currentCategory !== '__all__' && flat.some(function (f) { return f.path === state.currentCategory; })) {
+      select.value = state.currentCategory;
+    }
   }
 
-  function selectCategory(cat) {
-    state.currentCategory = cat;
-    document.querySelectorAll('.sidebar-link').forEach(function (el) {
-      el.classList.toggle('active', el.getAttribute('data-category') === cat);
-    });
-    document.getElementById('viewTitle').textContent = cat === '__all__' ? 'All Files' : cat;
+  function selectCategory(path) {
+    state.currentCategory = path;
+    applyActiveHighlight();
+    document.getElementById('viewTitle').textContent = path === '__all__' ? 'All Files' : path.split('/').join(' / ');
     closeMobileSidebar();
     renderCurrentView();
   }
@@ -1002,7 +1076,7 @@
     });
 
     document.getElementById('uploadBtn').addEventListener('click', function () { hideUploadDuplicateWarning(); openModal('uploadModal'); });
-    document.getElementById('addCategoryBtn').addEventListener('click', function () { openModal('categoryModal'); });
+    document.getElementById('addCategoryBtn').addEventListener('click', function () { openCategoryModal(); });
     document.getElementById('manageAccessBtn').addEventListener('click', function () { openAccessCenter('folders'); });
 
     bindUploadModal();
@@ -1174,14 +1248,7 @@
         return;
       }
       state.files.unshift(res.file);
-      if (state.categories.indexOf(res.file.category) === -1) {
-        state.categories.push(res.file.category);
-        state.categories.sort();
-        renderSidebar();
-        populateCategorySelect();
-      } else {
-        renderSidebar();
-      }
+      renderSidebar(); // updates the affected folder's file count
       renderCurrentView();
       resetUploadModal();
       closeModal('uploadModal');
@@ -1210,20 +1277,41 @@
   }
 
   // ---------------------------------------------------------------------
-  // Category modal
+  // Category / subfolder modal - "Add Category" (and each folder row's
+  // "+") both open this, scoped to a parent folder path (empty string for
+  // a new top-level category). Any depth of nesting is supported: a
+  // subfolder's own "+" creates a subfolder of IT, and so on.
   // ---------------------------------------------------------------------
+  var categoryModalParentPath = '';
+
+  function openCategoryModal(forcedParentPath) {
+    categoryModalParentPath = forcedParentPath !== undefined
+      ? forcedParentPath
+      : (state.currentCategory !== '__all__' ? state.currentCategory : '');
+
+    document.getElementById('categoryModalTitle').textContent = categoryModalParentPath ? 'New Subfolder' : 'New Category';
+    document.getElementById('categoryModalHint').textContent = categoryModalParentPath
+      ? 'Creates a subfolder inside "' + categoryModalParentPath + '".'
+      : 'Creates a new top-level category.';
+    document.getElementById('newCategoryInput').value = '';
+    openModal('categoryModal');
+  }
+
   function bindCategoryModal() {
     document.getElementById('submitCategoryBtn').addEventListener('click', function () {
       var name = document.getElementById('newCategoryInput').value.trim();
       if (!name) return;
-      callServer('addCategory', name).then(function (res) {
-        if (!res.success) return showToast(res.error || 'Failed to create category', 'error');
-        state.categories = res.categories;
+      var fullPath = categoryModalParentPath ? categoryModalParentPath + '/' + name : name;
+
+      callServer('createFolder', fullPath).then(function (res) {
+        if (!res.success) return showToast(res.error || 'Failed to create folder', 'error');
+        state.folderTree = res.tree;
+        if (categoryModalParentPath) state.expandedFolders[categoryModalParentPath] = true;
         renderSidebar();
         populateCategorySelect();
         document.getElementById('newCategoryInput').value = '';
         closeModal('categoryModal');
-        showToast('Category created', 'success');
+        showToast('Folder created', 'success');
       }).catch(function (err) { showToast(String(err), 'error'); });
     });
   }

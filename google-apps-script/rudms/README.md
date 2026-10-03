@@ -18,9 +18,25 @@ Google Sites page via `<iframe>`.
 - **Root folder**: On first run, RUDMS creates (or reuses)
   `Rukman Udyog Docs Management System (RUDMS)` in the Drive of whoever
   deploys the script.
-- **Categories**: `RFQ`, `Purchase Orders`, `Purchase Bills`, `CAD Designs`
-  are created automatically as sub-folders. Users can add more categories
-  from the sidebar — each becomes a real Drive folder.
+- **Categories & nested subfolders**: `RFQ`, `Purchase Orders`,
+  `Purchase Bills`, `CAD Designs` are created automatically as top-level
+  folders. The sidebar's **Add Category** button (and every folder row's
+  own **+** on hover) creates a real Drive folder - with no depth limit,
+  so a chain like `RFQ → 2024 → ClientA → Drawings` is just as valid as a
+  single flat category. Which one you get depends on where you click it
+  from: the top **Add Category** button creates a subfolder inside
+  whichever folder is currently open in the sidebar (or a new top-level
+  category if you're on "All Files"), and a folder row's own **+**
+  always creates a subfolder inside that specific folder regardless of
+  what's currently open - the popup tells you which before you confirm.
+  Click a folder's name to browse the files directly inside it (not its
+  subfolders' files - drill into those separately, same as Drive or
+  Windows Explorer); click the triangle next to a folder with children to
+  expand/collapse it. A file's `category` field is its full path (e.g.
+  `"RFQ/2024/ClientA"`), which is also what the Upload window's folder
+  dropdown and the Manage Access → By Folder tab both show/target -
+  there's no separate "nested folder" concept anywhere in the code, it's
+  the same category string everywhere, just allowed to contain `/`.
 - **Metadata**: each file's viewers/editors/uploaded-by is stored as JSON
   directly on that Drive file's own `description` field - there is no
   separate index file. `getAllFiles()` builds the list by walking every
@@ -50,12 +66,15 @@ Google Sites page via `<iframe>`.
   reachable via the lock icon that appears on hover over any category in
   the sidebar) opens a two-tab panel:
   - **By Folder** — set Drive-level viewer/editor emails on an entire
-    category folder in one go. Google Drive automatically extends that
-    same access to every file inside the folder, including files uploaded
+    category folder (or any nested subfolder, listed by its full path
+    like `RFQ/2024/ClientA`) in one go. Google Drive automatically
+    extends that same access to every file inside the folder - and every
+    subfolder nested under it - including anything uploaded or created
     later. An optional "also stamp existing files" checkbox additionally
     writes those emails directly onto each current file's own metadata
-    (additively, on top of whatever access it already had) so the file
-    list displays accurate access.
+    (additively, on top of whatever access it already had, but only for
+    files directly in that folder, not nested ones) so the file list
+    displays accurate access.
   - **By File** — a searchable table of every file with its current
     viewers/editors and an Edit shortcut into the same per-file Share
     modal described above.
