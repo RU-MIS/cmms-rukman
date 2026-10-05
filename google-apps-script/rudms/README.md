@@ -83,12 +83,35 @@ Google Sites page via `<iframe>`.
   Purchasing can view Purchase Orders"); use "By File" for one-off
   exceptions on a specific document.
 - **Sign in / Sign out**: everyone - regardless of whether they have a
-  Google account - signs in with a **username and password** created by
-  an admin. Google identity is not used as a login gate at all.
-  - **Creating accounts**: from **Manage Access → Login Accounts**
-    (admin-only tab; username + password, min 6 characters, "Member" or
-    "Admin" role). Passwords are salted and SHA-256 hashed, never stored
-    in plain text.
+  Google account - signs in with a **username and password**. Google
+  identity is not used as a login gate at all.
+  - **Creating accounts** happens two ways:
+    - **Admin-created**: from **Manage Access → Login Accounts**
+      (admin-only tab; username + password, min 6 characters, "Member"
+      or "Admin" role).
+    - **Self-signup**: anyone with the RUDMS link can create their own
+      account from the login screen's **Sign Up** tab - email, full
+      name, and a password they choose. The username is always their
+      email address, the role is always `member` (self-signup can never
+      create an admin), and the account is active immediately - no
+      approval step. On success they're signed straight in, and an
+      email with the new username/password goes to both the person
+      themselves and everyone on the "notify on password change" list
+      (Manage Access → Login Accounts) - reusing that same list rather
+      than a second one, since it already means "people who want to
+      know about credential events."
+    - **Security tradeoff of self-signup**: RUDMS doesn't check per-file
+      Drive access against the logged-in identity anywhere (see the
+      Honest limitation two bullets down) - every signed-in account can
+      browse and download every file through the app regardless of its
+      own Drive-level sharing. With self-signup on, that means anyone
+      who has the URL can get that same access by creating an account
+      themselves; this was a deliberate choice for this deployment, not
+      an oversight. If that's a concern, don't publicize the URL beyond
+      people who should have it, or put it behind a network you control
+      (e.g. only embedded on an internal Google Site).
+    Passwords are salted and SHA-256 hashed either way, never stored in
+    plain text.
   - **Bootstrapping the very first account**: nobody can reach "Login
     Accounts" before at least one account exists, so the first one is
     created directly in the Apps Script editor. Select `setupFirstAdmin`

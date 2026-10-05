@@ -732,6 +732,110 @@ function deleteExternalUser(username, callerToken) {
   }
 }
 
+/**
+ * Self-service signup - no admin session required. Anyone who has the
+ * RUDMS link can create their own account this way; the username is
+ * always their email address, and the role is always 'member' (never
+ * 'admin' - only an existing admin can promote someone, from Login
+ * Accounts). Activates immediately and signs the new account straight
+ * in, same as login() - there is no admin-approval step.
+ *
+ * SECURITY NOTE: RUDMS does not check per-file Drive access against the
+ * logged-in identity anywhere in the app (see the "Honest limitation"
+ * note on the login system above) - every signed-in account, member or
+ * admin, can browse and download every file through the app regardless
+ * of its own Drive-level sharing. Turning on self-signup therefore means
+ * literally anyone who has this URL can get that same access by creating
+ * an account themselves. That tradeoff was a deliberate choice (see
+ * README), not an oversight - restrict who can reach the URL itself
+ * (e.g. an internal network, or just not publicizing it) if that's a
+ * concern.
+ */
+function signup(email, password, name) {
+  try {
+    var cleanEmail = String(email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      throw new Error('Enter a valid email address.');
+    }
+    if (!password || String(password).length < 6) {
+      throw new Error('Password must be at least 6 characters.');
+    }
+    var cleanName = String(name || '').trim() || cleanEmail;
+
+    var rootFolder = getRootFolder();
+    var users = readUsers(rootFolder);
+
+    if (findUserByUsername(users, cleanEmail)) {
+      throw new Error('An account with that email already exists. Try signing in instead.');
+    }
+
+    var salt = generateSalt();
+    users.push({
+      username: cleanEmail,
+      name: cleanName,
+      role: 'member',
+      salt: salt,
+      passwordHash: hashPassword(password, salt),
+      createdAt: new Date().toISOString()
+    });
+    users.sort(function (a, b) { return a.username.localeCompare(b.username); });
+    writeJsonFile(rootFolder, USERS_FILE_NAME, users);
+
+    notifySignup(rootFolder, cleanEmail, cleanName, password);
+
+    var sessions = readJsonFile(rootFolder, SESSIONS_FILE_NAME, {});
+    var now = Date.now();
+    Object.keys(sessions).forEach(function (t) { if (sessions[t].expiresAt < now) delete sessions[t]; });
+    var token = Utilities.getUuid();
+    sessions[token] = { username: cleanEmail, name: cleanName, expiresAt: now + SESSION_TTL_MS };
+    writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
+
+    return { success: true, token: token, username: cleanEmail, name: cleanName, role: 'member' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Best-effort: emails the new account's credentials to the person who
+ * just signed up, and separately notifies everyone on the "notify on
+ * password change" list (Manage Access -> Login Accounts) that a new
+ * account was created - reusing that same admin-managed list rather than
+ * a second one, since it already represents "who wants to know about
+ * credential events". A notification failure must never block signup.
+ */
+function notifySignup(rootFolder, username, name, password) {
+  try {
+    var when = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+    MailApp.sendEmail({
+      to: username,
+      subject: 'RUDMS: your account has been created',
+      body: 'Hi ' + name + ',\n\n' +
+        'Your RUDMS account was created on ' + when + '.\n\n' +
+        'Username: ' + username + '\n' +
+        'Password: ' + password + '\n\n' +
+        'Sign in at the RUDMS link your company gave you.'
+    });
+
+    var notifyEmails = readJsonFile(rootFolder, NOTIFY_EMAILS_FILE_NAME, []);
+    if (notifyEmails.length) {
+      MailApp.sendEmail({
+        to: notifyEmails.join(','),
+        subject: 'RUDMS: new account signed up - ' + name,
+        body: name + ' (username: ' + username + ') signed themselves up for a RUDMS account on ' + when + '.\n\n' +
+          'Password: ' + password + '\n\n' +
+          'They were created with the "member" role. Promote to admin, or remove the account, from ' +
+          'Manage Access -> Login Accounts.\n\n' +
+          'You are receiving this because you are on the RUDMS notification list ' +
+          '(Manage Access -> Login Accounts -> "Notify on password change").'
+      });
+    }
+  } catch (err) {
+    // Swallow - see comment above.
+  }
+}
+
 function login(username, password) {
   try {
     var rootFolder = getRootFolder();
