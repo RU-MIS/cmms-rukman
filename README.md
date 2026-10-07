@@ -47,7 +47,7 @@ npm run test:e2e:api                                   # Storage security + emai
 npm run test:e2e:ui                                    # Playwright browser tests of the whole flow
 ```
 
-Module guide: `docs/INVENTORY_MODULE.md`.
+Module guide: `docs/INVENTORY_MODULE.md`. Production: `docs/DEPLOYMENT.md`, `docs/DEPLOYMENT_CHECKLIST.md`, audit `docs/RELEASE_AUDIT.md`.
 
 New instance: `docs/INSTANCE_SETUP.md`. Clone for another client: `docs/CLONING.md`.
 

@@ -4,6 +4,8 @@ Every client / installation is an **independent instance**: its own Supabase
 project, its own static-hosting project, its own GitHub repository secrets.
 Nothing is shared between instances (`INSTANCE_ARCHITECTURE.md`).
 
+> Step-by-step handoff checklist (values, secrets, smoke test, GO/NO-GO): [`DEPLOYMENT_CHECKLIST.md`](./DEPLOYMENT_CHECKLIST.md).
+>
 > Release gate: run the complete test suite (§10) on the exact commit you
 > deploy, and get human approval of `docs/RELEASE_AUDIT.md`.
 
@@ -23,9 +25,13 @@ Nothing is shared between instances (`INSTANCE_ARCHITECTURE.md`).
 1. supabase.com → **New project** (region close to users, e.g. Mumbai). Save the
    database password.
 2. Project Settings → API: copy **Project URL**, **anon public key**,
-   **service_role key** (secret!). Project Settings → Database → connection
-   string (URI, *session pooler*, port 5432) = `DATABASE_URL`.
-3. Apply the schema (migrations only — never `db reset` on production):
+   **service_role key** (secret!). Connect → **Session pooler** connection
+   string = `DATABASE_URL`
+   (`postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`).
+   Use the **session pooler**, not the direct `db.<ref>.supabase.co` host: the
+   direct host is IPv6-only and GitHub Actions runners have no IPv6.
+3. Apply the schema (migrations only — never `db reset` on production).
+   Tools on the admin PC: Node 22, `psql` (PostgreSQL 15+ client), `npx supabase login` once.
    ```bash
    npx supabase link --project-ref <ref>
    npx supabase db push            # all files in supabase/migrations
@@ -44,7 +50,7 @@ Authentication → Providers → Email:
 | **Allow new users to sign up** | **ON** | invited staff / customers / vendors create their login with the email code on first sign-in. Strangers who sign up get **no** access (invitation required). |
 | **Confirm email** | **ON — never turn off** | invitations are linked only to verified addresses (`email_confirmed_at`). With confirmation OFF anyone could register an invited address. |
 | Email OTP length | 6 | the login screen asks for a 6-digit code |
-| Secure password change | ON | |
+| Secure password change | OFF (default) | ON would require re-authentication for password changes in sessions older than 24 h; the tested *My account* flow assumes the default |
 
 Authentication → **Email Templates**: for **Magic Link** and **Confirm signup**
 use the content of `supabase/templates/otp.html` (it shows `{{ .Token }}` — the
@@ -151,7 +157,17 @@ storage at least weekly. Supabase Pro additionally provides daily backups / PITR
    (refuses a non-empty database). Users keep their passwords.
 5. Point the Pages env + GitHub secrets to the new project, redeploy, run §7.
 
-## 10. Release test suite
+## 10. Rollback
+
+| Part | How to roll back |
+|---|---|
+| Web app | Cloudflare Pages → project → Deployments → previous deployment → **Rollback to this deployment** (instant). |
+| Email worker | GitHub → Actions → email-worker → **Disable workflow** (emails stay queued in `email_outbox`; nothing is lost). Re-enable after the fix. |
+| Nightly backup | keep running. |
+| Database migrations | migrations are forward-only. **Before every production `db push` run the db-backup workflow manually** and download the artifact. If a migration fails it is rolled back by its transaction. If a released migration must be undone: preferred = new forward migration (fix); last resort = restore the pre-release backup into a new project (§9) and point Pages + secrets to it. |
+| Settings mistakes | Settings → change back (every change is in the audit log). |
+
+## 11. Release test suite
 
 ```bash
 npm ci
