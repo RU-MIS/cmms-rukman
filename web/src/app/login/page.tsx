@@ -20,7 +20,9 @@ function LoginForm() {
 
   useEffect(() => {
     if (ready && session && boot) {
-      router.replace(next && next.startsWith('/') ? next : boot.companies.length ? '/erp/' : '/portal/');
+      // only same-site paths ("/x", never "//host" or "/\\host") — no open redirect
+      const safeNext = next && /^\/(?![\/\\])/.test(next) ? next : null;
+      router.replace(safeNext ?? (boot.companies.length ? '/erp/' : '/portal/'));
     }
   }, [ready, session, boot, next, router]);
 

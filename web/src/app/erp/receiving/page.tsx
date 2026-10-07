@@ -41,7 +41,7 @@ function Receiving() {
       {tab === 'po' ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
           <Card title="Pending purchase orders">
-            {!pending.data ? <Spinner /> : (
+            {!pending.data ? (pending.error ? null : <Spinner />) : (
               <Table><thead><tr><th>PO</th><th>Vendor</th><th className="num">Pending lines</th><th>Status</th></tr></thead>
                 <tbody>{pos.map((ls) => (
                   <tr key={ls[0].order_id} className={po === ls[0].order_id ? 'bg-brand-light' : ''}>

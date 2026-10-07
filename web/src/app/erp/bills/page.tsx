@@ -37,7 +37,7 @@ export default function BillsPage() {
       <div className="mb-3 flex items-center gap-4"><div className="w-56"><Toggle label="Only outstanding" checked={onlyOpen} onChange={setOnlyOpen} /></div>
         <span className="text-sm">Total outstanding: <b>{money(total)}</b></span></div>
       <ErrorBox error={bills.error} />
-      {!bills.data ? <Spinner /> : (
+      {!bills.data ? (bills.error ? null : <Spinner />) : (
         <Table><thead><tr><th>Bill</th><th>Party</th><th>Date</th><th>Due</th><th className="num">Amount</th><th className="num">Paid</th><th className="num">Outstanding</th><th>Status</th></tr></thead>
           <tbody>{bills.data.map((b) => {
             const st = Number(b.outstanding_amount) <= 0 ? 'PAID' : Number(b.settled_amount) > 0 ? 'PARTIALLY_PAID' : 'UNPAID';

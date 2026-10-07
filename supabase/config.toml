@@ -9,3 +9,28 @@ major_version = 15
 [db.seed]
 enabled = true
 sql_paths = ["./seed/system/*.sql"]
+
+# Auth — same behaviour as production (docs/DEPLOYMENT.md §3):
+# email confirmation ON, sign-in code (OTP) in the email.
+[auth]
+site_url = "http://127.0.0.1:4173"
+additional_redirect_urls = ["http://127.0.0.1:4173/**", "http://localhost:3000/**"]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+otp_length = 6
+otp_expiry = 3600
+
+[auth.email.template.magic_link]
+subject = "Your sign-in code"
+content_path = "./supabase/templates/otp.html"
+
+[auth.email.template.confirmation]
+subject = "Your sign-in code"
+content_path = "./supabase/templates/otp.html"
+
+[inbucket]
+enabled = true
+port = 54324

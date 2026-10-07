@@ -65,7 +65,7 @@ function Catalog({ ctx, cart, setCart, goCart }: { ctx: PortalContext; cart: Car
         <Input placeholder="Search product, code or barcode" value={search} onChange={(e) => setSearch(e.target.value)} /><Button type="submit" variant="secondary">Search</Button>
       </form>
       <ErrorBox error={items.error} />
-      {!items.data ? <Spinner /> : items.data.length === 0 ? <Empty>No products</Empty> : (
+      {!items.data ? (items.error ? null : <Spinner />) : items.data.length === 0 ? <Empty>No products</Empty> : (
         <Table><thead><tr><th>Product</th>{ctx.rate_visible && <th className="num">Price</th>}{ctx.stock_visibility !== 'HIDDEN' && <th>Stock</th>}<th>Request quantity</th><th /></tr></thead>
           <tbody>{items.data.map((i) => (
             <tr key={i.item_id}>

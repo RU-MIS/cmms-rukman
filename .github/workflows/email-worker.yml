@@ -1,17 +1,17 @@
-# Sends queued ERP emails every 10 minutes and generates payment reminders
-# once a day (09:00 IST). Configure these repository secrets for the instance:
+# Sends queued ERP emails every 10 minutes. Every run also generates the day's
+# payment reminders: run_payment_reminders is idempotent per bill and day, so a
+# skipped or delayed schedule (GitHub does that under load) never loses a day. Configure these repository secrets for the instance:
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SMTP_HOST, SMTP_PORT, SMTP_SECURE,
 #   SMTP_USER, SMTP_PASSWORD, EMAIL_FROM_ADDRESS, EMAIL_FROM_NAME
 name: email-worker
 on:
   schedule:
     - cron: '*/10 * * * *'
-    - cron: '30 3 * * *'
   workflow_dispatch:
     inputs:
       mode:
-        description: once | reminders
-        default: once
+        description: reminders (send + generate reminders) | once (send only)
+        default: reminders
 concurrency:
   group: email-worker
   cancel-in-progress: false
@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci --workspace worker --include-workspace-root=false
+      - run: npm ci --workspace worker --include-workspace-root=false --omit=dev
       - name: Run worker
         working-directory: worker
         env:
@@ -38,9 +38,6 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_FROM_ADDRESS: ${{ secrets.EMAIL_FROM_ADDRESS }}
           EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
+          MODE: ${{ github.event.inputs.mode }}
         run: |
-          MODE="${{ github.event.inputs.mode }}"
-          if [ -z "$MODE" ]; then
-            if [ "${{ github.event.schedule }}" = "30 3 * * *" ]; then MODE=reminders; else MODE=once; fi
-          fi
-          node src/main.ts "$MODE"
+          node src/main.ts "${MODE:-reminders}"

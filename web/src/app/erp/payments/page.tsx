@@ -27,7 +27,7 @@ export default function PaymentsPage() {
           <Button onClick={() => setForm('PAYMENT')}>Pay vendor</Button>
           <Button variant="secondary" onClick={() => setForm('CONTRA')}>Bank / cash transfer</Button></>} />
       <ErrorBox error={list.error} />
-      {!list.data ? <Spinner /> : (
+      {!list.data ? (list.error ? null : <Spinner />) : (
         <Table><thead><tr><th>No</th><th>Date</th><th>Type</th><th>Party / transfer</th><th>Method</th><th>Reference</th><th className="num">Amount</th><th>Status</th></tr></thead>
           <tbody>{list.data.map((v) => (
             <tr key={v.id}><td>{v.doc_no ?? 'Draft'}</td><td>{date(v.doc_date)}</td><td>{v.voucher_type}</td>

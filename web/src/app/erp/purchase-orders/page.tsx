@@ -38,7 +38,7 @@ function PurchaseOrders() {
         { value: 'OPEN', label: 'Open (draft / open / partially received)' }, { value: 'FULLY_RECEIVED', label: 'Fully received' },
         { value: 'CLOSED', label: 'Closed' }, { value: 'CANCELLED', label: 'Cancelled' }, { value: 'ALL', label: 'All' }]} /></div>
       <ErrorBox error={list.error} />
-      {!list.data ? <Spinner /> : (
+      {!list.data ? (list.error ? null : <Spinner />) : (
         <Table><thead><tr><th>PO</th><th>Vendor</th><th>Date</th><th>Expected</th><th>Status</th></tr></thead>
           <tbody>{list.data.map((o) => (
             <tr key={o.id}><td><Link className="font-medium text-brand hover:underline" href={`/erp/purchase-orders/?id=${o.id}`}>{o.doc_no ?? 'Draft'}</Link></td>

@@ -98,6 +98,9 @@ export async function deliver(db: SupabaseClient, transport: Transporter, mailFr
       text: email.body_text,
       html: htmlBody(email.body_text),
       attachments,
+      // stable Message-ID: a retry of the same outbox row is recognisable as the
+      // same message (mail servers / clients de-duplicate on it)
+      messageId: `<erp-${email.id}@${(mailFrom.match(/@([^>\s]+)/)?.[1] ?? 'erp.local')}>`,
       headers: { 'X-ERP-Email-Id': email.id, 'X-ERP-Email-Kind': email.kind },
     });
     const res = await db.rpc('email_complete', { p_id: email.id, p_ok: true, p_error: null, p_message_id: info.messageId ?? null });

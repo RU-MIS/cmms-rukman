@@ -35,7 +35,7 @@ function EmailLog() {
           options={['VENDOR_PO', 'VENDOR_DOCUMENT', 'CUSTOMER_INVOICE', 'CUSTOMER_DOCUMENT', 'CUSTOMER_PAYMENT_REMINDER', 'VENDOR_PAYMENT_REMINDER'].map((s) => ({ value: s, label: label(s) }))} /></Field>
       </div>
       <ErrorBox error={mails.error} />
-      {!mails.data ? <Spinner /> : (
+      {!mails.data ? (mails.error ? null : <Spinner />) : (
         <Table><thead><tr><th>Queued</th><th>Type</th><th>Recipient</th><th>Subject</th><th>Attempts</th><th>Status</th><th>Error</th><th /></tr></thead>
           <tbody>{mails.data.map((m) => (
             <tr key={m.id}><td>{dateTime(m.created_at)}</td><td>{label(m.kind)}</td>

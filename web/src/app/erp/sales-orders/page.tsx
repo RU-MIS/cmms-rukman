@@ -36,7 +36,7 @@ function SalesOrders() {
         { value: 'OPEN', label: 'Open / partially dispatched' }, { value: 'DISPATCHED', label: 'Dispatched' }, { value: 'CLOSED', label: 'Closed' },
         { value: 'CANCELLED', label: 'Cancelled' }, { value: 'ALL', label: 'All' }]} /></div>
       <ErrorBox error={list.error} />
-      {!list.data ? <Spinner /> : (
+      {!list.data ? (list.error ? null : <Spinner />) : (
         <Table><thead><tr><th>Order</th><th>Customer</th><th>Customer PO</th><th>Date</th><th>Delivery</th><th>Status</th></tr></thead>
           <tbody>{list.data.map((o) => (
             <tr key={o.id}><td><Link className="font-medium text-brand hover:underline" href={`/erp/sales-orders/?id=${o.id}`}>{o.doc_no}</Link></td>
@@ -65,6 +65,7 @@ function OrderDetail({ id }: { id: string }) {
   const [dispatching, setDispatching] = useState(false);
   const reloadAll = () => { lines.reload(); so.reload(); res.reload(); dsp.reload(); };
 
+  if (lines.error || so.error) return <ErrorBox error={lines.error ?? so.error} />;
   if (!lines.data || !so.data) return <Spinner />;
   const h = lines.data[0];
   const open = ['OPEN', 'PARTIALLY_DISPATCHED'].includes(so.data.status);

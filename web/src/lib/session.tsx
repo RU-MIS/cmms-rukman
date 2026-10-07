@@ -47,7 +47,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (c) setPermissions(new Set(await rpc<string[]>('my_permissions', { p_company_id: c.id })));
       setError(null);
     } catch (e) {
-      setError(errorText(e));
+      const msg = errorText(e);
+      // expired / revoked / forged session: sign out and go back to the login screen
+      if (/jwt|token|not signed in|401|invalid claim|session/i.test(msg)) {
+        await sb().auth.signOut({ scope: 'local' }).catch(() => undefined);
+        setSession(null); setBoot(null); setPermissions(new Set());
+        setError(null);
+      } else {
+        setError(msg);
+      }
     } finally {
       setReady(true);
     }

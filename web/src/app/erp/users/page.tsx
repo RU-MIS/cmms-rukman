@@ -34,7 +34,7 @@ export default function UsersPage() {
         </Card>
       )}
       <Card title="Members">
-        {!members.data ? <Spinner /> : (
+        {!members.data ? (members.error ? null : <Spinner />) : (
           <Table><thead><tr><th>User</th><th>Email</th><th>Roles</th></tr></thead>
             <tbody>{members.data.map((u) => (<tr key={u.user_id}><td>{u.full_name}</td><td>{u.email}</td>
               <td className="space-x-1">{u.role_names.map((r) => <Badge key={r} color="blue">{r}</Badge>)}</td></tr>))}</tbody></Table>

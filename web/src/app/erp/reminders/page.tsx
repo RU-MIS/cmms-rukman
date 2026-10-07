@@ -32,7 +32,7 @@ export default function RemindersPage() {
         </Card>
       )}
       <ErrorBox error={rows.error} />
-      {!rows.data ? <Spinner /> : (
+      {!rows.data ? (rows.error ? null : <Spinner />) : (
         <Table><thead><tr><th>Date</th><th>Side</th><th>Party</th><th>Due</th><th className="num">Outstanding then</th><th>Sent to</th><th>Email</th></tr></thead>
           <tbody>{rows.data.map((r) => (
             <tr key={String(r.id)}><td>{date(r.reminder_date)}</td><td>{String(r.side)}</td><td>{String(r.party_name)}</td><td>{date(r.due_date)}</td>

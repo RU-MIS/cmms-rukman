@@ -32,7 +32,7 @@ export default function PartiesPage() {
         <Input className="max-w-xs" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
       <ErrorBox error={list.error} />
-      {!list.data ? <Spinner /> : (
+      {!list.data ? (list.error ? null : <Spinner />) : (
         <Table><thead><tr><th>Code</th><th>Name</th><th>Roles</th><th>Email</th><th className="num">Credit days</th><th>Status</th></tr></thead>
           <tbody>{rows.map((p) => (
             <tr key={p.id}><td className="font-mono">{p.code}</td><td><button className="font-medium text-brand hover:underline" onClick={() => setSel(p)}>{p.name}</button></td>

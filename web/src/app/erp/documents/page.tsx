@@ -34,7 +34,7 @@ export default function DocumentsPage() {
         <Field label="Category"><Select value={category} onChange={(e) => setCategory(e.target.value)} placeholder="All" options={CATEGORIES} /></Field>
       </div>
       <ErrorBox error={docs.error} />
-      {!docs.data ? <Spinner /> : (
+      {!docs.data ? (docs.error ? null : <Spinner />) : (
         <Table><thead><tr><th>File</th><th>Category</th><th>Attached to</th><th>Party</th><th>Portal</th><th>Uploaded</th></tr></thead>
           <tbody>{rows.map((d) => (
             <tr key={d.id}><td><button className="text-brand hover:underline" onClick={() => downloadFile(d.storage_path, d.file_name).catch(toast.fail)}>{d.file_name}</button></td>

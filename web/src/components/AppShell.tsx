@@ -52,7 +52,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [ready, session, boot, router, path]);
 
   if (!ready || !session || !boot || !company) {
-    return error ? <div className="p-6 text-red-600">{error}</div> : <Spinner />;
+    return error ? (
+      <div className="space-y-3 p-6">
+        <div role="alert" className="text-red-600">{error}</div>
+        <UserMenu />
+      </div>
+    ) : <Spinner />;
   }
   const items = NAV.filter((n) => !n.perm || can(n.perm));
   const groups = [...new Set(items.map((n) => n.group))];

@@ -18,7 +18,17 @@ export default async function globalSetup() {
   ok(await service.auth.admin.updateUserById(owner.id, { password: ownerPassword }));
   const customerId = await party(owner.client, companyId, 'CUST', 'CUSTOMER', `buyer-${runId}@e2e.test`);
   const vendorId = await party(owner.client, companyId, 'VEND', 'SUPPLIER', `sales-${runId}@e2e.test`);
+  // an operator (data entry) for permission checks
+  const opEmail = `operator-${runId}@e2e.test`;
+  const opPassword = `Pw-${runId}-operator!`;
+  const op = ok(await service.auth.admin.createUser({ email: opEmail, password: opPassword, email_confirm: true }));
+  ok(await owner.client.rpc('user_invite', { p_company_id: companyId, p_email: opEmail, p_role_code: 'OPERATOR' }));
+  void op;
+  // a customer contact invited to the portal who signs in with an email code (OTP)
+  const otpEmail = `otp-${runId}@e2e.test`;
+  ok(await owner.client.rpc('portal_invite', { p_party_id: customerId, p_kind: 'CUSTOMER', p_email: otpEmail }));
   const fixture = {
+    operator: { email: opEmail, password: opPassword }, otpEmail,
     runId, companyId, customerId, vendorId,
     customerName: `CUST ${runId}`, vendorName: `VEND ${runId}`,
     owner: { email: owner.email, password: ownerPassword },

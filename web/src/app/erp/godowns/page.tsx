@@ -51,7 +51,7 @@ export default function GodownsPage() {
       <PageHeader title="Godowns & locations" subtitle="Godown → zone → rack → shelf → bin. Location code is RACK-SHELF-BIN (e.g. B1-C-123)"
         actions={can('godowns.create') && <Button onClick={() => setG({ godown_type: 'OWN_STORE', is_active: true, portal_visible: true })}>New godown</Button>} />
       <ErrorBox error={godowns.error || locs.error} />
-      {!godowns.data ? <Spinner /> : (
+      {!godowns.data ? (godowns.error ? null : <Spinner />) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
           <Card title="Godowns">
             <Table><thead><tr><th>Godown</th><th>Type</th><th className="num">Locations</th><th /></tr></thead>

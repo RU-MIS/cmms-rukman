@@ -5,6 +5,10 @@ import { loadConfig } from './config.ts';
 import { createDb, createTransport, runOnce } from './worker.ts';
 
 const mode = process.argv[2] ?? 'once';
+if (!['once', 'reminders', 'loop'].includes(mode)) {
+  console.error('usage: node src/main.ts once|reminders|loop');
+  process.exit(2);
+}
 const cfg = loadConfig();
 const db = createDb(cfg);
 const transport = createTransport(cfg);
@@ -17,7 +21,7 @@ async function tick(reminders: boolean) {
 if (mode === 'once' || mode === 'reminders') {
   await tick(mode === 'reminders');
   transport.close();
-} else if (mode === 'loop') {
+} else {
   let lastReminderDay = '';
   for (;;) {
     const today = new Date().toISOString().slice(0, 10);
@@ -29,7 +33,4 @@ if (mode === 'once' || mode === 'reminders') {
     }
     await new Promise((r) => setTimeout(r, cfg.loopIntervalMs));
   }
-} else {
-  console.error('usage: node src/main.ts once|reminders|loop');
-  process.exit(2);
 }

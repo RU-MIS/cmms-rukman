@@ -62,3 +62,23 @@ export async function portalUser(ownerClient, partyId, kind, label) {
   const boot = ok(await client.rpc('session_bootstrap'));
   return { id: created.user.id, email, client, boot };
 }
+
+/** Mailpit (local SMTP inbox of `supabase start`) — reads the sign-in code sent to an address. */
+export const mailpitUrl = process.env.E2E_MAILPIT_URL ?? 'http://127.0.0.1:54324';
+export async function otpCode(email, { after = 0, timeoutMs = 20000 } = {}) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    const res = await fetch(`${mailpitUrl}/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}`);
+    if (res.ok) {
+      const list = await res.json();
+      const msg = (list.messages ?? []).find((m) => new Date(m.Created).getTime() >= after);
+      if (msg) {
+        const full = await (await fetch(`${mailpitUrl}/api/v1/message/${msg.ID}`)).json();
+        const code = (full.Text ?? full.HTML ?? '').match(/\b(\d{6})\b/);
+        if (code) return code[1];
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`No sign-in code email for ${email}`);
+}
