@@ -28,3 +28,8 @@ coverage/
 
 # Local database backups
 backups/
+
+# e2e artefacts
+e2e/ui/.fixture.json
+e2e/ui/test-results/
+playwright-report/

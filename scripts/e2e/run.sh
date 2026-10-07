@@ -13,6 +13,9 @@ case "$E2E_API_URL" in
 esac
 case "${1:-api}" in
   api) npm --workspace e2e run test:api ;;
-  ui)  npm --workspace e2e run test:ui ;;
+  ui)
+    # build the static web app against the local stack, then drive it in Chromium
+    NEXT_PUBLIC_SUPABASE_URL="$E2E_API_URL" NEXT_PUBLIC_SUPABASE_ANON_KEY="$E2E_ANON_KEY" npm --workspace web run build
+    npm --workspace e2e run test:ui ;;
   *)   echo "usage: run.sh api|ui"; exit 2 ;;
 esac
