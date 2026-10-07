@@ -68,7 +68,7 @@ select test.ok(not exists (select 1 from public.v_production_pending where order
 select test.eq((select base_qty from public.stock_balances where item_id = test.id('fg') and godown_id = test.id('b336')),
                720.000::numeric(16,3), 'Stock IN 40 box = 720 pair');
 select test.eq((select base_qty from public.stock_balances where item_id = test.id('carton') and godown_id = test.id('b336')),
-               -40.000::numeric(16,3), 'Carton consumed for factory receipt too (Q-19)');
+               960.000::numeric(16,3), 'Carton consumed for factory receipt too (Q-19)');
 select test.ok(not exists (select 1 from public.journal_entries where source_table = 'production_receipts'),
                'Own-factory receipt creates no ledger entry (Q-08)');
 

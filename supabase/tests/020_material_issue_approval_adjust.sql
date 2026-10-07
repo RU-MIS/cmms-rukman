@@ -98,22 +98,24 @@ select test.eq((select balance from public.party_ledger(test.id('company'), test
                  date '2026-04-01', date '2027-03-31', 'RECEIVABLE') order by entry_date desc, entry_no desc nulls last limit 1),
                0.00::numeric, 'Receivable ledger closes at 0');
 
--- ------------------------------------------------ negative stock only warns (Q-18)
+-- ------------------------------------------------ negative stock BLOCKED by default
 select test.login(test.id('admin'));
+select test.throws(format($$ select public.doc_submit('STOCK_TRANSFER', public.doc_save('STOCK_TRANSFER', jsonb_build_object(
+  'company_id', %L, 'doc_date', '2026-09-23', 'from_godown_id', %L, 'to_godown_id', %L,
+  'lines', jsonb_build_array(jsonb_build_object('item_id', %L, 'qty', 300, 'unit_id', %L))))) $$,
+  test.id('company'), test.id('rm_godown'), test.id('warehouse'), test.id('rm'), test.id('mtr')),
+  'Insufficient stock%', 'Negative stock OFF (default): transfer of more than stock is rejected');
+
+-- Owner/Admin enables negative stock in Settings: posts with a warning
+update public.company_settings set allow_negative_stock = true where company_id = test.id('company');
 select test.ok(jsonb_array_length(public.doc_submit('STOCK_TRANSFER', public.doc_save('STOCK_TRANSFER', jsonb_build_object(
   'company_id', test.id('company'), 'doc_date', '2026-09-23', 'from_godown_id', test.id('rm_godown'),
   'to_godown_id', test.id('warehouse'),
   'lines', jsonb_build_array(jsonb_build_object('item_id', test.id('rm'), 'qty', 300, 'unit_id', test.id('mtr'))))))->'warnings') = 1,
-  'Transfer more than stock posts with a negative-stock warning');
-select test.eq((select base_qty from public.stock_balances where item_id = test.id('rm') and godown_id = test.id('warehouse')),
-               300.000::numeric(16,3), 'Transfer IN at destination');
-
--- policy switched to BLOCK
-insert into public.app_settings (company_id, key, value) values (test.id('company'), 'negative_stock', '"BLOCK"');
-select test.throws(format($$ select public.doc_submit('STOCK_TRANSFER', public.doc_save('STOCK_TRANSFER', jsonb_build_object(
-  'company_id', %L, 'doc_date', '2026-09-23', 'from_godown_id', %L, 'to_godown_id', %L,
-  'lines', jsonb_build_array(jsonb_build_object('item_id', %L, 'qty', 1, 'unit_id', %L))))) $$,
-  test.id('company'), test.id('rm_godown'), test.id('warehouse'), test.id('rm'), test.id('mtr')),
-  'Insufficient stock%', 'With policy BLOCK the transfer is rejected');
+  'Negative stock ON: transfer posts with a negative-stock warning');
+select test.eq((select sum(base_qty) from public.stock_balances where item_id = test.id('rm') and godown_id = test.id('warehouse')),
+               300.000::numeric, 'Transfer IN at destination');
+select test.ok(exists (select 1 from public.audit_log where table_name = 'company_settings'),
+               'Settings change is audited');
 
 rollback;

@@ -36,8 +36,8 @@ select test.ok(not exists (select 1 from public.parties where name = 'Customer-B
 select test.ok(exists (select 1 from public.parties where name = 'Customer-A'), 'A sees Customer-A');
 select test.eq((select count(*) from public.job_work_orders)::int, 0, 'A sees no B purchase/job-work orders');
 select test.eq((select count(*) from public.job_work_receipts)::int, 0, 'A sees no B receipts');
-select test.eq((select count(*) from public.stock_movements)::int, 0, 'A sees no B stock');
-select test.eq((select count(*) from public.stock_balances)::int, 0, 'A sees no B godown stock');
+select test.eq((select count(*) from public.stock_movements where company_id <> test.id('company'))::int, 0, 'A sees no B stock');
+select test.eq((select count(*) from public.stock_balances where company_id <> test.id('company'))::int, 0, 'A sees no B godown stock');
 select test.eq((select count(*) from public.journal_entries)::int, 0, 'A sees no B ledger / accounting');
 select test.eq((select count(*) from public.v_party_balances where company_id = pg_temp.b('company'))::int, 0,
                'A sees no B party balances');

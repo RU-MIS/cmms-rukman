@@ -107,6 +107,11 @@ begin
                                              qty_per_unit, applies_to, effective_from)
   values (v_co, v_fg, v_carton, v_box, 1, 'ANY', date '2026-06-15');
 
+  -- Opening stock of cartons: negative stock is blocked by default, and
+  -- receiving finished goods consumes cartons (Q-19).
+  perform app.post_stock(v_co, v_carton, v_b336, date '2026-04-01', 'OPENING', 1::smallint, 1000, v_pcs, 1,
+                         null, null, 'fixture', v_co, null, 'OPENING');
+
   return jsonb_build_object(
     'company', v_co, 'admin', v_admin, 'operator', v_op, 'approver', v_appr,
     'pair', v_pair, 'box', v_box, 'pcs', v_pcs, 'mtr', v_mtr,

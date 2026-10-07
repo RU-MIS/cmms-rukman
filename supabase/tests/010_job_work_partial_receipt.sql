@@ -81,7 +81,7 @@ select test.eq((select base_qty from public.stock_balances where item_id = test.
 select test.eq((select count(*) from public.stock_movements where item_id = test.id('fg')
                 and movement_type = 'JOB_WORK_RECEIPT')::int, 3, '3 JOB_WORK_RECEIPT movements');
 select test.eq((select base_qty from public.stock_balances where item_id = test.id('carton') and godown_id = test.id('b336')),
-               -500.000::numeric(16,3), 'Carton rule: 1 carton per box consumed (500), negative allowed with warning (Q-18)');
+               500.000::numeric(16,3), 'Carton rule: 1 carton per box consumed (1000 opening − 500)');
 select test.eq((select payable_balance from public.v_party_balances where party_id = test.id('aleem')),
                (9000 * 140)::numeric, 'Karigar payable = 9000 pair × 140');
 

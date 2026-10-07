@@ -33,3 +33,8 @@ create type public.email_status as enum
 create type public.payment_method as enum ('CASH', 'BANK', 'UPI', 'CHEQUE', 'OTHER');
 
 create type public.reservation_status as enum ('ACTIVE', 'RELEASED', 'CONSUMED');
+
+-- Reservation ledger types (§6). Used by stock_reservation_movements only:
+-- reservations never change physical stock.
+alter type public.movement_type add value if not exists 'RESERVATION';
+alter type public.movement_type add value if not exists 'RESERVATION_RELEASE';
