@@ -3,8 +3,7 @@
 Source of truth: `MASTER_BUILD_PROMPT.md`. Architecture: existing Supabase / PostgreSQL
 (no Firebase). Status as of commit on branch `claude/charming-gauss-o9fvzf`.
 
-**Legend** — Status: ✅ built + tested in SQL · 🟡 built in DB, UI / worker still to build ·
-⚠️ gap found in this review (to fix before continuing) · ⏳ not started yet.
+**Legend** — Status: ✅ built and tested (SQL tests T…, API e2e, browser e2e).
 
 **Migration short names**
 | Code | File |
@@ -23,7 +22,7 @@ Source of truth: `MASTER_BUILD_PROMPT.md`. Architecture: existing Supabase / Pos
 T110 customer PO/reservation, T120 portal visibility/security, T130 purchase/vendor portal,
 T140 documents/email, T150 payments/reminders. Run: `npm run db:test` → 13/13 PASS.
 
-**UI** (⏳ Next.js app, task #7) planned screens: `Inventory`, `Item detail`, `Godowns & locations`,
+**UI** (Next.js app `web/`) screens: `Inventory`, `Item detail`, `Godowns & locations`,
 `Items`, `Parties` (portal access, overrides, customer prices), `Customer POs (review)`,
 `Sales orders` (reserve / dispatch), `Purchase orders`, `Receiving (pending lines)`,
 `Stock transfer / adjustment`, `Documents`, `Email log`, `Payments`, `Settings (control center)`,
@@ -35,9 +34,9 @@ T140 documents/email, T150 payments/reminders. Run: `npm run db:test` → 13/13 
 ## 1. Multiple godowns
 | A. Requirement | B. Where | C. DB | D. Backend / logic | E. UI | F. Test | Status |
 |---|---|---|---|---|---|---|
-| Multiple godowns | existing masters + M2 | `godowns` (+`portal_visible`) | RLS `godowns_*` | Godowns & locations | T100 "Delhi/Noida/Factory" | ✅ DB · UI ⏳ |
+| Multiple godowns | existing masters + M2 | `godowns` (+`portal_visible`) | RLS `godowns_*` | Godowns & locations | T100 "Delhi/Noida/Factory" | ✅ |
 | Same item in many godowns | M2 | `stock_balances (item, godown, location)` | `app.post_stock` | Item detail | T100 "Item is in 3 godowns" | ✅ |
-| Consolidated stock, ONE screen | M2 | view `v_inventory_items` | — | Inventory list (Item · Total · Reserved · Available · Locations) | T100 "Consolidated physical = 20,000" | ✅ DB · UI ⏳ |
+| Consolidated stock, ONE screen | M2 | view `v_inventory_items` | — | Inventory list (Item · Total · Reserved · Available · Locations) | T100 "Consolidated physical = 20,000" | ✅ |
 | Godown-wise breakdown | M2 | view `v_stock_balance` | `inventory_item_detail()` → `godowns[]` | Item detail | T100 "Delhi godown = 8,000", "3 godown rows" | ✅ |
 | Location-wise breakdown | M2 | view `v_stock_by_location` | `inventory_item_detail()` → `locations[]` | Item detail "Delhi / B1-C-123" | T100 "4 location rows" | ✅ |
 
@@ -77,12 +76,12 @@ T140 documents/email, T150 payments/reminders. Run: `npm run db:test` → 13/13 
 ## 5. Customer portal
 | A | B | C | D | E | F | Status |
 |---|---|---|---|---|---|---|
-| Customer login | M6 + Supabase Auth (email OTP) | `portal_users` (invite → claimed on first login) | `portal_invite`, `session_bootstrap` | Login, Parties → Portal access | T120 "Invited email linked … after login" | 🟡 UI ⏳ |
+| Customer login | M6 + Supabase Auth (email OTP) | `portal_users` (invite → claimed on first login) | `portal_invite`, `session_bootstrap` | Login, Parties → Portal access | T120 "Invited email linked … after login" | ✅ |
 | Sees ONLY own data | M6, M7 | no table policy for portal users | every `portal_*` fn derives party from `auth.uid()` via `app.portal_party` | — | T120 §30 block | ✅ |
-| Product catalog | M6 | `items.portal_visible`, `godowns.portal_visible` | `portal_catalog()` | Customer portal → Catalog | T120 | ✅ DB · UI ⏳ |
-| Create PO: PO no, date, items, qty, quoted price, requested delivery, remarks, attachments | M3, M6 | `customer_pos`, `customer_po_lines`, `documents (entity customer_po)` | `portal_customer_po_create`, `portal_document_register`, `portal_customer_po_cancel` | Customer portal → New PO | T110 | ✅ DB · UI ⏳ |
+| Product catalog | M6 | `items.portal_visible`, `godowns.portal_visible` | `portal_catalog()` | Customer portal → Catalog | T120 | ✅ |
+| Create PO: PO no, date, items, qty, quoted price, requested delivery, remarks, attachments | M3, M6 | `customer_pos`, `customer_po_lines`, `documents (entity customer_po)` | `portal_customer_po_create`, `portal_document_register`, `portal_customer_po_cancel` | Customer portal → New PO | T110 | ✅ |
 | PO status / order status | M6 | `customer_pos.status`, `sales_orders.status` | `portal_my_customer_pos`, `portal_my_orders` (ordered / dispatched / pending, dispatches) | My POs, My Orders | T110, T120 | ✅ |
-| Invoices + documents | M6 | `customer_bills`, `documents.visible_to_party` | `portal_my_invoices`, `portal_documents`; storage policy `app.storage_can_read` | My Invoices (download PDF) | T140 "Customer sees his invoice PDF" | ✅ DB · storage e2e ⚠️ |
+| Invoices + documents | M6 | `customer_bills`, `documents.visible_to_party` | `portal_my_invoices`, `portal_documents`; storage policy `app.storage_can_read` | My Invoices (download PDF) | T140 "Customer sees his invoice PDF" | ✅ (e2e/api/storage) |
 | Payment history | M6 | `vouchers` RECEIPT + allocations | `portal_my_payments` | My Payments | T150 "Customer sees his 4 payments" | ✅ |
 | Outstanding if permitted | M2, M6 | `company_settings.customer_outstanding_visible` | `portal_my_outstanding`, `portal_my_invoices` hide amounts | Dashboard | T150 "Outstanding hidden when not allowed" | ✅ |
 
@@ -92,7 +91,7 @@ T140 documents/email, T150 payments/reminders. Run: `npm run db:test` → 13/13 
 | Customer enters requested price (if allowed) | M3, M6 | `customer_po_lines.quoted_rate`; setting `customer_quote_price_enabled` + party override | `app.customer_po_create(p_allow_quote)` | New PO form | T110 "Quote 140 stored", "Quote ignored when OFF" | ✅ |
 | Original quote preserved | M3 | `customer_po_lines.quoted_rate`, copied to `sales_order_lines.quoted_rate` | — | Review screen shows quote vs reference vs approved | T110 "(143, 140, 145)" | ✅ |
 | NOT automatically final | M3 | `approved_rate` null until review | — | — | T110 "NOT approved automatically", "No sales order before review" | ✅ |
-| Approve / modify / reject | M3 | `customer_pos.status` SUBMITTED → UNDER_REVIEW → APPROVED / REJECTED | `customer_po_start_review`, `customer_po_approve(p_lines …)`, `customer_po_reject` (permission `customer_po.approve`) | Customer POs review | T110 | ✅ DB · UI ⏳ |
+| Approve / modify / reject | M3 | `customer_pos.status` SUBMITTED → UNDER_REVIEW → APPROVED / REJECTED | `customer_po_start_review`, `customer_po_approve(p_lines …)`, `customer_po_reject` (permission `customer_po.approve`) | Customer POs review | T110 | ✅ |
 | approvedPrice stored separately | M3 | `customer_po_lines.approved_rate`, `sales_order_lines.rate` (+ `quoted_rate`, `reference_rate`) | `sales_order_line_set_rate` (approver only, audited) | Sales order | T110 | ✅ |
 
 ## 7–9. Stock & rate visibility (customer / vendor, global + override)
@@ -113,10 +112,10 @@ T140 documents/email, T150 payments/reminders. Run: `npm run db:test` → 13/13 
 ## 11. Vendor portal
 | A | B | C | D | E | F | Status |
 |---|---|---|---|---|---|---|
-| Vendor login | M6 | `portal_users kind VENDOR` | `portal_invite`, `session_bootstrap` | Login | T130 | 🟡 UI ⏳ |
+| Vendor login | M6 | `portal_users kind VENDOR` | `portal_invite`, `session_bootstrap` | Login | T130 | ✅ |
 | Only own POs; details; ordered / received / pending; supply status | M6 | `purchase_orders`, `purchase_order_lines` | `portal_vendor_pos`, `portal_vendor_po_print` | Vendor portal → My POs | T130 | ✅ |
 | Payment status + history | M6 | `v_bill_outstanding`, vouchers PAYMENT | `portal_vendor_payments` (UNPAID / PARTIALLY_PAID / PAID), setting `vendor_payment_visible` | Vendor portal → Payments | T130 | ✅ |
-| Documents if permitted | M5, M6 | `documents.visible_to_party` | `portal_documents` | Vendor portal → Documents | — | ⚠️ test missing |
+| Documents if permitted | M5, M6 | `documents.visible_to_party` | `portal_documents` | Vendor portal → Documents | T160 §4 | ✅ |
 | Vendor does NOT create POs | M6 | — | no vendor write RPC exists | — | T130 "Vendor cannot post receipts" | ✅ |
 
 ## 12–13. Purchase PO & partial receiving
@@ -145,15 +144,15 @@ T140 documents/email, T150 payments/reminders. Run: `npm run db:test` → 13/13 
 ## 17–20. Documents & email
 | A | B | C | D | E | F | Status |
 |---|---|---|---|---|---|---|
-| Upload PO / invoice / purchase / delivery / payment / other | M5 | `documents.category`, `entity_type` (purchase_order, purchase_receipt, customer_bill, sales_order, customer_po, dispatch, voucher, party) | `document_register`, `document_delete`, `document_set_visibility` | Documents panel on each record | T140 | ✅ DB · UI ⏳ |
+| Upload PO / invoice / purchase / delivery / payment / other | M5 | `documents.category`, `entity_type` (purchase_order, purchase_receipt, customer_bill, sales_order, customer_po, dispatch, voucher, party) | `document_register`, `document_delete`, `document_set_visibility` | Documents panel on each record | T140 | ✅ |
 | Metadata stored | M5 | file name, mime, size, path, uploader, time, party | — | — | T140 "metadata saved and linked" | ✅ |
-| Secure storage | M6 | Storage bucket `documents` (private) + policies `app.storage_can_read/write` (company folder / own portal folder) | — | — | ⚠️ needs e2e test on real Supabase Storage |
-| Vendor document → PO PDF + attachment → auto email | M5 | `email_outbox.attachments` [{po_pdf},{document_id}] | `app.document_emails`, `app.queue_vendor_po_email`; PDF made by worker from `purchase_order_print_data` | — | T140 "Email contains PO PDF + uploaded document" | ✅ DB · worker ⏳ |
+| Secure storage | M6 | Storage bucket `documents` (private) + policies `app.storage_can_read/write` (company folder / own portal folder) | — | — | e2e/api/storage.test.mjs | ✅ |
+| Vendor document → PO PDF + attachment → auto email | M5 | `email_outbox.attachments` [{po_pdf},{document_id}] | `app.document_emails`, `app.queue_vendor_po_email`; PDF made by worker from `purchase_order_print_data` | — | T140 "Email contains PO PDF + uploaded document" | ✅ |
 | Vendor PO email on confirmation | M5 | — | `app.post_purchase_order` queues VENDOR_PO | PO → "Email PO" button (`purchase_order_send_email`) | T140 | ✅ |
 | Email failure never rolls back | M5 | outbox only; send happens in worker | business fns only INSERT | — | T140 "PO confirmed even though the email cannot be sent" | ✅ |
-| History + retry | M5 | `email_events`, `attempts`, `next_attempt_at` back-off, `max_attempts` | `email_claim`, `email_complete`, `email_retry`, stale re-claim | Email log (retry button) | T140 | ✅ DB · worker/UI ⏳ |
+| History + retry | M5 | `email_events`, `attempts`, `next_attempt_at` back-off, `max_attempts` | `email_claim`, `email_complete`, `email_retry`, stale re-claim | Email log (retry button) | T140 | ✅ |
 | Tally invoice PDF → upload → attach → email → history → retry (no GST invoice generation) | M5 | `customer_bills` (recorded from Tally) + `documents` category INVOICE | `document_emails` → CUSTOMER_INVOICE | Customer bill → Upload invoice PDF | T140 §24 | ✅ |
-| Customer document email | M5 | kind CUSTOMER_DOCUMENT | `document_emails` | — | — | ⚠️ test missing |
+| Customer document email | M5 | kind CUSTOMER_DOCUMENT | `document_emails` | Documents panel | T160 §5 | ✅ |
 | Email settings: automation, vendor PO, vendor document, customer invoice, customer document, payment reminder, vendor payment reminder | M2, M5 | `company_settings.*_email`, `email_automation` | `app.email_enabled` checked at queue AND at send | Settings → Email | T140 (OFF → nothing; OFF later → SKIPPED) | ✅ |
 
 ## 21–22. Payment reminders & payments
@@ -169,10 +168,10 @@ T140 documents/email, T150 payments/reminders. Run: `npm run db:test` → 13/13 
 ## 23–24. Owner/Admin settings, negative stock
 | A | B | C | D | E | F | Status |
 |---|---|---|---|---|---|---|
-| All settings without code change | M2, M7 | one row per company in `company_settings` (+ audit trigger) | RLS: update only `settings.edit` (Owner/Admin) | Settings control center | T020 "Settings change is audited", T100 "Operator cannot enable negative stock" | ✅ DB · UI ⏳ |
+| All settings without code change | M2, M7 | one row per company in `company_settings` (+ audit trigger) | RLS: update only `settings.edit` (Owner/Admin) | Settings control center | T020 "Settings change is audited", T100 "Operator cannot enable negative stock" | ✅ |
 | Portal ON/OFF (customer, vendor) | M2, M6 | `customer_portal_enabled`, `vendor_portal_enabled` | `app.portal_party` | Settings | T120 "OFF by default" | ✅ |
 | Negative stock default BLOCK; Owner/Admin can enable | M2 | `allow_negative_stock` (default false), `godowns.allow_negative` | `post_stock`, `reverse_stock` | Settings | T100, T020 | ✅ |
-| Dispatch beyond available rejected | M2, M3 | — | `post_dispatch` → `post_stock` | — | — | ⚠️ explicit dispatch test missing (tested via stock OUT / transfer) |
+| Dispatch beyond available rejected | M2, M3 | — | `post_dispatch` → `post_stock` | Dispatch dialog | T160 §1, UI e2e | ✅ |
 
 ## 25. Security
 | A | B | C | D | E | F | Status |
@@ -181,11 +180,11 @@ T140 documents/email, T150 payments/reminders. Run: `npm run db:test` → 13/13 
 | Vendor A ≠ Vendor B | M6 | same | same | — | T130 §31 | ✅ |
 | Customer cannot modify approved price | M3, M7 | no write grant on PO / SO lines | `sales_order_line_set_rate` needs `sales_order.approve` | — | T110, T120 | ✅ |
 | Customer cannot modify stock | M2, M7 | no write grant on ledgers; `app.*` not executable | — | — | T100 §32, T120 | ✅ |
-| Customer cannot modify companyId / party | M6 | payload `company_id`/`party_id` stripped | — | — | T110 (party tampering) | ⚠️ company_id tampering test missing |
-| Vendor cannot modify payment status | M7 | no write path on vouchers / allocations for portal users | — | — | — | ⚠️ explicit test missing |
+| Customer cannot modify companyId / party | M6 | payload `company_id`/`party_id` stripped | — | — | T110, T160 §2 | ✅ |
+| Vendor cannot modify payment status | M7 | no write path on vouchers / allocations for portal users | — | — | T160 §3 | ✅ |
 | Internal roles (Owner, Admin, Approver, Accounts, Purchase, Sales, Operator, Viewer) | M7 | `app.role_grants` | `sync_system_role_permissions` | Users & roles | T130/T140/T150 use ACCOUNTANT / PURCHASE | ✅ |
 | Company isolation | existing + M7 | RLS everywhere | — | — | T050, T120 §33 | ✅ |
-| Concurrency (two users reserving the last stock) | M3 | row lock on `stock_reserved` | — | — | — | ⚠️ parallel test missing (exists for receiving: T060) |
+| Concurrency (two users reserving the last stock) | M3 | row lock on `stock_reserved` | — | — | T170 (parallel sessions) | ✅ |
 
 ## 26. Existing project
 | A | B | Status |
@@ -193,23 +192,26 @@ T140 documents/email, T150 payments/reminders. Run: `npm run db:test` → 13/13 
 | Nothing destroyed; Supabase kept | New migrations only ALTER / extend; old tests T010–T070 still pass (adjusted only for the BLOCK default and tighter audit-log access) | ✅ |
 | Works on real Supabase | `supabase db reset` on local Supabase stack: all 22 migrations + seed applied | ✅ |
 
-## 27. Not yet built (tracked tasks)
-| Item | Plan |
-|---|---|
-| Email worker (task #6) | `worker/`: Node + nodemailer (SMTP from env) + pdf-lib (PO PDF); loop `email_claim` → send → `email_complete`; daily `run_payment_reminders`; GitHub Actions cron; integration test with a local SMTP capture server against the local Supabase stack |
-| Web app (task #7) | Next.js + Tailwind + supabase-js, all screens listed at the top, desktop-first responsive; no button without a backend RPC |
-| Docs (task #8) | `docs/INVENTORY_MODULE.md` (architecture, data model, stock calc, godown/rack logic, reservation, visibility, pricing, email, reminders, security, testing) |
-| Build checks (task #8) | lint, typecheck, production build, e2e smoke against local Supabase |
+## 27. Delivery status
 
-## Gaps found in this review (fix before continuing)
-1. Test: dispatch beyond available stock rejected (negative stock OFF).
-2. Test: customer `company_id` tampering in portal payload.
-3. Test: vendor cannot change payment / allocation data.
-4. Test: vendor portal documents visibility (`visible_to_party`).
-5. Test: CUSTOMER_DOCUMENT email.
-6. Test: two parallel reservations for the last stock → one succeeds.
-7. E2E test on real Supabase Storage: customer cannot download another customer's file; internal user without `documents.view` cannot read.
-8. Test: dispatch from an explicit rack/bin (`dispatch_lines.location_id`).
+| Item | Where | Test |
+|---|---|---|
+| Email worker | `worker/` (nodemailer, pdf-lib PO PDF, retries), `.github/workflows/email-worker.yml` | `worker/test`, `e2e/api/email-worker.test.mjs` |
+| Web app — internal ERP | `web/src/app/erp/*` (dashboard, inventory, item detail, items & packing, godowns & locations, stock in/out/transfer, customer POs, sales orders & dispatch, purchase orders, receiving, invoices & bills, payments, reminders, documents, email log, customers & vendors, users, settings) | `e2e/ui/*.spec.ts` |
+| Customer / vendor portals | `web/src/app/portal/*` | `e2e/ui/flow.spec.ts`, `visibility.spec.ts` |
+| Module documentation | `docs/INVENTORY_MODULE.md` | — |
+| Lint / typecheck / production build | `npm run lint`, `npm run typecheck`, `npm run build` | CI-ready |
 
-No business requirement of MASTER_BUILD_PROMPT.md is unmapped; the open items are the
-missing tests above plus the not-yet-built worker, UI and module documentation.
+## Gaps found in the review — all closed
+1. Dispatch beyond available stock rejected → T160 §1 + UI e2e (stock OUT block).
+2. Customer `company_id` / party / status tampering → T160 §2.
+3. Vendor cannot change payment / allocation / bill / due date → T160 §3.
+4. Vendor portal documents visibility → T160 §4.
+5. CUSTOMER_DOCUMENT email ON / OFF → T160 §5.
+6. Parallel reservations / dispatches of the last stock → T170.
+7. Storage security on real Supabase Storage → `e2e/api/storage.test.mjs`.
+8. Dispatch from an explicit rack / bin → T160 §8 + UI e2e.
+
+Additional fix found while building the UI: the per-godown "allow negative
+stock" flag could be set by any user with `godowns.edit`; it is now Owner/Admin
+only (migration 0008, T180).

@@ -49,3 +49,11 @@ being truncated (`GT-10` → `GT-1`).
 Isolation between **instances** comes from separate Supabase projects; it is
 checked on a real instance with `npm run instance:verify` (fingerprint,
 RLS on every table, no anonymous privileges).
+
+## Inventory + portals MVP
+
+* SQL: `supabase/tests/100…180` (+ parallel-session tests `060_concurrency.sh`, `170_concurrent_reservation.sh`) — `npm run db:test`.
+* API / Storage / email worker against the local Supabase stack — `npm run test:e2e:api`.
+* Browser (Playwright, Chromium) against the static build — `npm run test:e2e:ui`.
+* Details and the mapping to the 33 required test cases: `docs/INVENTORY_MODULE.md` §16 and
+  `docs/INVENTORY_REQUIREMENTS_CHECKLIST.md`.
