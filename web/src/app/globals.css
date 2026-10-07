@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: var(--brand, #1f4e79);
+  --color-brand-dark: color-mix(in srgb, var(--brand, #1f4e79) 80%, black);
+  --color-brand-light: color-mix(in srgb, var(--brand, #1f4e79) 10%, white);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Arial, sans-serif;
+}
+
+html, body { height: 100%; }
+body { @apply bg-slate-50 text-slate-800 antialiased text-sm; }
+
+/* dense ERP tables */
+.erp-table { @apply w-full border-collapse text-sm; }
+.erp-table th { @apply sticky top-0 z-10 bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 border-b border-slate-200; }
+.erp-table td { @apply px-3 py-2 border-b border-slate-100 align-top; }
+.erp-table tbody tr:hover { @apply bg-brand-light; }
+.num { @apply text-right tabular-nums whitespace-nowrap; }
+
+.field-label { @apply block text-xs font-medium text-slate-600 mb-1; }
+.input { @apply w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm shadow-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-100; }
