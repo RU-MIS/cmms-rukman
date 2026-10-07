@@ -21,7 +21,12 @@ from (values
   ('settings',       'Company settings & numbering'),
   ('users',          'Users & roles'),
   ('reports',        'Reports'),
-  ('audit',          'Audit log')
+  ('audit',          'Audit log'),
+  ('customer_po',    'Customer POs (review / approve)'),
+  ('reservation',    'Stock reservations'),
+  ('documents',      'Documents'),
+  ('email',          'Email log & sending'),
+  ('portal',         'Customer / vendor portal access')
 ) as m(module, label)
 cross join unnest(enum_range(null::public.perm_action)) a
 on conflict (code) do nothing;

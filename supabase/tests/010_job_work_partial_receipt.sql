@@ -93,8 +93,10 @@ select test.eq((public.job_work_order_line_set_qty((select v from t where k = 'l
                '360.000', 'PO increased to 520 box → 20 box (360 pair) pending again');
 select test.eq((select status::text from public.job_work_orders where id = (select v from t where k = 'po')),
                'PARTIALLY_RECEIVED', 'PO re-opened after qty increase');
+select test.login(test.id('admin'));  -- audit log is visible to owner/admin only
 select test.ok(exists (select 1 from public.audit_log where table_name = 'job_work_order_lines'
                         and action = 'EDIT_QTY'), 'PO qty edit is audited');
+select test.login(test.id('operator'));
 
 -- zero-rate receipt allowed (Q-06): no journal, flagged
 insert into t select 'r0', (pg_temp.receive(20, 0)->>'id')::uuid;
