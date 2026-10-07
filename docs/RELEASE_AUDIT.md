@@ -44,7 +44,7 @@ performance. Production-like environment: local Supabase stack
 ## Security review summary
 
 * **RLS**: enabled on every public table (verified by query and `instance:verify`); no table without a policy; anon has no table grant and no function grant.
-* **Every SECURITY DEFINER RPC** reviewed (54): each checks membership + permission, or resolves the portal party from the login, or requires the service role (`email_claim`, `email_complete`, reminders for all companies).
+* **Every SECURITY DEFINER RPC** callable by users reviewed (52): each checks membership + permission, or resolves the portal party from the login, or requires the service role (`email_claim`, `email_complete`, reminders for all companies).
 * **Company isolation**: T050, T120 §33, T160 §2, e2e storage (other company cannot read/upload).
 * **Customer / vendor isolation**: portal users are not company members; T120, T130, T160, e2e portal tests.
 * **Role permissions**: `app.role_grants`; settings / users / portal access / overrides / per-godown negative stock Owner-Admin only (T100, T120, T180, T190, `zz-auth.spec.ts` operator).
