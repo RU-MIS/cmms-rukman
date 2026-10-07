@@ -190,6 +190,12 @@ begin
   end loop;
 end $$;
 
+-- Visibility / email / reminder overrides are an Owner/Admin control (§33).
+drop policy party_settings_write on public.party_settings;
+create policy party_settings_write on public.party_settings for all to authenticated
+  using (exists (select 1 from public.parties p where p.id = party_id and app.has_permission(p.company_id, 'portal.edit')))
+  with check (exists (select 1 from public.parties p where p.id = party_id and app.has_permission(p.company_id, 'portal.edit')));
+
 create policy stock_reservations_read on public.stock_reservations for select to authenticated
   using (app.is_member(company_id));
 create policy stock_reservation_movements_read on public.stock_reservation_movements for select to authenticated

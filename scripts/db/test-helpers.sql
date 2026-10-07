@@ -125,3 +125,55 @@ grant all on test.ctx to authenticated;
 create or replace function test.id(p_key text) returns uuid language sql stable as
   $$ select (v->>p_key)::uuid from test.ctx where k = 'fx' $$;
 grant execute on all functions in schema test to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- Inventory MVP helpers (owner context)
+-- -----------------------------------------------------------------------------
+create or replace function test.party(p_company uuid, p_code text, p_role public.party_role, p_email text default null)
+returns uuid language plpgsql as $$
+declare v uuid;
+begin
+  insert into public.parties (company_id, code, name, email) values (p_company, p_code, p_code, p_email) returning id into v;
+  insert into public.party_roles values (v, p_role);
+  return v;
+end $$;
+
+-- A portal login (auth user + portal_users row) for a party.
+create or replace function test.portal_user(p_company uuid, p_party uuid, p_kind public.portal_kind)
+returns uuid language plpgsql as $$
+declare v uuid := gen_random_uuid();
+begin
+  insert into auth.users (id, email) values (v, 'portal-' || v || '@test.local');
+  insert into public.portal_users (company_id, party_id, kind, email, user_id, claimed_at)
+  values (p_company, p_party, p_kind, 'portal-' || v || '@test.local', v, now());
+  return v;
+end $$;
+
+-- An internal user with a system role.
+create or replace function test.user_with_role(p_company uuid, p_role text)
+returns uuid language plpgsql as $$
+declare v uuid := gen_random_uuid();
+begin
+  insert into auth.users (id, email) values (v, lower(p_role) || '-' || v || '@test.local');
+  insert into public.user_roles (user_id, company_id, role_id)
+  select v, p_company, id from public.roles where company_id = p_company and code = p_role;
+  return v;
+end $$;
+
+create or replace function test.location(p_company uuid, p_godown uuid, p_rack text, p_shelf text, p_bin text)
+returns uuid language sql as $$
+  insert into public.storage_locations (company_id, godown_id, rack, shelf, bin)
+  values (p_company, p_godown, p_rack, p_shelf, p_bin) returning id
+$$;
+
+-- Stock IN through the posting engine (opening stock).
+create or replace function test.stock_in(p_company uuid, p_item uuid, p_godown uuid, p_qty numeric,
+                                         p_location uuid default null)
+returns void language plpgsql as $$
+begin
+  perform app.post_stock(p_company, p_item, p_godown, date '2026-04-01', 'OPENING', 1::smallint, p_qty,
+                         (select base_unit_id from public.items where id = p_item), 1, null, null,
+                         'fixture', p_company, null, 'OPENING', p_location);
+end $$;
+
+grant execute on all functions in schema test to authenticated;
