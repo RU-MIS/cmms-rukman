@@ -1,0 +1,29 @@
+{
+  "name": "@rukman/worker",
+  "private": true,
+  "type": "module",
+  "description": "Email outbox worker: sends queued ERP emails (PO PDF, documents, invoices, payment reminders) with retries",
+  "scripts": {
+    "once": "node src/main.ts once",
+    "loop": "node src/main.ts loop",
+    "reminders": "node src/main.ts reminders",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p .",
+    "lint": "eslint src test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
+    "nodemailer": "^10.0.14",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "@types/nodemailer": "^6.4.0",
+    "eslint": "^9.0.0",
+    "smtp-server": "^3.13.0",
+    "@types/smtp-server": "^3.5.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}

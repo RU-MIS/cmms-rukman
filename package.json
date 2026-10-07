@@ -9,9 +9,21 @@
     "db:migrate": "supabase db push",
     "db:seed": "bash scripts/db/seed.sh",
     "instance:init": "bash scripts/instance/init.sh",
-    "instance:verify": "bash scripts/instance/verify.sh"
+    "instance:verify": "bash scripts/instance/verify.sh",
+    "e2e:env": "bash scripts/e2e/env.sh",
+    "test:e2e:api": "bash scripts/e2e/run.sh api",
+    "test:e2e:ui": "bash scripts/e2e/run.sh ui",
+    "test:worker": "npm --workspace worker test",
+    "lint": "npm --workspace web run lint && npm --workspace worker run lint",
+    "typecheck": "npm --workspace web run typecheck && npm --workspace worker run typecheck",
+    "build": "npm --workspace web run build"
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "workspaces": [
+    "worker",
+    "web",
+    "e2e"
+  ]
 }

@@ -1,0 +1,16 @@
+{
+  "name": "@rukman/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:api": "node --test --test-concurrency=1 \"api/*.test.mjs\"",
+    "test:ui": "playwright test -c ui/playwright.config.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "smtp-server": "^3.13.0"
+  }
+}
