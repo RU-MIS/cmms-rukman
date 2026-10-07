@@ -11,7 +11,7 @@ must be *different* and how to prove the clone is independent.
 3. System seed — `supabase/seed/system/`
 4. `.env.example` → new `.env` values
 5. Hosting configuration (Cloudflare Pages project with the new env)
-6. Storage buckets created in the new Supabase project
+6. GitHub Actions secrets of the new instance (email worker, backup) — `DEPLOYMENT.md` §6, §9
 
 ## Must be new for every clone
 
@@ -29,9 +29,10 @@ must be *different* and how to prove the clone is independent.
 | Change | How | Code change? |
 |---|---|---|
 | Product name | `NEXT_PUBLIC_APP_NAME`, `NEXT_PUBLIC_APP_SHORT_NAME` | No |
-| Logo, favicon, colours | env / `public/brand/` | No |
-| Company name, GSTIN, address, PDF header/footer | Settings screen (database) | No |
-| Document prefixes / formats | Settings → Numbering | No |
+| Logo, favicon, colour | `NEXT_PUBLIC_LOGO_URL`, `NEXT_PUBLIC_FAVICON_URL` (files in `web/public/brand/` or any URL), `NEXT_PUBLIC_PRIMARY_COLOR` | No |
+| Company name, GSTIN, address (PO PDF header, email reply-to) | Settings → Company profile (database) | No |
+| Email sender name / address | GitHub secrets `EMAIL_FROM_NAME`, `EMAIL_FROM_ADDRESS` | No |
+| Document prefixes / formats | table `document_sequences` (Supabase table editor) | No |
 
 The database schema, SQL functions and business logic contain no product or
 company name.

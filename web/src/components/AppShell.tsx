@@ -66,6 +66,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen">
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 transform overflow-y-auto bg-slate-900 text-slate-200 transition lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="border-b border-slate-800 px-4 py-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {brand.logo && <img src={brand.logo} alt="" className="mb-2 h-8 w-auto" />}
           <div className="text-base font-semibold text-white">{brand.short}</div>
           {boot.companies.length > 1 ? (
             <select aria-label="Company" value={company.id} onChange={(e) => setCompany(e.target.value)}

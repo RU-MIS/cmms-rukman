@@ -5,7 +5,12 @@ import './globals.css';
 const name = process.env.NEXT_PUBLIC_APP_NAME ?? 'Rukman Dataflow Management System';
 const color = process.env.NEXT_PUBLIC_PRIMARY_COLOR ?? '#1f4e79';
 
-export const metadata: Metadata = { title: name, description: `${name} — inventory, purchase, sales, documents and payments` };
+const favicon = process.env.NEXT_PUBLIC_FAVICON_URL;
+export const metadata: Metadata = {
+  title: name,
+  description: `${name} — inventory, purchase, sales, documents and payments`,
+  ...(favicon ? { icons: { icon: favicon } } : {}),
+};
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

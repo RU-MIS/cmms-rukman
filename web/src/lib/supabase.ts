@@ -18,6 +18,7 @@ export const brand = {
   name: process.env.NEXT_PUBLIC_APP_NAME ?? 'Rukman Dataflow Management System',
   short: process.env.NEXT_PUBLIC_APP_SHORT_NAME ?? 'Rukman DMS',
   color: process.env.NEXT_PUBLIC_PRIMARY_COLOR ?? '#1f4e79',
+  logo: process.env.NEXT_PUBLIC_LOGO_URL || null,
 };
 
 /** Turns a PostgREST / Postgres error into the business message shown to the user. */

@@ -49,6 +49,8 @@ function LoginForm() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-100 to-brand-light p-4">
       <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-lg">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {brand.logo && <img src={brand.logo} alt="" className="mb-3 h-10 w-auto" />}
         <h1 className="text-lg font-semibold text-slate-800">{brand.name}</h1>
         <p className="mb-4 text-sm text-slate-500">Sign in to the ERP, customer portal or vendor portal.</p>
         <Tabs tabs={[{ id: 'password', label: 'Password' }, { id: 'code', label: 'Email code (OTP)' }]} active={mode}

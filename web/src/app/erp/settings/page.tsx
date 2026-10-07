@@ -42,6 +42,7 @@ export default function SettingsPage() {
             must(await sb().from('company_settings').update(draft).eq('company_id', companyId));
             setDraft({}); saved.reload(); }, 'Settings saved')}>Save settings</Button></>} />
       {!editable && <ErrorBox error="You can view the settings; only the Owner or an Admin can change them." />}
+      <CompanyProfile companyId={companyId} editable={editable} />
       <div className="grid gap-4 xl:grid-cols-2">
         <Card title="Inventory">
           {b('allow_negative_stock', 'Allow negative stock', 'OFF (recommended): stock OUT / dispatch / transfer beyond available stock (physical − reserved) is blocked.')}
@@ -91,5 +92,28 @@ export default function SettingsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+const PROFILE = [['legal_name', 'Legal name *'], ['trade_name', 'Trade name'], ['gstin', 'GSTIN'], ['pan', 'PAN'], ['address_line1', 'Address line 1'],
+  ['address_line2', 'Address line 2'], ['city', 'City'], ['state', 'State'], ['state_code', 'State code'], ['pincode', 'PIN code'],
+  ['phone', 'Phone'], ['email', 'Email (reply-to of ERP emails)']] as const;
+
+function CompanyProfile({ companyId, editable }: { companyId: string; editable: boolean }) {
+  const { busy, run } = useAction();
+  const co = useData(async () => must<Record<string, string | null>>(await sb().from('companies').select('*').eq('id', companyId).single()), [companyId]);
+  const [d, setD] = useState<Record<string, string>>({});
+  if (!co.data) return null;
+  const v = (k: string) => d[k] ?? co.data?.[k] ?? '';
+  return (
+    <Card title="Company profile (printed on PO PDF and used in emails)" actions={editable && Object.keys(d).length > 0 &&
+      <Button busy={busy} onClick={() => run(async () => {
+        if (!v('legal_name').trim()) throw new Error('Legal name is required');
+        must(await sb().from('companies').update(Object.fromEntries(Object.entries(d).map(([k, x]) => [k, x.trim() || null]))).eq('id', companyId));
+        setD({}); co.reload(); }, 'Company profile saved')}>Save profile</Button>}>
+      <div className="grid gap-3 md:grid-cols-3">
+        {PROFILE.map(([k, l]) => <Field key={k} label={l}><Input value={v(k)} disabled={!editable} onChange={(e) => setD({ ...d, [k]: e.target.value })} /></Field>)}
+      </div>
+    </Card>
   );
 }
