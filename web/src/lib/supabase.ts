@@ -29,7 +29,7 @@ export function errorText(e: unknown): string {
 }
 
 /** Unwraps a Supabase response or throws its message. */
-export function must<T>(res: { data: T | null; error: unknown }): T {
+export function must<T>(res: { data: unknown; error: unknown }): T {
   if (res.error) throw new Error(errorText(res.error));
   return res.data as T;
 }

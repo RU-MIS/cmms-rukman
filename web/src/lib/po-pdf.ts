@@ -1,4 +1,4 @@
-// KEEP IN SYNC with web/src/lib/po-pdf.ts (checked by worker/test/po-pdf.test.ts).
+// KEEP IN SYNC with worker/src/po-pdf.ts (checked by worker/test/po-pdf.test.ts).
 // Purchase Order PDF (§25) from app.purchase_order_print_data().
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 

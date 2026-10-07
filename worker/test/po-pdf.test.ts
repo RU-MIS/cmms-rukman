@@ -28,3 +28,11 @@ test('text helpers', () => {
   assert.equal(pdfText('₹100 – ok'), 'Rs. 100 - ok');
   assert.equal(money(140000), '1,40,000.00');
 });
+
+test('web copy of the PO PDF generator is identical', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const strip = (s: string) => s.split('\n').slice(1).join('\n');
+  const a = await readFile(new URL('../src/po-pdf.ts', import.meta.url), 'utf8');
+  const b = await readFile(new URL('../../web/src/lib/po-pdf.ts', import.meta.url), 'utf8');
+  assert.equal(strip(a), strip(b));
+});

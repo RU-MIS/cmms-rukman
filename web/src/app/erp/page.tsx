@@ -26,7 +26,7 @@ export default function Dashboard() {
       can('purchase_order.view') ? count(c.from('v_purchase_pending_lines').select('po_line_id', head).eq('company_id', companyId)) : 0,
       can('email.view') ? count(c.from('email_outbox').select('id', head).eq('company_id', companyId).eq('status', 'FAILED')) : 0,
       can('voucher.view')
-        ? must(await c.from('v_bill_outstanding').select('outstanding_amount').eq('company_id', companyId).eq('side', 'RECEIVABLE')
+        ? must<{ outstanding_amount: number }[]>(await c.from('v_bill_outstanding').select('outstanding_amount').eq('company_id', companyId).eq('side', 'RECEIVABLE')
             .gt('outstanding_amount', 0).lt('due_date', new Date().toISOString().slice(0, 10)))
             .reduce((s: number, r: { outstanding_amount: number }) => s + Number(r.outstanding_amount), 0)
         : 0,
