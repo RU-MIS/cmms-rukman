@@ -18,4 +18,9 @@ const due = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
 const bill = ok(await db.rpc('doc_save', { p_doc_type: 'CUSTOMER_BILL', p_payload: { company_id: companyId,
   doc_date: new Date().toISOString().slice(0, 10), bill_no: `S/${runId}`, party_id: customer, amount: 5000, due_date: due } }));
 ok(await db.rpc('doc_submit', { p_doc_type: 'CUSTOMER_BILL', p_id: bill }));
+// vendor bill (direct purchase receipt) → internal vendor payment reminder
+const godown = ok(await db.from('godowns').insert({ company_id: companyId, code: 'G1', name: 'Main' }).select('id').single()).id;
+const pr = ok(await db.rpc('doc_save', { p_doc_type: 'PURCHASE_RECEIPT', p_payload: { company_id: companyId,
+  doc_date: new Date().toISOString().slice(0, 10), party_id: vendor, godown_id: godown, lines: [{ item_id: item, qty: 10, unit_id: mtr, rate: 5 }] } }));
+ok(await db.rpc('doc_submit', { p_doc_type: 'PURCHASE_RECEIPT', p_id: pr }));
 console.log(JSON.stringify({ companyId, vendorEmail: `vendor-${runId}@smoke.test`, customerEmail: `customer-${runId}@smoke.test`, ownerEmail: owner.email }));

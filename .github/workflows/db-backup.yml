@@ -1,0 +1,46 @@
+# Nightly encrypted backup of this instance (Supabase Free has no automatic
+# backups): database data + files of the "documents" bucket, made by
+# scripts/backup/backup.sh. Kept as a private workflow artifact for 30 days —
+# download it regularly to an off-site place as well. Restore: docs/DEPLOYMENT.md §9.
+# Secrets: DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, BACKUP_PASSPHRASE
+name: db-backup
+on:
+  schedule:
+    - cron: '7 21 * * *'        # 02:37 IST
+  workflow_dispatch:
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: npm ci --workspace worker --include-workspace-root=false --omit=dev
+      - name: Backup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: bash scripts/backup/backup.sh "$RUNNER_TEMP" | tail -1 > "$RUNNER_TEMP/archive.txt"
+      - name: Encrypt
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          ARCHIVE="$(cat "$RUNNER_TEMP/archive.txt")"
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" \
+              --symmetric --cipher-algo AES256 -o "$(basename "$ARCHIVE").gpg" "$ARCHIVE"
+          rm -f "$ARCHIVE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ github.run_id }}
+          path: backup-*.tar.gz.gpg
+          retention-days: 30

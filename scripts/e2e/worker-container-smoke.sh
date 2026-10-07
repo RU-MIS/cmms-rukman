@@ -12,7 +12,11 @@ DATA="$(node e2e/smoke/worker-data.mjs)"
 echo "data: $DATA"
 SRC="$(mktemp -d)"; trap 'rm -rf "$SRC"' EXIT
 git archive HEAD | tar -x -C "$SRC"
-docker run --rm --network "$NET" -v "$SRC:/w" -w /w \
+CA_ARGS=()   # behind a TLS-intercepting proxy: EXTRA_CA_CERT=/path/to/ca.pem
+if [ -n "${EXTRA_CA_CERT:-}" ]; then
+  CA_ARGS=(-v "$EXTRA_CA_CERT:/extra-ca.pem:ro" -e NODE_EXTRA_CA_CERTS=/extra-ca.pem -e npm_config_cafile=/extra-ca.pem)
+fi
+docker run --rm --network "$NET" -v "$SRC:/w" -w /w "${CA_ARGS[@]}" \
   -e SUPABASE_URL=http://supabase_kong_rukman-dataflow-local:8000 -e SUPABASE_SERVICE_ROLE_KEY="$E2E_SERVICE_ROLE_KEY" \
   -e SMTP_HOST=supabase_inbucket_rukman-dataflow-local -e SMTP_PORT=1025 -e SMTP_SECURE=false \
   -e EMAIL_FROM_ADDRESS=erp@smoke.test -e EMAIL_FROM_NAME="Smoke ERP" \

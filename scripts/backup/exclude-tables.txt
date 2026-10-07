@@ -1,0 +1,15 @@
+app.default_accounts
+app.default_approvals
+app.default_roles
+app.default_sequences
+app.doc_types
+storage.buckets
+storage.buckets_analytics
+storage.buckets_vectors
+storage.iceberg_namespaces
+storage.iceberg_tables
+storage.objects
+storage.s3_multipart_uploads
+storage.s3_multipart_uploads_parts
+storage.vector_indexes
+supabase_functions.hooks
