@@ -13,7 +13,11 @@ create schema if not exists auth;
 create table if not exists auth.users (
   id                  uuid primary key default gen_random_uuid(),
   email               text unique,
-  email_confirmed_at  timestamptz default now()   -- tests insert NULL for an unverified address
+  email_confirmed_at  timestamptz default now(),  -- tests insert NULL for an unverified address
+  encrypted_password  text,
+  created_at          timestamptz default now(),
+  last_sign_in_at     timestamptz,
+  banned_until        timestamptz
 );
 create or replace function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid

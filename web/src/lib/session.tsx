@@ -5,7 +5,7 @@ import { errorText, rpc, sb } from './supabase';
 
 export interface CompanyAccess { id: string; name: string; code: string; roles: string[] }
 export interface PortalAccess { company_id: string; company_name: string; kind: 'CUSTOMER' | 'VENDOR'; party_id: string; party_name: string; enabled: boolean }
-export interface Bootstrap { user_id: string; email: string; full_name: string; companies: CompanyAccess[]; portals: PortalAccess[] }
+export interface Bootstrap { user_id: string; email: string; full_name: string; must_change_password?: boolean; companies: CompanyAccess[]; portals: PortalAccess[] }
 
 interface SessionState {
   ready: boolean;

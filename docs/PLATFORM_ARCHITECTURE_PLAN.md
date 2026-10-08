@@ -1,6 +1,6 @@
 # Rukman Dataflow — Configurable Multi-Tenant Platform: Audit & Plan
 
-Status: **PROPOSAL — awaiting approval. No code, migration or production change has been made.**
+Status: **APPROVED.** R1 (Phases 1–2) implemented on the development branch — see [`PLATFORM_R1.md`](./PLATFORM_R1.md). Not deployed.
 Baseline: production release `5cff5d6` (= `main`). All work below is additive, on a development branch, released through the same test + release process.
 
 ---

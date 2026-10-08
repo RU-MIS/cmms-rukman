@@ -3,6 +3,9 @@ app.default_approvals
 app.default_roles
 app.default_sequences
 app.doc_types
+app.godown_scoped_tables
+public.data_scope_dimensions
+public.permission_modules
 storage.buckets
 storage.buckets_analytics
 storage.buckets_vectors

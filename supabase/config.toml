@@ -34,3 +34,11 @@ content_path = "./supabase/templates/otp.html"
 [inbucket]
 enabled = true
 port = 54324
+
+# Edge Functions (supabase/functions). admin-users holds the only use of the
+# service-role key for user logins; the key is injected by Supabase.
+[edge_runtime]
+enabled = true
+
+[functions.admin-users]
+verify_jwt = true

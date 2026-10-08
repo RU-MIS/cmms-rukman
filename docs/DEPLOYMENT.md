@@ -36,7 +36,17 @@ Nothing is shared between instances (`INSTANCE_ARCHITECTURE.md`).
    npx supabase link --project-ref <ref>
    npx supabase db push            # all files in supabase/migrations
    npm run db:seed                 # permissions + system units (idempotent)
+   npx supabase functions deploy admin-users   # User Management Center
    ```
+   `admin-users` is the only place that uses the service-role key for logins
+   (create login with a temporary password, reset password, disable / enable).
+   Supabase injects `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY` into every function — configure no secret. It
+   has no third-party imports. The gateway verifies the caller's JWT
+   (`verify_jwt = true`, `supabase/config.toml`) and the function verifies it
+   again with Supabase Auth; if the project uses the new asymmetric JWT signing
+   keys and calls are refused at the gateway, deploy with `--no-verify-jwt`
+   (the function's own check stays).
    The migrations also create the private Storage bucket **`documents`** and its
    policies — do not create buckets by hand.
 
@@ -76,8 +86,11 @@ is not for production). Rate limits → emails per hour: e.g. 100.
 3. Log in → **Settings**: company profile (address, GSTIN, email — printed on the
    PO PDF), portals, visibility, email switches, reminders. Negative stock stays
    OFF unless the owner decides otherwise.
-4. **Users & roles** → invite staff (they sign in with the email code, then set a
-   password under *My account*). **Customers & vendors** → *Portal access*.
+4. **Admin → Users** → *New user* (internal, customer or vendor login with a
+   temporary password shown once; the user must change it at the first login)
+   or *Invite by email* (sign-in with the email code). **Admin → Roles &
+   permissions** → roles, permission matrix, godown access. Customers &
+   vendors → *Portal access* still works for email-code invitations.
 
 Document numbering prefixes and approval rules have no screen yet: change them
 in Supabase → Table editor → `document_sequences` / `approval_policies` (rows of
@@ -133,7 +146,7 @@ Alternative host: any server/container — `cd worker && npm ci --omit=dev && no
 ## 8. Security checklist
 
 - [ ] Confirm email ON, OTP template with `{{ .Token }}`, custom SMTP for Auth.
-- [ ] Service-role key only in GitHub secrets (worker, backup) — not in Pages.
+- [ ] Service-role key only in GitHub secrets (worker, backup) and in the Edge Function environment (injected by Supabase) — not in Pages, not in the repository.
 - [ ] `npm run instance:verify` OK (RLS on every table, no anonymous access).
 - [ ] Owner account uses a strong password; at least two OWNER users.
 - [ ] Supabase → Database → Network restrictions (optional) / SSL enforced.
@@ -162,6 +175,7 @@ storage at least weekly. Supabase Pro additionally provides daily backups / PITR
 | Part | How to roll back |
 |---|---|
 | Web app | Cloudflare Pages → project → Deployments → previous deployment → **Rollback to this deployment** (instant). |
+| Edge Function admin-users | redeploy the previous commit's `supabase/functions/admin-users` (`supabase functions deploy admin-users`), or delete it in Dashboard → Edge Functions (only *New user / Reset password / Disable* stop working; existing logins are unaffected). |
 | Email worker | GitHub → Actions → email-worker → **Disable workflow** (emails stay queued in `email_outbox`; nothing is lost). Re-enable after the fix. |
 | Nightly backup | keep running. |
 | Database migrations | migrations are forward-only. **Before every production `db push` run the db-backup workflow manually** and download the artifact. If a migration fails it is rolled back by its transaction. If a released migration must be undone: preferred = new forward migration (fix); last resort = restore the pre-release backup into a new project (§9) and point Pages + secrets to it. |
@@ -174,7 +188,7 @@ npm ci
 PGHOST=/var/run/postgresql npm run db:test          # SQL + concurrency (local PostgreSQL)
 npm run lint && npm run typecheck && npm run build  # web + worker
 npm run test:worker
-supabase start && supabase db reset                 # production-like local stack (supabase/config.toml)
+supabase start && supabase db reset                 # production-like local stack incl. Edge Runtime (supabase/config.toml)
 npm run test:e2e:api                                # auth/OTP via Mailpit, storage security, worker + SMTP
 npm run test:e2e:ui                                 # Playwright: full flow, auth, permissions, mobile
 bash scripts/e2e/worker-container-smoke.sh          # worker exactly as the scheduled job

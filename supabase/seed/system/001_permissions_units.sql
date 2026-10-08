@@ -3,10 +3,12 @@
 -- =============================================================================
 
 -- Permissions for every registered document type: <prefix>.<action>
+-- Only the seven base actions are generated per module; finer permissions
+-- (import, reset_password, …) are added one by one by migrations.
 insert into public.permissions (code, module, action, description)
 select d.perm_prefix || '.' || lower(a::text), d.perm_prefix, a, d.label || ' — ' || lower(a::text)
 from app.doc_types d
-cross join unnest(enum_range(null::public.perm_action)) a
+cross join unnest(array['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'CANCEL', 'EXPORT']::public.perm_action[]) a
 on conflict (code) do nothing;
 
 -- Permissions for masters, reports and administration.
@@ -28,7 +30,7 @@ from (values
   ('email',          'Email log & sending'),
   ('portal',         'Customer / vendor portal access')
 ) as m(module, label)
-cross join unnest(enum_range(null::public.perm_action)) a
+cross join unnest(array['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'CANCEL', 'EXPORT']::public.perm_action[]) a
 on conflict (code) do nothing;
 
 -- System units (company_id NULL = available to all companies).

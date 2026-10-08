@@ -6,7 +6,8 @@ import { brand } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { Spinner } from './ui';
 
-export const NAV: { href: string; label: string; perm?: string; group: string }[] = [
+/** Menu = data; an entry is shown when the user holds one of its permissions. */
+export const NAV: { href: string; label: string; perm?: string | string[]; group: string }[] = [
   { href: '/erp/', label: 'Dashboard', group: 'Overview' },
   { href: '/erp/inventory/', label: 'Inventory', perm: 'items.view', group: 'Inventory' },
   { href: '/erp/items/', label: 'Items & packing', perm: 'items.view', group: 'Inventory' },
@@ -22,9 +23,28 @@ export const NAV: { href: string; label: string; perm?: string; group: string }[
   { href: '/erp/documents/', label: 'Documents', perm: 'documents.view', group: 'Documents' },
   { href: '/erp/email-log/', label: 'Email log', perm: 'email.view', group: 'Documents' },
   { href: '/erp/parties/', label: 'Customers & vendors', perm: 'parties.view', group: 'Masters' },
-  { href: '/erp/users/', label: 'Users & roles', perm: 'users.view', group: 'Admin' },
+  { href: '/erp/admin/', label: 'Admin control center', perm: ['users.view', 'roles.view', 'settings.view'], group: 'Admin' },
+  { href: '/erp/admin/users/', label: 'Users', perm: 'users.view', group: 'Admin' },
+  { href: '/erp/admin/roles/', label: 'Roles & permissions', perm: 'roles.view', group: 'Admin' },
   { href: '/erp/settings/', label: 'Settings', perm: 'settings.view', group: 'Admin' },
 ];
+
+/** Pages outside the menu that still need a permission (direct URL access). */
+const EXTRA_ROUTES: { href: string; perm: string | string[] }[] = [
+  { href: '/erp/item/', perm: 'items.view' },
+  { href: '/erp/users/', perm: 'users.view' },
+];
+
+const allowed = (perm: string | string[] | undefined, can: (p: string) => boolean) =>
+  !perm || (Array.isArray(perm) ? perm.some(can) : can(perm));
+
+/** Permission needed for a path: most specific menu / route entry. */
+export function routePermission(path: string): string | string[] | undefined {
+  const p = path.endsWith('/') ? path : `${path}/`;
+  const match = [...NAV, ...EXTRA_ROUTES].filter((n) => n.href !== '/erp/' && p.startsWith(n.href))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  return match?.perm;
+}
 
 export function UserMenu() {
   const { boot, signOut } = useSession();
@@ -59,7 +79,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
     ) : <Spinner />;
   }
-  const items = NAV.filter((n) => !n.perm || can(n.perm));
+  const items = NAV.filter((n) => allowed(n.perm, can));
+  // direct URL access: the page is not rendered without its permission (the
+  // database refuses the data anyway)
+  const pageAllowed = allowed(routePermission(path), can);
   const groups = [...new Set(items.map((n) => n.group))];
 
   return (
@@ -100,7 +123,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="truncate text-sm text-slate-500">{brand.name}</div>
           <UserMenu />
         </header>
-        <main className="min-w-0 flex-1 p-3 sm:p-5">{children}</main>
+        <main className="min-w-0 flex-1 p-3 sm:p-5">{pageAllowed ? children : (
+          <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-4 text-amber-800">
+            You do not have access to this page. Ask your administrator for the permission.
+          </div>)}</main>
       </div>
     </div>
   );

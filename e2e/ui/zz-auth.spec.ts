@@ -65,15 +65,19 @@ test('password change, logout, login with the new password', async ({ page }) =>
   fx.operator.password = pw;
 });
 
-test('operator: no settings / users menu, settings read-only (enforced by the database)', async ({ page }) => {
+test('operator: no settings / users menu, no direct URL access (enforced by the database)', async ({ page }) => {
   await login(page, fx.operator);
   await expect(page).toHaveURL(/\/erp\/$/);
   await expect(page.getByRole('link', { name: 'Settings' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Users & roles' })).toHaveCount(0);
-  await page.goto('/erp/settings/');
-  await expect(page.getByText(/only the Owner or an Admin can change them/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Users', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Roles & permissions' })).toHaveCount(0);
+  // R1: pages without the permission are not rendered on direct URL access
+  for (const url of ['/erp/settings/', '/erp/admin/users/', '/erp/admin/roles/', '/erp/users/']) {
+    await page.goto(url);
+    await expect(page.getByText('You do not have access to this page')).toBeVisible();
+  }
   await expect(page.getByRole('button', { name: 'Save settings' })).toHaveCount(0);
-  await expect(page.getByRole('switch', { name: 'Allow negative stock', exact: true })).toBeDisabled();
 });
 
 test('expired / forged session returns to login instead of breaking', async ({ page }) => {
