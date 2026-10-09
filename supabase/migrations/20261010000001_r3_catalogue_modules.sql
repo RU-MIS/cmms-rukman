@@ -219,7 +219,8 @@ drop view r3_map;
 -- Catalogue clean-up: permissions that no policy, function or screen checks
 -- and that have no meaning for their module. Kept (role data intact), hidden.
 -- -----------------------------------------------------------------------------
-update public.permissions set is_active = false where code in (
+create table app.hidden_permissions (code text primary key);
+insert into app.hidden_permissions (code) select unnest(array[
   'audit.create', 'audit.edit', 'audit.delete', 'audit.approve', 'audit.cancel',
   'reports.create', 'reports.edit', 'reports.delete', 'reports.approve', 'reports.cancel',
   'settings.create', 'settings.delete', 'settings.approve', 'settings.cancel', 'settings.export',
@@ -227,7 +228,22 @@ update public.permissions set is_active = false where code in (
   'accounts.approve', 'accounts.cancel', 'documents.approve', 'documents.cancel',
   'email.approve', 'email.cancel', 'godowns.approve', 'godowns.cancel', 'items.approve', 'items.cancel',
   'parties.approve', 'parties.cancel', 'portal.approve', 'portal.cancel', 'portal.delete', 'portal.export',
-  'rates.cancel', 'users.approve', 'users.cancel', 'reservation.approve');
+  'rates.cancel', 'users.approve', 'users.cancel', 'reservation.approve']);
+update public.permissions set is_active = false where code in (select code from app.hidden_permissions);
+-- a fresh instance seeds the base permissions after the migrations: hide them on insert too
+create or replace function app.tg_permission_hidden()
+returns trigger
+language plpgsql
+set search_path = public, app, pg_temp
+as $$
+begin
+  if exists (select 1 from app.hidden_permissions where code = new.code) then
+    new.is_active := false;
+  end if;
+  return new;
+end;
+$$;
+create trigger permissions_hidden before insert on public.permissions for each row execute function app.tg_permission_hidden();
 
 -- -----------------------------------------------------------------------------
 -- Default grants of new companies (seed_default_roles): new codes follow the

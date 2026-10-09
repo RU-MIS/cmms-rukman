@@ -761,3 +761,9 @@ grant execute on function app.approval_state(text, uuid), app.approval_can_act(t
   to authenticated, service_role;
 revoke all on function app.tg_items_rate_request(), app.tg_party_rate_request(), app.tg_rate_history_approval(),
                        app.approval_notify(text, uuid, jsonb) from public, anon, authenticated;
+
+-- financial-security registry (migration 2): the new write RPCs that touch rates
+insert into secure.reviewed_functions values
+  ('public.party_rate_save', 'invoker write: row-level policies + rate-change trigger'),
+  ('public.rate_change_decide', 'write; requires rates.approve + class + scope; returns no values')
+on conflict do nothing;
