@@ -1,6 +1,6 @@
 # Rukman Dataflow — Configurable Multi-Tenant Platform: Audit & Plan
 
-Status: **APPROVED.** R1 (Phases 1–2) implemented on the development branch — see [`PLATFORM_R1.md`](./PLATFORM_R1.md). Not deployed.
+Status: **APPROVED.** R1 (Phases 1–2) and R2 (Phases 3–5 + most of 6–7) implemented on the development branch — see [`PLATFORM_R1.md`](./PLATFORM_R1.md), [`PLATFORM_R2.md`](./PLATFORM_R2.md). Not deployed. Proposed R3 scope: [`PLATFORM_R3_SCOPE.md`](./PLATFORM_R3_SCOPE.md).
 Baseline: production release `5cff5d6` (= `main`). All work below is additive, on a development branch, released through the same test + release process.
 
 ---
