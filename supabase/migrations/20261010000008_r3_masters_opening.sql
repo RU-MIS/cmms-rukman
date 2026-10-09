@@ -461,10 +461,10 @@ begin
                              'party_addresses', 'documents', 'rate_change_requests', 'stock_balances')
   loop
     execute format('select exists (select 1 from public.%I where %I = $1)', r.ref_table, r.ref_col) into v using p_id;
-    if v then v_out := v_out || r.ref_table; end if;
+    if v then v_out := v_out || r.ref_table::text; end if;
   end loop;
-  if p_table = 'items' and exists (select 1 from public.stock_balances where item_id = p_id and base_qty <> 0) then v_out := v_out || 'stock_balances'; end if;
-  if p_table = 'godowns' and exists (select 1 from public.stock_balances where godown_id = p_id and base_qty <> 0) then v_out := v_out || 'stock_balances'; end if;
+  if p_table = 'items' and exists (select 1 from public.stock_balances where item_id = p_id and base_qty <> 0) then v_out := v_out || 'stock_balances'::text; end if;
+  if p_table = 'godowns' and exists (select 1 from public.stock_balances where godown_id = p_id and base_qty <> 0) then v_out := v_out || 'stock_balances'::text; end if;
   return v_out;
 end;
 $$;
@@ -503,7 +503,7 @@ begin
   end if;
   v_refs := app.master_references(v_table, p_id);
   if p_kind = 'LOCATION' and exists (select 1 from public.stock_balances where location_id = p_id and base_qty <> 0) then
-    v_refs := v_refs || 'stock_balances';
+    v_refs := v_refs || 'stock_balances'::text;
   end if;
   if cardinality(v_refs) > 0 then
     raise exception 'Cannot delete: it is used in % (disable it instead)', array_to_string(v_refs, ', ') using errcode = 'P0001';
