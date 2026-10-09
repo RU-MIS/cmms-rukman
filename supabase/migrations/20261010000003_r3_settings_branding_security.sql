@@ -72,7 +72,7 @@ insert into app.settings_fields values
   ('inventory', 'company_settings', 'image_max_px'), ('inventory', 'company_settings', 'image_quality'),
   ('sales', 'company_settings', 'sale_rate_limit_policy'),
   ('purchase', 'company_settings', 'purchase_terms'),
-  ('payments', 'company_settings', 'rate_change_approval'),
+  ('approvals', 'company_settings', 'rate_change_approval'),
   ('documents', 'company_settings', 'document_max_mb'), ('documents', 'company_settings', 'document_categories'),
   ('portal', 'company_settings', 'customer_portal_enabled'), ('portal', 'company_settings', 'vendor_portal_enabled'),
   ('portal', 'company_settings', 'customer_stock_visibility'), ('portal', 'company_settings', 'vendor_stock_visibility'),

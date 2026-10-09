@@ -90,8 +90,9 @@ begin
   execute format('select company_id, created_by, status::text, doc_no from public.%I where id = $1', d.table_name)
     into company_id, created_by, status, doc_no using p_id;
   amount := case p_doc_type
-    when 'PURCHASE_ORDER' then (select sum(round(ordered_base_qty * coalesce(rate, 0), 2)) from public.purchase_order_lines where order_id = p_id)
-    when 'SALES_ORDER' then (select sum(round(ordered_base_qty * coalesce(rate, 0) / nullif(factor_to_base, 0), 2)) from public.sales_order_lines where order_id = p_id)
+    -- rates are per document unit; base quantities are only filled when the document posts
+    when 'PURCHASE_ORDER' then (select sum(round(qty * coalesce(rate, 0), 2)) from public.purchase_order_lines where order_id = p_id)
+    when 'SALES_ORDER' then (select sum(round(qty * coalesce(rate, 0), 2)) from public.sales_order_lines where order_id = p_id)
     when 'PURCHASE_RECEIPT' then (select total_amount from public.purchase_receipts where id = p_id)
     when 'PURCHASE_RETURN' then (select total_amount from public.purchase_returns where id = p_id)
     when 'SERVICE_BILL' then (select total_amount from public.service_bills where id = p_id)
@@ -102,7 +103,7 @@ begin
     when 'CUSTOMER_BILL' then (select b.amount from public.customer_bills b where b.id = p_id)
     when 'SALES_RETURN' then (select credit_amount from public.sales_returns where id = p_id)
     when 'VOUCHER' then (select v.amount from public.vouchers v where v.id = p_id)
-    when 'STOCK_ADJUSTMENT' then (select sum(round(base_qty * coalesce(rate, 0), 2)) from public.stock_adjustment_lines where adjustment_id = p_id)
+    when 'STOCK_ADJUSTMENT' then (select sum(round(qty * coalesce(rate, 0), 2)) from public.stock_adjustment_lines where adjustment_id = p_id)
     else 0 end;
   amount := coalesce(amount, 0);
 end;
@@ -204,8 +205,16 @@ begin
     return;
   end if;
   select * into d from app.doc_types where doc_type = p_doc_type;
-  if exists (select 1 from app.godown_scoped_tables where table_name = d.table_name) then
-    perform app.assert_doc_godown_scope(d.table_name, p_id);
+  -- approving acts on every godown of the document (a transfer moves stock out of one and into the other):
+  -- all of them must be in the approver's scope, even where reading needs only one
+  if auth.uid() is not null and exists (select 1 from app.godown_scoped_tables where table_name = d.table_name) then
+    declare v_cols text[] := (select columns from app.godown_scoped_tables where table_name = d.table_name); v_row jsonb;
+    begin
+      execute format('select to_jsonb(h) from public.%I h where id = $1', d.table_name) into v_row using p_id;
+      if v_row is not null and not app.row_godowns_allowed(v_row, v_cols, false) then
+        perform app.raise_godown_denied(v_row, v_cols);
+      end if;
+    end;
   end if;
   perform app.assert_doc_party_scope(d.table_name, p_id);
   if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = d.line_table and column_name = 'item_id') then
@@ -233,6 +242,8 @@ begin
   if v_level->>'approver_permission' is not null then
     perform app.require_permission(v_company, v_level->>'approver_permission');
   end if;
+  -- an approver must be able to open the record (D2), also when the level names a role
+  perform app.require_permission(v_company, coalesce((select perm_prefix from app.doc_types where doc_type = p_doc_type), 'customer_po') || '.view');
   v_role := (v_level->>'approver_role_id')::uuid;
   if v_role is not null and not app.is_owner(auth.uid(), v_company)
      and not exists (select 1 from public.user_roles ur join public.roles r on r.id = ur.role_id and r.is_active
@@ -518,7 +529,7 @@ begin
   for d in select doc_type, table_name, label from app.doc_types loop
     execute format($q$
       select coalesce(jsonb_agg(jsonb_build_object('doc_type', %L, 'label', %L, 'id', h.id, 'doc_no', h.doc_no, 'doc_date', h.doc_date,
-                                                   'created_by', h.created_by, 'state', s.state,
+                                                   'created_by', h.created_by, 'state', s.state - 'amount',
                                                    'amount', app.approval_amount_visible(%L, h.id))
                                 order by h.doc_date, h.doc_no), '[]')
       from public.%I h
@@ -528,7 +539,7 @@ begin
     v := v || v_rows;
   end loop;
   select v || coalesce(jsonb_agg(jsonb_build_object('doc_type', 'CUSTOMER_PO', 'label', 'Customer PO', 'id', c.id, 'doc_no', c.po_no,
-                                                    'doc_date', c.po_date, 'created_by', c.created_by, 'state', s.state,
+                                                    'doc_date', c.po_date, 'created_by', c.created_by, 'state', s.state - 'amount',
                                                     'amount', app.approval_amount_visible('CUSTOMER_PO', c.id))), '[]')
     into v
   from public.customer_pos c
@@ -775,3 +786,26 @@ insert into secure.column_whitelist values
   ('rate_change_requests', 'rate_type', 'type, not a value'),
   ('approval_rules', 'min_amount', 'approval threshold (configuration), not a business value')
 on conflict do nothing;
+-- the inbox is an invoker function (document RLS applies) and lists the document types
+grant select on app.doc_types to authenticated;
+
+-- an approved rate change is applied by its approver (rates.approve), who need not hold items.edit_rate
+create or replace function app.tg_items_rate_guard()
+returns trigger
+language plpgsql security definer
+set search_path = public, app, pg_temp
+as $$
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+  if (tg_op = 'INSERT' and (new.sale_price is not null or new.purchase_price is not null))
+     or (tg_op = 'UPDATE' and (new.sale_price is distinct from old.sale_price or new.purchase_price is distinct from old.purchase_price)) then
+    if not app.has_permission(new.company_id, 'items.edit_rate')
+       and not (current_setting('app.applying_rate_request', true) = 'on' and app.has_permission(new.company_id, 'rates.approve')) then
+      raise exception 'Permission denied: items.edit_rate is required to change prices' using errcode = '42501';
+    end if;
+  end if;
+  return new;
+end;
+$$;
