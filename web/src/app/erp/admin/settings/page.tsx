@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { rpc, sb } from '@/lib/supabase';
-import { useCompanyId, useSession } from '@/lib/session';
+import { useCompanyId } from '@/lib/session';
 import { useData } from '@/lib/useData';
 import { ASSET_BUCKET, ASSET_MAX_BYTES, ASSET_TYPES, contrastRatio, readableBrand, useAssetUrl } from '@/lib/branding';
 import { Button, Card, ErrorBox, Field, Input, PageHeader, Select, Spinner, Tabs, TextArea, Toggle, useAction } from '@/components/ui';
@@ -85,15 +86,17 @@ const SECTIONS: { id: string; label: string; fields: Def[] }[] = [
       hint: 'A convenience on the device; sessions are governed by Supabase Auth' }] },
 ];
 
-export default function SettingsSections() {
+export default function SettingsPage() {
+  return <Suspense><SettingsSections /></Suspense>;
+}
+
+function SettingsSections() {
   const companyId = useCompanyId();
   const data = useData(() => rpc<Record<string, Section>>('settings_get', { p_company_id: companyId }), [companyId]);
-  const [tab, setTab] = useState('');
+  const [picked, setTab] = useState('');
+  const want = useSearchParams().get('section');
   const visible = SECTIONS.filter((s) => data.data?.[s.id]);
-  useEffect(() => {
-    const want = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('section') : null;
-    if (!tab && visible.length) setTab(visible.find((s) => s.id === want)?.id ?? visible[0].id);
-  }, [visible, tab]);
+  const tab = picked || (visible.find((s) => s.id === want) ?? visible[0])?.id || '';
   if (!data.data) return data.error ? <ErrorBox error={data.error} /> : <Spinner />;
   const sec = SECTIONS.find((s) => s.id === tab);
   return (

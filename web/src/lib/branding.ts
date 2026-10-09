@@ -38,15 +38,15 @@ export function readableBrand(color: string | null | undefined): string {
 
 /** Short-lived signed URL of a private branding file (members / portal users of the company only). */
 export function useAssetUrl(path: string | null | undefined): string | null {
-  const [url, setUrl] = useState<string | null>(null);
+  const [signed, setSigned] = useState<{ path: string; url: string | null } | null>(null);
   useEffect(() => {
     let alive = true;
-    if (!path) { setUrl(null); return; }
+    if (!path) return;
     sb().storage.from(ASSET_BUCKET).createSignedUrl(path, 3600)
-      .then(({ data }) => { if (alive) setUrl(data?.signedUrl ?? null); }, () => { if (alive) setUrl(null); });
+      .then(({ data }) => { if (alive) setSigned({ path, url: data?.signedUrl ?? null }); }, () => { if (alive) setSigned({ path, url: null }); });
     return () => { alive = false; };
   }, [path]);
-  return url;
+  return path && signed?.path === path ? signed.url : null;
 }
 
 /** Applies a company's branding to the page: colour, title, favicon. */
