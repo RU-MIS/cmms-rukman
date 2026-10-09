@@ -1,6 +1,6 @@
 'use client';
-import { createContext, useCallback, useContext, useState, type ButtonHTMLAttributes, type InputHTMLAttributes,
-  type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes,
+  type ReactNode, type Ref, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { errorText } from '@/lib/supabase';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -32,8 +32,8 @@ export function Field({ label, hint, children, className = '' }: { label: string
   );
 }
 
-export function Input(p: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...p} className={`input ${p.className ?? ''}`} />;
+export function Input({ ref, ...p }: InputHTMLAttributes<HTMLInputElement> & { ref?: Ref<HTMLInputElement> }) {
+  return <input ref={ref} {...p} className={`input ${p.className ?? ''}`} />;
 }
 
 export function TextArea(p: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -131,6 +131,14 @@ export function Table({ children, className = '' }: { children: ReactNode; class
 }
 
 export function Modal({ open, title, onClose, children, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; });
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-2 sm:p-6" onMouseDown={onClose}>

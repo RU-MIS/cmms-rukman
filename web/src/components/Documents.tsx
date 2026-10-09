@@ -6,7 +6,7 @@ import { useSession } from '@/lib/session';
 import { dateTime } from '@/lib/format';
 import { Badge, Button, Card, Field, Select, Table, Toggle, useAction, useToast } from './ui';
 
-export type EntityType = 'purchase_order' | 'purchase_receipt' | 'customer_bill' | 'sales_order' | 'customer_po' | 'dispatch' | 'voucher' | 'party';
+export type EntityType = 'purchase_order' | 'purchase_receipt' | 'customer_bill' | 'sales_order' | 'customer_po' | 'dispatch' | 'voucher' | 'party' | 'item';
 export const CATEGORIES = [
   { value: 'PO_PDF', label: 'PO PDF' }, { value: 'INVOICE', label: 'Invoice (Tally PDF)' },
   { value: 'PURCHASE_DOCUMENT', label: 'Purchase document' }, { value: 'DELIVERY_DOCUMENT', label: 'Delivery document' },
@@ -63,10 +63,12 @@ export function DocumentsPanel({ companyId, entityType, entityId, defaultCategor
       <Table className="mb-3"><thead><tr><th>File</th><th>Category</th><th>Portal</th><th>Uploaded</th><th /></tr></thead>
         <tbody>{(docs.data ?? []).map((d) => (
           <tr key={d.id}>
-            <td><button className="text-brand hover:underline" onClick={() => downloadFile(d.storage_path, d.file_name).catch(toast.fail)}>{d.file_name}</button>
+            <td>{can('documents.download')
+              ? <button className="text-brand hover:underline" onClick={() => downloadFile(d.storage_path, d.file_name).catch(toast.fail)}>{d.file_name}</button>
+              : <span title="Downloading needs the download right">{d.file_name}</span>}
               {d.uploaded_via === 'PORTAL' && <span className="ml-1 text-xs text-slate-500">(by customer)</span>}</td>
             <td>{d.category.replace(/_/g, ' ')}</td>
-            <td>{can('documents.edit')
+            <td>{can('documents.share')
               ? <button className="text-xs" onClick={() => run(async () => { await rpc('document_set_visibility', { p_document_id: d.id, p_visible: !d.visible_to_party }); docs.reload(); })}>
                   <Badge color={d.visible_to_party ? 'green' : 'slate'}>{d.visible_to_party ? 'Shared' : 'Internal'}</Badge></button>
               : <Badge color={d.visible_to_party ? 'green' : 'slate'}>{d.visible_to_party ? 'Shared' : 'Internal'}</Badge>}</td>
