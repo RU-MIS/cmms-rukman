@@ -1,6 +1,7 @@
-# Platform R3 — Scope and acceptance criteria (for approval)
+# Platform R3 — Scope, acceptance criteria and implementation / test map
 
-Status: **PROPOSED — not started.** Nothing in this document has been built.
+Status: **APPROVED with decisions D1–D7 (§0)** — implementation in progress on the development branch.
+The binding decisions in §0 override any differing text in §§1–8; §9 maps every acceptance criterion to its implementation and tests.
 Baseline: development branch `claude/charming-gauss-o9fvzf` at R2 `292bcce` (on top of R1 `a1a4c5c`).
 Production stays at `5cff5d630d704aeecdc670c1e6af642854eb7c60`. R3 changes nothing in production and is not merged into `main`.
 
@@ -10,6 +11,22 @@ architecture plan ([`PLATFORM_ARCHITECTURE_PLAN.md`](./PLATFORM_ARCHITECTURE_PLA
 R2 schema (permission catalogue, tables, functions) and the R2 UI, not written from memory.
 
 ---
+
+## 0. Approved decisions (binding)
+
+| # | Decision (as approved) | Effect on the scope |
+|---|---|---|
+| D1 | R3 = documented remaining functionality; R4 = regression / security / migration rehearsal / performance / release candidate only. No production deployment or `main` merge without separate approval. | §1 as proposed. |
+| D2 | Up to 3 levels; amount thresholds; approver role or permission; no self-approval where maker-checker applies; mandatory rejection reason; approval history + audit; approver must have access to the record **and** its data scope; existing workflows unchanged unless configured; rate-change approval configurable; **server-side enforcement**. | W3 as proposed; AC-3.9 / 3.10 added. |
+| D3 | **Separate permissions**: purchase rate, landed cost, average cost, stock valuation, gross margin, profit-related figures and reports. Masking applies to screens, DB / API responses, reports, exports, audit details and related calculations; **no inference through another endpoint**. | New W13 (financial field security) replaces the single "purchase cost summary" right of W7. |
+| D4 | **No unrestricted audit for ordinary users.** Company isolation, audit permissions **and godown / customer / vendor restrictions** apply; financial values masked; **OWNER unrestricted**; never passwords / tokens / secrets / credentials. | W4 changed: audit rows carry their scope keys; RLS + masking; AC-4.9 / 4.10 added. |
+| D5 | Balanced double-entry opening journals linked to customer / vendor sub-ledgers; validate Dr / Cr direction, totals, duplicate posting, period rules; prevent accidental reposting; auditable **reversal / correction** instead of editing; **no GST assumptions**. | W9 opening balance re-specified (AC-9.7a–e). |
+| D6 | Module status **required** and enforced at database / RPC / API boundaries: direct API calls, imports, exports, posting functions and document actions of disabled modules rejected. Users, Roles, core Security Settings, Audit not disableable; OWNER keeps a safe recovery path. | W1 as proposed, AC-1.7–1.9 added. |
+| D7 | May defer: team / business-unit scopes, per-company SMTP, failed-login history (if data not reliably available), inline list editing, exports > 50,000 rows. **Not deferrable**: field-level masking of purchase costs, **financial amounts** and margins everywhere; existing company / customer / vendor / item / godown scope enforcement; security checks on imports, exports, audit access and direct API calls. | Payment / financial-amount masking moves **into** R3 (W13). |
+
+Additional requirements carried into every work stream: all ordinary administration through the UI; R1 / R2 behaviour and tests preserved;
+additive migrations only, fresh-instance migration + backup / restore tested; no production, secrets, Cloudflare or `main` change;
+branch `claude/charming-gauss-o9fvzf` only; full regression + security review; exact SHA; stop after R3.
 
 ## 1. Release grouping (revision proposed)
 
@@ -81,6 +98,11 @@ Acceptance criteria
 - **AC-1.4** Users, Roles, Settings and Audit cannot be disabled (UI and API refuse).
 - **AC-1.5** Every existing role keeps exactly its current effective permissions after migration (SQL test compares before / after).
 - **AC-1.6** Every settings change writes an audit row with old and new values (W4).
+- **AC-1.7** (D6) Imports and exports of a disabled module's entities are refused by `import_create`, `import_commit` and `export_rows`.
+- **AC-1.8** (D6) Posting functions and document actions (`doc_save` / submit / approve / reject / cancel, module RPCs such as reservation,
+  dispatch, PO print / e-mail) of a disabled module are refused; portal RPCs are refused when the portal module is disabled.
+- **AC-1.9** (D6) OWNER recovery: the owner can always open Modules and re-enable a module; core modules cannot be disabled by anyone;
+  module changes are audited.
 
 ### W2 — Document and master numbering
 
@@ -134,6 +156,9 @@ Acceptance criteria
 - **AC-3.6** With rate approval on, a sales user's rate change is not effective until approved; the approver sees old vs new; approval makes it effective and writes rate history with both users.
 - **AC-3.7** A user without the approver permission or role gets no inbox entries and is refused by API.
 - **AC-3.8** With no rules changed after migration, all existing document flows behave exactly as in R2 (regression suite green).
+- **AC-3.9** (D2) Approval rules are enforced by the database: calling `doc_approve` / approval RPCs directly with a user who does not
+  satisfy the level (role / permission / threshold / self-approval / scope) is refused.
+- **AC-3.10** (D2) Every approval, rejection (with reason) and rate-change decision is in the approval history and the audit log.
 
 ### W4 — Audit log: coverage, metadata, viewer, export
 
@@ -172,7 +197,10 @@ Acceptance criteria
 - **AC-4.2** An audit row written through the API carries IP and user agent.
 - **AC-4.3** No audit row contains a password, temporary password, token or SMTP secret (test scans all rows after the full e2e run).
 - **AC-4.4** A user without `audit.view` cannot open the viewer (URL) or read `audit_log` / the audit RPC (API).
-- **AC-4.5** A viewer with `audit.view` but without `items.view_sale_rate` sees `•••` instead of sale prices in item diffs.
+- **AC-4.9** (D4) Audit rows carry their scope keys (godown, customer / vendor, item — derived from the row, lines from their header). A
+  non-owner auditor restricted to Godown A / Customer X sees only rows of that scope (plus company-level rows without scope keys).
+- **AC-4.10** (D4) OWNER sees all audit rows of the company unmasked; every other auditor sees financial values masked per W13.
+- **AC-4.5** A viewer with `audit.view` but without `items.view_sale_rate` sees `•••` instead of sale prices in item diffs (generalised to all W13 classes).
 - **AC-4.6** Audit rows of company A are never visible to company B (cross-company test).
 - **AC-4.7** UPDATE / DELETE on `audit_log` is refused for every role.
 - **AC-4.8** With 1,000,000 audit rows, the first page with a date + user filter loads in < 300 ms (local stack).
@@ -224,9 +252,7 @@ Deliverables
   - RLS on parties: customer rows need `customers.view`, vendor rows `vendors.view`, other parties `parties.view`;
   - the customer / vendor pages, imports and exports use the new codes.
 - **`documents.download`** (storage read; backfilled from `documents.view`) and **`documents.share`** (make visible to a party / email; backfilled from `documents.edit`).
-- **Field rights:**
-  - **`sales.view_margin`** — margin = sale price − cost, shown on the item list and sales order lines; needs this right **and** both underlying rate rights.
-  - **`purchase.view_cost_summary`** — see decision D3.
+- **Field rights:** see **W13** (D3 replaced the single purchase-cost-summary right with six separate rights).
 - Settings section rights (W1); `audit.export`; `sales_order.override_rate_limit` (W9).
 - **Catalogue clean-up:** permissions that no policy or function checks (e.g. `audit.create`, `reports.edit`, `settings.cancel`) are hidden from the matrix (`is_active = false`). A SQL test proves that no policy or function references a hidden code.
 
@@ -234,7 +260,7 @@ Acceptance criteria
 - **AC-7.1** A role with `customers.view` but not `vendors.view` sees customers and not vendors through REST, export and UI.
 - **AC-7.2** All R2 roles have identical effective access to parties before and after the split (SQL comparison).
 - **AC-7.3** A user with `documents.view` but not `documents.download` sees the document list but cannot download the file (Storage refuses).
-- **AC-7.4** Margin is visible only with `sales.view_margin` + both rate rights; it is absent from REST, export and UI otherwise.
+- **AC-7.4** Margin is visible only with `sales.view_margin` + sale rate + average cost (W13).
 - **AC-7.5** The matrix no longer shows no-effect permissions; no hidden code is referenced by any policy or function.
 
 ### W8 — Data scopes completion: OWN_RECORDS, OWN_DEPARTMENT, departments
@@ -278,7 +304,15 @@ Acceptance criteria
 - **AC-9.4** Godown with receipts disabled: a purchase receipt into it is refused by the database.
 - **AC-9.5** Deleting a godown with stock or movements is refused; deleting an unused one works; both are audited.
 - **AC-9.6** A customer *On hold* cannot get a new sales order (API + UI); existing documents continue.
-- **AC-9.7** An opening balance of 10,000 Dr for a customer appears in the customer ledger / outstanding as of the date; changing it reverses and reposts; both are audited.
+- **AC-9.7a** (D5) An opening balance (party, receivable / payable side, Dr / Cr, amount > 0, as-of date) posts **one balanced
+  double-entry journal** (`is_opening`): party line on Sundry Debtors / Creditors (sub-ledger) against *Opening Balance Adjustment*.
+  No tax lines.
+- **AC-9.7b** Direction validated: customer receivable defaults to Dr, vendor payable to Cr; the opposite (advance) needs an explicit
+  confirmation flag; amount ≤ 0 or unbalanced totals are refused.
+- **AC-9.7c** Duplicate posting refused: one active opening balance per party and side; re-submitting the same request is idempotent.
+- **AC-9.7d** Period rules: dates inside locked books are refused for posting and for reversal.
+- **AC-9.7e** No editing of posted entries: correction = auditable **reversal** (reason required, reversal journal linked) followed by a new
+  opening balance; history shows both. Balances appear in the party ledger, outstanding and party balances; trial balance stays balanced.
 - **AC-9.8** Assigning a user to a godown from the godown page is effective immediately and enforced by RLS.
 
 ### W10 — Custom fields completion
@@ -329,6 +363,51 @@ Acceptance criteria
 - **AC-12.2** Bulk-disabling 50 selected customers is one confirmed action, scope-checked and audited per record.
 - **AC-12.3** Shortcuts work in the item and customer drawers (browser e2e).
 
+### W13 — Financial field security (D3, D7)
+
+Rights (field level, configured in the permission matrix):
+
+| Code | Label | Masks |
+|---|---|---|
+| `items.view_sale_rate` (R2) | Sale rates and sales amounts | item sale price, SALE rates / history (R2); **R3:** sales order / customer PO / sales return line rates and amounts, customer bill amounts |
+| `items.view_purchase_rate` (R2) | Purchase rates and purchase amounts | item purchase price, PURCHASE rates / history (R2); **R3:** PO line rates, purchase receipt / return / service bill / job-work receipt / return rates, amounts, taxes and totals, PO print / e-mail, rate suggestions |
+| `costs.view_landed_cost` | Landed cost | inward stock movement rate / value (receipts, opening, production, job-work and adjustment-in) |
+| `items.view_cost` (R2, relabelled) | Average cost | outward stock movement rate / value, issue valuation (material issues, adjustments-out), item average cost |
+| `costs.view_stock_valuation` | Stock valuation | stock value report, stock value in P&L / balance sheet, value totals |
+| `sales.view_margin` | Gross margin | margin = sale rate − average cost on items and sales order lines |
+| `reports.view_profit` | Profit and accounting reports | profit & loss, balance sheet, trial balance, account ledgers, day book, journals of non-party accounts |
+| `accounts.view_amounts` | Financial amounts | payment / receipt amounts, allocations, outstanding, party balances / ledgers, reminder amounts |
+
+Inference rules (database-enforced): payable-side amounts need `accounts.view_amounts` **and** `items.view_purchase_rate`; receivable-side
+amounts need `accounts.view_amounts` **and** `items.view_sale_rate`; margin needs `sales.view_margin` + sale rate + average cost; accounting
+reports and non-party journal lines need `reports.view_profit` + financial amounts + both rate rights; P&L / balance-sheet stock lines and
+anything computed from them (net profit, totals) additionally need `costs.view_stock_valuation`. OWNER has every right.
+
+Mechanism: sensitive columns get column-level `SELECT` revoked on the base tables; values are served through **sidecar joins** — invoker views
+(RLS of the base table applies unchanged) left-join a definer "value" view keyed by primary key that only returns values for companies where
+the caller holds the right (InitPlan, PK join — no per-row permission query). A registry `secure.sensitive_columns(table, column, class)`
+drives the views, the audit masking and a **completeness test**. Definer RPCs check the same rights; invoker RPCs that read these
+columns are rewritten. Backfill grants each new right to every role that can see the values today, so nobody loses access by migration.
+
+Pre-existing gap closed here: `journal_entry_lines` is readable by every company member and `profit_loss`, `trial_balance`, `day_book`,
+`account_ledger`, `party_ledger` are invoker functions without a permission check.
+
+Acceptance criteria
+- **AC-13.1** For each of the eight rights: a user holding *every* permission except that one receives NULL / no value for every column of
+  its class through REST tables, views, RPCs, exports and audit diffs (systematic SQL test iterating the registry) — and a holder sees them.
+- **AC-13.2** Completeness: every money-like column (rate, price, amount, value, cost, total, balance, debit, credit, outstanding …) of every
+  public table and view is registered with a class or explicitly whitelisted with a reason; every public function that reads a registered
+  column is in the reviewed list. A new unregistered column or function fails the test.
+- **AC-13.3** No inference: payable / receivable amounts, margin, accounting reports and P&L stock lines follow the inference rules above
+  (tests per rule, including PO print, rate suggestion, party ledger, bills outstanding, dashboard totals and exports).
+- **AC-13.4** Behaviour preserved: every role created before R3 sees exactly the same values after migration (SQL comparison per role).
+- **AC-13.5** A member without accounting / payment rights cannot read journal lines, P&L, balance sheet, trial balance, day book, account
+  or party ledgers through the API (pre-existing gap).
+- **AC-13.6** UI: masked values show "—" or the column is hidden; dashboard totals the user may not see are not shown; printing a PO needs
+  the purchase-rate right.
+- **AC-13.7** Performance: inventory, PO list, bills and movements within 20 % of R2 timings; masking adds no per-row permission query.
+- **AC-13.8** OWNER sees every value.
+
 ## 4. Cross-cutting acceptance criteria (R3 exit gate)
 
 | # | Criterion |
@@ -341,18 +420,17 @@ Acceptance criteria
 | X-6 | Additive migrations only; no `db reset` / push to production; no secrets in the repository; production untouched (`main` = `5cff5d6`). |
 | X-7 | Completion report: SHA, migrations, changed files, screens, permissions, security model, tests, performance, known limitations, "production impact = NONE". Then STOP. |
 
-## 5. Proposed to defer (not in R3) — your call
+## 5. Deferred (approved under D7)
 
 | Item | Reason |
 |---|---|
 | OWN_TEAM and business-unit scopes | No team or business-unit concept exists in the data model; it needs a definition (who belongs to a team, which records a team owns) before it can be enforced. Departments (W8) cover the stated example. |
-| Masking of payment amounts / all financial values (`payments.view_amounts`) | Masking would have to reach every voucher, ledger, outstanding and report query; it is best done as its own release with the reports module. Rate, cost, margin and purchase-cost rights are in R3. |
 | Per-company SMTP accounts | SMTP credentials are instance secrets. R3 makes sender name / reply-to / footer per company; separate SMTP accounts per company would need a secret store design. |
 | Failed-login history | Supabase Auth does not expose failed attempts to the database; lockout / rate limiting stays with Supabase Auth (documented in W6). |
 | Inline editing in lists | Low value and high risk of bypassing drawer validation; drawers stay the edit path. |
 | Streaming / paginated exports > 50,000 rows | Not needed at current volumes; R2 exports in one response. |
 
-## 6. Decisions needed before R3 starts (recommended answer first)
+## 6. Decisions (answered — see §0; the table below is kept for the record)
 
 | # | Question | Recommendation |
 |---|---|---|
@@ -364,22 +442,48 @@ Acceptance criteria
 | D6 | Should module visibility (W1) also be enforced by the database, not only the menu? | Yes (`has_permission` returns false for a disabled module). |
 | D7 | Is the deferral list in §5 acceptable? | Yes. |
 
-## 7. Proposed migrations (indicative, additive)
+## 7. Migrations (additive)
 
 | # | Migration | Content |
 |---|---|---|
-| 1 | `r3_catalogue` | customers / vendors split + backfill, documents.download / share, settings section rights, field rights, catalogue clean-up, modules table |
-| 2 | `r3_settings_branding` | settings sections RPCs, branding columns, `company-assets` bucket + policies |
-| 3 | `r3_numbering` | tokens, calendar / monthly reset, master code sequences, numbering RPCs |
-| 4 | `r3_approvals` | approval rules / levels / actions, inbox RPC, multi-level submit / approve / reject, rate change requests |
-| 5 | `r3_audit` | `request_meta`, redaction, coverage triggers + registry, audit read / export RPCs with masking |
-| 6 | `r3_security` | password policy / temp-password validity settings, login overview RPC |
-| 7 | `r3_scopes_departments` | departments, record scope (own / department) policies via registry |
-| 8 | `r3_masters` | item / godown / party fields, min / max rate policy, godown flags, party status / opening balance, delete-where-safe |
-| 9 | `r3_custom_fields` | new entities / types / properties, restricted values storage + masking |
-| 10 | `r3_import_export` | import templates (mappings), suggestions, new entities, stock exports, commit robustness |
+| 1 | `20261010000001_r3_catalogue_modules` | new rights (customers / vendors split, documents.download / share, settings sections, audit.export, financial rights, overrides), backfill, catalogue clean-up, `company_modules` + DB enforcement in `has_permission` / `permitted_company_ids` / portal guard |
+| 2 | `20261010000002_r3_financial_security` | `secure` schema, sensitive-column registry, column privileges, value views, rewritten views / RPCs, journal read tightening |
+| 3 | `20261010000003_r3_settings_branding_security` | settings-section RPCs, branding, `company-assets` bucket, security policy, login overview |
+| 4 | `20261010000004_r3_numbering` | tokens, resets, start-number rule, master code sequences |
+| 5 | `20261010000005_r3_approvals` | rules / levels / actions, multi-level submit / approve / reject, inbox, rate-change requests |
+| 6 | `20261010000006_r3_audit` | `request_meta`, scope keys, redaction, coverage triggers + registry, audit RLS, read / export RPCs with masking |
+| 7 | `20261010000007_r3_scopes_departments` | departments, RECORDS scope (own / department) |
+| 8 | `20261010000008_r3_masters_opening` | item / godown / party fields, rate-limit policy, godown flags, party status, delete-where-safe, opening balances |
+| 9 | `20261010000009_r3_custom_fields` | entities, types, properties, restricted values |
+| 10 | `20261010000010_r3_import_export` | mappings, suggestions, new entities, stock exports, commit robustness |
 
 ## 8. Process (unchanged)
 
 Development branch only → migration review → SQL tests → API tests → browser e2e → security / RLS tests → full regression → lint →
 typecheck → build → commit → report exact SHA → **STOP** → your approval. No production deployment, no merge into `main`.
+
+## 9. Acceptance criterion → implementation → test map
+
+SQL tests are new files under `supabase/tests/` (run by `npm run db:test`); API = `e2e/api/r3-platform.test.mjs`; UI = `e2e/ui/r3-admin.spec.ts`;
+J33 = `e2e/ui/r3-acceptance.spec.ts` (the 33 original criteria as one journey).
+
+| AC | Implementation | Tests |
+|---|---|---|
+| 1.1, 1.2 | `settings.<section>.view/edit` rights; section RPCs `settings_get/settings_save(section)` check them; pages under `/erp/admin/settings/*` | SQL `300_r3_catalogue_modules`; API; UI |
+| 1.3, 1.7, 1.8 | `company_modules`; `app.module_enabled()` folded into `user_has_permission` (cached) and `permitted_company_ids`; module map on `permission_modules.app_module`; import / export / doc RPCs therefore refuse; portal guard checks portal modules | SQL 300 (REST, doc RPCs, import, export, portal); API; UI |
+| 1.4, 1.9 | core modules flagged `is_core`, `module_set` refuses them; Modules page always reachable for OWNER | SQL 300; UI |
+| 1.5, 13.4 | backfill + before / after snapshot of effective permissions and visible values | SQL 300, 310 |
+| 1.6, 4.1 | audit triggers / registry on every settings table | SQL 340 |
+| 2.1–2.7 | `next_doc_no` v2 (tokens, CALENDAR / MONTHLY / FY / NEVER), `sequence_save` with start-number rule, master sequences used by item / party / godown create and imports | SQL `320_r3_numbering` (incl. concurrency `325_r3_numbering_concurrency.sh`); API; UI |
+| 3.1–3.10 | `approval_rules`, `approval_actions`, `app.doc_amount`, multi-level `doc_submit` / `doc_approve` / `doc_reject`, `approval_inbox`, scope + self checks, `rate_change_requests` | SQL `330_r3_approvals`; API; UI |
+| 4.1–4.10 | `audit_log.request_meta`, scope-key columns, central redaction in `app.audit`, coverage registry + test, RLS (company, `audit.view`, scope keys, OWNER bypass), `audit_search` / `audit_export` with W13 masking | SQL `340_r3_audit`; API; UI |
+| 5.1–5.6 | branding columns, `company-assets` bucket + policies, shells / PDF / e-mail use branding, contrast helper, new-company journey | SQL `350_r3_settings_branding_security`; API (storage); UI; worker test |
+| 6.1–6.3 | `security_settings`, password policy check in change-password + `admin-users`, temp-password expiry in `has_permission` / bootstrap, `login_overview` | SQL 350; API (Edge Function); UI |
+| 7.1–7.5 | `customers.*` / `vendors.*` with party RLS split, `documents.download` in storage policy, `documents.share`, catalogue `is_active` + reference test | SQL 300; API; UI |
+| 8.1–8.4 | `departments`, `company_users.department_id`, RECORDS dimension in scope registry (restrictive RLS on `created_by`) | SQL `360_r3_scopes_departments`; API; UI; perf script |
+| 9.1–9.8, 9.7a–e | item / godown / party columns, rate-limit trigger, godown flags in posting, party status guard, `delete_if_unused`, `opening_balance_post` / `opening_balance_reverse`, orphan-image worker job | SQL `370_r3_masters_opening`; worker test; API; UI |
+| 10.1–10.6 | definitions v2, `custom` on new entities, restricted values table + masked access | SQL `380_r3_custom_fields`; API; UI |
+| 11.1–11.6 | `import_templates`, mapping in `import_create`, `pg_trgm` suggestions, new entities, `export_rows` stock entities, commit with function-level timeout | SQL `390_r3_import_export`; API (10k with 8 s timeout); UI |
+| 12.1–12.3 | `list_*` RPCs / range queries with server-side sort, bulk RPCs | API (timing); UI |
+| 13.1–13.8 | `secure` schema, registry, column privileges, value views, rewritten views / RPCs, inference rules, journal read tightening | SQL `310_r3_financial_security` (registry-driven per-right test + completeness); API; UI |
+| X-1–X-7 | completeness tests for new tables, full regression, fresh-instance migration + backup / restore drill, security review | all suites; `drill-local.sh`; review notes in `PLATFORM_R3.md` |
