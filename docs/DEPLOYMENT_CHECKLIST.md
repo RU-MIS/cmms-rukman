@@ -49,12 +49,12 @@ Nothing has been deployed. All steps below are manual.
    ```bash
    npm ci
    npx supabase link --project-ref <ref>          # asks for the DB password
-   npx supabase db push                           # applies all 29 migrations
+   npx supabase db push                           # applies all 35 migrations
    DATABASE_URL='<session pooler URI>' npm run db:seed
    npx supabase functions deploy admin-users      # User Management Center (create login / reset / disable)
    ```
    The function gets `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` from Supabase automatically — set no secret for it.
-   The migrations create the private bucket `documents` and all RLS / storage policies — create nothing by hand.
+   The migrations create the private buckets `documents` and `item-images` and all RLS / storage policies — create nothing by hand.
 5. **Authentication → Sign In / Providers → Email**:
    - Email provider: **ON**
    - Allow new users to sign up: **ON**
@@ -177,7 +177,7 @@ GO only if **every** box is ticked:
 - [ ] PR merged to the default branch; deployed commit = tested commit.
 - [ ] Release suite green on that commit (`docs/DEPLOYMENT.md` §11): SQL 19/19, API e2e 7/7, browser e2e 22/22, lint, typecheck, build, worker unit, worker container smoke, backup drill.
 - [ ] `docs/RELEASE_AUDIT.md` reviewed and the LOW risks accepted by the owner.
-- [ ] Supabase: 29 migrations applied, seed applied, bucket `documents` exists (Storage), Edge Function `admin-users` deployed (Edge Functions list), `instance:verify` OK.
+- [ ] Supabase: 35 migrations applied, seed applied, buckets `documents` and `item-images` exist (Storage), Edge Function `admin-users` deployed (Edge Functions list), `instance:verify` OK.
 - [ ] Auth: sign-ups ON, **Confirm email ON**, OTP 6 digits, both templates show the code, custom SMTP set, Site URL + Redirect URLs = production domain.
 - [ ] DNS: SPF, DKIM, DMARC published and verified in the SMTP provider; test mail not in spam.
 - [ ] Cloudflare Pages: only `NEXT_PUBLIC_*` + `NODE_VERSION`; custom domain with TLS; security headers present.

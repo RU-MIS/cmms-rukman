@@ -26,7 +26,7 @@ export async function user(label) {
   const created = ok(await service.auth.admin.createUser({ email, password, email_confirm: true }));
   const client = createClient(url, anonKey, opts);
   ok(await client.auth.signInWithPassword({ email, password }));
-  return { id: created.user.id, email, client };
+  return { id: created.user.id, email, password, client };
 }
 
 /** A company with an owner; returns ids and the owner's client. */
@@ -60,7 +60,7 @@ export async function portalUser(ownerClient, partyId, kind, label) {
   const client = createClient(url, anonKey, opts);
   ok(await client.auth.signInWithPassword({ email, password }));
   const boot = ok(await client.rpc('session_bootstrap'));
-  return { id: created.user.id, email, client, boot };
+  return { id: created.user.id, email, password, client, boot };
 }
 
 /** Mailpit (local SMTP inbox of `supabase start`) — reads the sign-in code sent to an address. */
@@ -81,4 +81,21 @@ export async function otpCode(email, { after = 0, timeoutMs = 20000 } = {}) {
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error(`No sign-in code email for ${email}`);
+}
+
+/** Internal staff user with a role of the company (data scope optional, set by the owner through the API). */
+export async function staff(ownerClient, companyId, label, roleId, scopes = {}) {
+  const u = await user(label);
+  ok(await service.from('user_roles').insert({ user_id: u.id, company_id: companyId, role_id: roleId }));
+  for (const [dimension, ids] of Object.entries(scopes)) {
+    ok(await ownerClient.rpc('user_set_scope', { p_company_id: companyId, p_user_id: u.id, p_dimension: dimension, p_entity_ids: ids }));
+  }
+  return u;
+}
+
+/** Role with exactly these permissions (created by the owner through the API). */
+export async function role(ownerClient, companyId, code, permissions, kind = 'INTERNAL') {
+  const id = ok(await ownerClient.rpc('role_save', { p_company_id: companyId, p_role_id: null, p_payload: { code: `${code}_${runId}`.toUpperCase(), name: code, kind } }));
+  ok(await ownerClient.rpc('role_set_permissions', { p_role_id: id, p_permissions: permissions }));
+  return id;
 }

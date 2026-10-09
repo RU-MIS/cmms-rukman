@@ -22,16 +22,21 @@ export const NAV: { href: string; label: string; perm?: string | string[]; group
   { href: '/erp/reminders/', label: 'Payment reminders', perm: 'voucher.view', group: 'Accounts' },
   { href: '/erp/documents/', label: 'Documents', perm: 'documents.view', group: 'Documents' },
   { href: '/erp/email-log/', label: 'Email log', perm: 'email.view', group: 'Documents' },
+  { href: '/erp/admin/customers/', label: 'Customers', perm: 'parties.view', group: 'Masters' },
+  { href: '/erp/admin/vendors/', label: 'Vendors', perm: 'parties.view', group: 'Masters' },
   { href: '/erp/parties/', label: 'Customers & vendors', perm: 'parties.view', group: 'Masters' },
+  { href: '/erp/admin/import-export/', label: 'Import / Export', perm: ['items.import', 'items.export', 'parties.import', 'parties.export', 'godowns.import', 'godowns.export', 'rates.import', 'rates.export', 'stock_adjustment.import', 'users.import', 'users.export'], group: 'Masters' },
   { href: '/erp/admin/', label: 'Admin control center', perm: ['users.view', 'roles.view', 'settings.view'], group: 'Admin' },
   { href: '/erp/admin/users/', label: 'Users', perm: 'users.view', group: 'Admin' },
   { href: '/erp/admin/roles/', label: 'Roles & permissions', perm: 'roles.view', group: 'Admin' },
+  { href: '/erp/admin/custom-fields/', label: 'Custom fields', perm: 'settings.view', group: 'Admin' },
   { href: '/erp/settings/', label: 'Settings', perm: 'settings.view', group: 'Admin' },
 ];
 
 /** Pages outside the menu that still need a permission (direct URL access). */
 const EXTRA_ROUTES: { href: string; perm: string | string[] }[] = [
   { href: '/erp/item/', perm: 'items.view' },
+  { href: '/erp/admin/items/', perm: 'items.view' },
   { href: '/erp/users/', perm: 'users.view' },
 ];
 

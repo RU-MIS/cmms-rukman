@@ -11,6 +11,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",
-    "smtp-server": "^3.13.0"
+    "smtp-server": "^3.13.0",
+    "read-excel-file": "9.3.10",
+    "write-excel-file": "4.1.1"
   }
 }

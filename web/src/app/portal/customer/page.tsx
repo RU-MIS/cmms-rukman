@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { must, rpc, sb } from '@/lib/supabase';
 import { useData } from '@/lib/useData';
 import { date, money, num, today } from '@/lib/format';
-import { PortalShell, type PortalContext } from '@/components/PortalShell';
+import { PortalShell, portalTabs, type PortalContext } from '@/components/PortalShell';
 import { downloadFile, safeName } from '@/components/Documents';
 import { MyDocumentsList } from '@/components/PortalDocs';
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, PageHeader, Select, Spinner, Stat, Table, Tabs, TextArea, useAction, useToast } from '@/components/ui';
@@ -26,8 +26,14 @@ function CustomerPortal() {
 }
 
 function Customer({ ctx }: { ctx: PortalContext }) {
-  const [tab, setTab] = useState('catalog');
   const [cart, setCart] = useState<CartLine[]>([]);
+  const tabs = portalTabs(ctx, [{ id: 'catalog', label: 'Products', feature: 'catalog' }, { id: 'cart', label: `New PO (${cart.length})`, feature: 'create_po' },
+    { id: 'pos', label: 'My POs', feature: 'view_pos' }, { id: 'orders', label: 'My orders', feature: 'view_orders' },
+    { id: 'invoices', label: 'Invoices', feature: 'view_invoices' }, { id: 'payments', label: 'Payments', feature: 'view_payments' },
+    { id: 'docs', label: 'Documents', feature: 'view_documents' }]);
+  const [picked, setTab] = useState('');
+  const tab = tabs.some((t) => t.id === picked) ? picked : tabs[0]?.id ?? '';
+  const canOrder = tabs.some((t) => t.id === 'cart');
   const c = ctx.company_id;
   const outstanding = useData(() => rpc<{ visible: boolean; total_outstanding?: number; overdue?: number; bills?: number }>('portal_my_outstanding', { p_company_id: c }), [c]);
   return (
@@ -37,12 +43,11 @@ function Customer({ ctx }: { ctx: PortalContext }) {
         {outstanding.data?.visible && <>
           <Stat label="Outstanding" value={money(outstanding.data.total_outstanding)} />
           <Stat label="Overdue" value={money(outstanding.data.overdue)} tone={Number(outstanding.data.overdue) > 0 ? 'red' : undefined} /></>}
-        <Stat label="Items in PO cart" value={cart.length} />
+        {canOrder && <Stat label="Items in PO cart" value={cart.length} />}
       </div>
-      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'catalog', label: 'Products' }, { id: 'cart', label: `New PO (${cart.length})` },
-        { id: 'pos', label: 'My POs' }, { id: 'orders', label: 'My orders' }, { id: 'invoices', label: 'Invoices' }, { id: 'payments', label: 'Payments' },
-        { id: 'docs', label: 'Documents' }]} />
-      {tab === 'catalog' && <Catalog ctx={ctx} cart={cart} setCart={setCart} goCart={() => setTab('cart')} />}
+      {tabs.length === 0 ? <Card><Empty>No portal features are enabled for your login. Please contact us.</Empty></Card>
+        : <Tabs active={tab} onChange={setTab} tabs={tabs} />}
+      {tab === 'catalog' && <Catalog ctx={ctx} cart={cart} setCart={setCart} goCart={() => setTab('cart')} canOrder={canOrder} />}
       {tab === 'cart' && <Cart ctx={ctx} cart={cart} setCart={setCart} onDone={() => { setCart([]); setTab('pos'); }} />}
       {tab === 'pos' && <MyPos ctx={ctx} />}
       {tab === 'orders' && <MyOrders companyId={c} />}
@@ -53,7 +58,7 @@ function Customer({ ctx }: { ctx: PortalContext }) {
   );
 }
 
-function Catalog({ ctx, cart, setCart, goCart }: { ctx: PortalContext; cart: CartLine[]; setCart: (c: CartLine[]) => void; goCart: () => void }) {
+function Catalog({ ctx, cart, setCart, goCart, canOrder }: { ctx: PortalContext; cart: CartLine[]; setCart: (c: CartLine[]) => void; goCart: () => void; canOrder: boolean }) {
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const toast = useToast();
@@ -66,23 +71,23 @@ function Catalog({ ctx, cart, setCart, goCart }: { ctx: PortalContext; cart: Car
       </form>
       <ErrorBox error={items.error} />
       {!items.data ? (items.error ? null : <Spinner />) : items.data.length === 0 ? <Empty>No products</Empty> : (
-        <Table><thead><tr><th>Product</th>{ctx.rate_visible && <th className="num">Price</th>}{ctx.stock_visibility !== 'HIDDEN' && <th>Stock</th>}<th>Request quantity</th><th /></tr></thead>
+        <Table><thead><tr><th>Product</th>{ctx.rate_visible && <th className="num">Price</th>}{ctx.stock_visibility !== 'HIDDEN' && <th>Stock</th>}{canOrder && <><th>Request quantity</th><th /></>}</tr></thead>
           <tbody>{items.data.map((i) => (
             <tr key={i.item_id}>
               <td className="font-medium">{i.name}<div className="text-xs text-slate-500">{i.code}{i.category ? ` · ${i.category}` : ''}{i.brand ? ` · ${i.brand}` : ''}</div>
                 {i.description && <div className="text-xs text-slate-500">{i.description}</div>}</td>
               {ctx.rate_visible && <td className="num">{i.price === null ? '—' : `${money(i.price)} / ${i.base_unit}`}</td>}
               {ctx.stock_visibility !== 'HIDDEN' && <td><StockCell s={i.stock} unit={i.base_unit} /></td>}
-              <td><div className="flex items-center gap-1"><Input aria-label={`Qty ${i.code}`} className="w-24" type="number" min="0" value={qty[i.item_id] ?? ''}
+              {canOrder && <><td><div className="flex items-center gap-1"><Input aria-label={`Qty ${i.code}`} className="w-24" type="number" min="0" value={qty[i.item_id] ?? ''}
                 onChange={(e) => setQty({ ...qty, [i.item_id]: e.target.value })} /><span className="text-xs text-slate-500">{i.unit}</span></div></td>
               <td><Button variant="secondary" onClick={() => {
                 if (!(Number(qty[i.item_id]) > 0)) { toast.fail('Enter a quantity'); return; }
                 setCart([...cart.filter((l) => l.item.item_id !== i.item_id), { item: i, qty: qty[i.item_id], quote: '' }]);
                 toast.ok(`${i.name} added to the PO`);
-              }}>Add to PO</Button></td>
+              }}>Add to PO</Button></td></>}
             </tr>))}</tbody></Table>
       )}
-      {cart.length > 0 && <div className="mt-3 flex justify-end"><Button onClick={goCart}>Review PO ({cart.length})</Button></div>}
+      {canOrder && cart.length > 0 && <div className="mt-3 flex justify-end"><Button onClick={goCart}>Review PO ({cart.length})</Button></div>}
     </Card>
   );
 }

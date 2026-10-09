@@ -10,7 +10,8 @@ export interface Location { id: string; godown_id: string; code: string; is_defa
 export interface Party { id: string; code: string; name: string; email: string | null; is_active: boolean }
 
 export function useItems(companyId: string) {
-  return useData(async () => must<Item[]>(await sb().from('items')
+  // prices through the masked view: NULL when the user may not see them
+  return useData(async () => must<Item[]>(await sb().from('v_items')
     .select('id, code, name, base_unit_id, sales_unit_id, purchase_unit_id, item_kind, is_active, sale_price, purchase_price')
     .eq('company_id', companyId).eq('is_deleted', false).order('name')), [companyId]);
 }

@@ -10,7 +10,15 @@ import { UserMenu } from './AppShell';
 
 export interface PortalContext { company_id: string; company_name: string; kind: 'CUSTOMER' | 'VENDOR'; party_id: string; party_name: string;
   stock_visibility: string; rate_visible: boolean; quote_price_enabled: boolean; outstanding_visible: boolean;
-  addresses: { id: string; code: string; name: string }[] }
+  addresses: { id: string; code: string; name: string }[];
+  /** portal permission codes of the login's portal role (portal_customer.* / portal_vendor.*) */
+  features: string[] }
+
+/** Portal tabs the login's portal role allows; the RPCs enforce the same features. */
+export function portalTabs(ctx: PortalContext, tabs: { id: string; label: string; feature: string }[]) {
+  const prefix = ctx.kind === 'CUSTOMER' ? 'portal_customer.' : 'portal_vendor.';
+  return tabs.filter((t) => (ctx.features ?? []).includes(prefix + t.feature));
+}
 
 /** Portal pages: requires a signed-in portal user; all data comes from portal_* RPCs (own party only). */
 export function PortalShell({ companyId, kind, children }: { companyId: string; kind: 'CUSTOMER' | 'VENDOR'; children: (ctx: PortalContext) => ReactNode }) {

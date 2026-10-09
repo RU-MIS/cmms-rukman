@@ -5,7 +5,7 @@ import { rpc } from '@/lib/supabase';
 import { useData } from '@/lib/useData';
 import { date, money, num } from '@/lib/format';
 import { downloadPoPdf } from '@/lib/po-download';
-import { PortalShell, type PortalContext } from '@/components/PortalShell';
+import { PortalShell, portalTabs, type PortalContext } from '@/components/PortalShell';
 import { downloadFile } from '@/components/Documents';
 import { MyDocumentsList } from '@/components/PortalDocs';
 import { Badge, Button, Card, Empty, ErrorBox, PageHeader, Spinner, Stat, Table, Tabs, useToast } from '@/components/ui';
@@ -21,9 +21,13 @@ function VendorPortal() {
 }
 
 function Vendor({ ctx }: { ctx: PortalContext }) {
-  const [tab, setTab] = useState('pending');
+  const tabs = portalTabs(ctx, [{ id: 'pending', label: 'Pending supply', feature: 'view_pos' }, { id: 'all', label: 'All POs', feature: 'view_pos' },
+    { id: 'payments', label: 'Payments', feature: 'view_payments' }, { id: 'docs', label: 'Documents', feature: 'view_documents' }]);
+  const [picked, setTab] = useState('');
+  const tab = tabs.some((t) => t.id === picked) ? picked : tabs[0]?.id ?? '';
+  const seePos = tabs.some((t) => t.id === 'pending');
   const toast = useToast();
-  const pos = useData(() => rpc<VendorPo[]>('portal_vendor_pos', { p_company_id: ctx.company_id }), [ctx.company_id]);
+  const pos = useData(async () => (seePos ? rpc<VendorPo[]>('portal_vendor_pos', { p_company_id: ctx.company_id }) : []), [ctx.company_id, seePos]);
   const pay = useData(() => rpc<{ visible: boolean; total_outstanding?: number;
     bills?: { bill_no: string; bill_date: string; due_date: string | null; amount: number; paid: number; outstanding: number; status: string }[];
     payments?: { id: string; voucher_no: string; date: string; amount: number; method: string | null; reference: string | null; allocations: { bill_no: string; amount: number }[] }[] }>(
@@ -36,12 +40,12 @@ function Vendor({ ctx }: { ctx: PortalContext }) {
     <div>
       <PageHeader title={`Welcome, ${ctx.party_name}`} subtitle="Purchase orders placed with you, supply status and payments" />
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="Open POs" value={open.length} />
-        <Stat label="Lines pending supply" value={pendingLines} tone={pendingLines ? 'amber' : undefined} />
+        {seePos && <><Stat label="Open POs" value={open.length} />
+          <Stat label="Lines pending supply" value={pendingLines} tone={pendingLines ? 'amber' : undefined} /></>}
         {pay.data?.visible && <Stat label="Payment due to you" value={money(pay.data.total_outstanding)} />}
       </div>
-      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'pending', label: 'Pending supply' }, { id: 'all', label: 'All POs' },
-        { id: 'payments', label: 'Payments' }, { id: 'docs', label: 'Documents' }]} />
+      {tabs.length === 0 ? <Card><Empty>No portal features are enabled for your login. Please contact us.</Empty></Card>
+        : <Tabs active={tab} onChange={setTab} tabs={tabs} />}
       {(tab === 'pending' || tab === 'all') && (pos.error ? <ErrorBox error={pos.error} /> : !pos.data ? <Spinner /> :
         shown.length === 0 ? <Card><Empty>No purchase orders</Empty></Card> : (
           <div className="space-y-3">{shown.map((p) => (

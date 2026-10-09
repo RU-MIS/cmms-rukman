@@ -179,16 +179,18 @@ function Prices({ partyId, rateType }: { partyId: string; rateType: 'SALE' | 'PU
   const items = useItems(companyId);
   const { busy, run } = useAction();
   const [n, setN] = useState({ item_id: '', rate: '', from: new Date().toISOString().slice(0, 10) });
-  const rates = useData(async () => must<{ id: string; rate: number; effective_from: string; items: { code: string; name: string; sale_price: number | null; purchase_price: number | null } | null }[]>(
-    await sb().from('party_item_rates').select('id, rate, effective_from, items(code, name, sale_price, purchase_price)').eq('party_id', partyId).eq('rate_type', rateType)
+  const rates = useData(async () => must<{ id: string; rate: number; effective_from: string; item_id: string; items: { code: string; name: string } | null }[]>(
+    await sb().from('party_item_rates').select('id, rate, effective_from, item_id, items(code, name)').eq('party_id', partyId).eq('rate_type', rateType)
       .order('effective_from', { ascending: false })), [partyId, rateType]);
+  // base prices come from the masked item view (empty without the field right)
+  const basePrice = (itemId: string) => { const i = items.data?.find((x) => x.id === itemId); return rateType === 'SALE' ? i?.sale_price : i?.purchase_price; };
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-600">{rateType === 'SALE' ? 'Customer-specific sale prices (per base unit). Without one the item sale price is used. Whether the customer can SEE prices is a separate setting.' : 'Vendor-specific purchase prices (per base unit).'}</p>
       <Table><thead><tr><th>Item</th><th className="num">Base price</th><th className="num">This party</th><th>From</th><th /></tr></thead>
         <tbody>{(rates.data ?? []).map((r) => (
           <tr key={r.id}><td>{r.items?.name}<div className="text-xs text-slate-500">{r.items?.code}</div></td>
-            <td className="num">{money(rateType === 'SALE' ? r.items?.sale_price : r.items?.purchase_price)}</td><td className="num font-semibold">{money(r.rate)}</td>
+            <td className="num">{money(basePrice(r.item_id))}</td><td className="num font-semibold">{money(r.rate)}</td>
             <td>{date(r.effective_from)}</td><td>{can('rates.delete') && <Button variant="ghost" onClick={() => run(async () => {
               must(await sb().from('party_item_rates').delete().eq('id', r.id)); rates.reload(); }, 'Price removed')}>Remove</Button>}</td></tr>))}
           {rates.data?.length === 0 && <tr><td colSpan={5} className="text-slate-500">No party-specific prices</td></tr>}</tbody></Table>

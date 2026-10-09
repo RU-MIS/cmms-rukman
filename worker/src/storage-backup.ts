@@ -3,7 +3,11 @@
 //   node src/storage-backup.ts backup  <dir> [bucket=documents]
 //   node src/storage-backup.ts restore <dir> [bucket=documents]
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { dirname, extname, join, relative } from 'node:path';
+
+// Buckets with allowed MIME types (item-images) need the type on upload.
+const TYPES: Record<string, string> = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp', '.gif': 'image/gif' };
 import { createDb } from './worker.ts';
 
 type Db = ReturnType<typeof createDb>;
@@ -25,7 +29,8 @@ async function listAll(db: Db, bucket: string, prefix = ''): Promise<string[]> {
 
 async function walk(dir: string): Promise<string[]> {
   const out: string[] = [];
-  for (const e of await readdir(dir)) {
+  const entries = await readdir(dir).catch((e: NodeJS.ErrnoException) => { if (e.code === 'ENOENT') return [] as string[]; throw e; });
+  for (const e of entries) {
     const p = join(dir, e);
     if ((await stat(p)).isDirectory()) out.push(...(await walk(p))); else out.push(p);
   }
@@ -49,7 +54,8 @@ export async function restore(db: Db, dir: string, bucket = 'documents') {
   const files = await walk(root);
   for (const file of files) {
     const path = relative(root, file).split('\\').join('/');
-    const { error } = await db.storage.from(bucket).upload(path, await readFile(file), { upsert: true });
+    const contentType = TYPES[extname(path).toLowerCase()];
+    const { error } = await db.storage.from(bucket).upload(path, await readFile(file), { upsert: true, ...(contentType ? { contentType } : {}) });
     if (error) throw new Error(`upload ${path}: ${error.message}`);
   }
   return files.length;

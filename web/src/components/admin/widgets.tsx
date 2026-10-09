@@ -55,3 +55,57 @@ export function GodownScopePicker({ godowns, value, onChange, disabled }: {
     </div>
   );
 }
+
+/** Sentinel scope entry meaning "no record of this dimension" (app.scope_none()). */
+export const SCOPE_NONE = '00000000-0000-0000-0000-000000000000';
+export const SCOPE_DIMENSIONS: { code: 'GODOWN' | 'CUSTOMER' | 'VENDOR' | 'ITEM'; label: string; one: string }[] = [
+  { code: 'GODOWN', label: 'Godowns', one: 'Godown' }, { code: 'CUSTOMER', label: 'Customers', one: 'Customer' },
+  { code: 'VENDOR', label: 'Vendors', one: 'Vendor' }, { code: 'ITEM', label: 'Items', one: 'Item' },
+];
+export type ScopeOption = { id: string; code: string; name: string };
+
+/**
+ * Data scope of one dimension: full access (no entries), selected records,
+ * or no access (the SCOPE_NONE sentinel). Enforced by the database.
+ */
+export function DataScopePicker({ dimension, label, one, options, value, onChange, disabled }: {
+  dimension: string; label: string; one: string; options: ScopeOption[]; value: string[]; onChange: (ids: string[]) => void; disabled?: boolean;
+}) {
+  const mode = value.includes(SCOPE_NONE) ? 'none' : value.length > 0 ? 'some' : 'all';
+  const [picking, setPicking] = useState(mode === 'some');
+  const [q, setQ] = useState('');
+  const shown = picking && mode !== 'none' ? 'some' : mode;
+  const s = q.trim().toLowerCase();
+  const list = options.filter((o) => !s || o.code.toLowerCase().includes(s) || o.name.toLowerCase().includes(s) || value.includes(o.id)).slice(0, 300);
+  const name = `scope-${dimension}`;
+  return (
+    <div className="space-y-2" role="group" aria-label={`${one} access`}>
+      <div className="flex flex-wrap gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="radio" name={name} disabled={disabled} checked={shown === 'all'} onChange={() => { setPicking(false); onChange([]); }} />
+          All {label.toLowerCase()}</label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="radio" name={name} disabled={disabled} checked={shown === 'some'}
+            onChange={() => { setPicking(true); if (mode === 'none') onChange([]); }} />
+          Only selected {label.toLowerCase()}</label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="radio" name={name} disabled={disabled} checked={shown === 'none'} onChange={() => { setPicking(false); onChange([SCOPE_NONE]); }} />
+          No access</label>
+      </div>
+      {shown === 'some' && (
+        <div className="ml-6 space-y-2">
+          {options.length > 12 && <input className="input w-64" placeholder={`Find ${label.toLowerCase()}`} aria-label={`Find ${label.toLowerCase()}`}
+            value={q} onChange={(e) => setQ(e.target.value)} />}
+          <div className="grid max-h-60 gap-1 overflow-y-auto sm:grid-cols-2">
+            {list.map((o) => (
+              <label key={o.id} className="flex items-center gap-2 text-sm">
+                <input type="checkbox" disabled={disabled} aria-label={`${one} ${o.code}`} checked={value.includes(o.id)}
+                  onChange={(e) => onChange(e.target.checked ? [...value, o.id] : value.filter((x) => x !== o.id))} />
+                {o.name} <span className="text-xs text-slate-500">{o.code}</span>
+              </label>))}
+          </div>
+          {value.length === 0 && <p className="text-xs text-amber-700">Select at least one (no selection = all {label.toLowerCase()}).</p>}
+        </div>)}
+    </div>
+  );
+}

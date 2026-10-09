@@ -8,6 +8,7 @@ import { dateTime } from '@/lib/format';
 import { adminUsers, type AdminUser, type Permission, type PermissionModule, type Role } from '@/lib/admin';
 import { Badge, Button, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Table, Tabs, useAction } from '@/components/ui';
 import { GodownScopePicker, TempPasswordModal } from '@/components/admin/widgets';
+import { ScopeEditor } from '@/components/admin/ScopeEditor';
 import { buildMatrix } from '@/components/admin/PermissionMatrix';
 
 const KIND_LABEL: Record<string, string> = { INTERNAL: 'Internal', CUSTOMER: 'Customer', VENDOR: 'Vendor' };
@@ -111,7 +112,7 @@ export default function UsersPage() {
         onClose={() => setCreating(false)}
         onCreated={(r) => { setCreating(false); users.reload(); if (r.password) setTemp(r as { email: string; password: string }); }} />}
       {inviting && <InviteUser roles={(roles.data ?? []).filter((r) => r.is_active)} onClose={() => setInviting(false)} onDone={() => { setInviting(false); users.reload(); }} />}
-      {open && <UserDrawer user={open} roles={roles.data ?? []} godowns={godowns.data ?? []} onClose={() => setOpen(null)}
+      {open && <UserDrawer user={open} roles={roles.data ?? []} onClose={() => setOpen(null)}
         onChanged={() => users.reload()} onTempPassword={setTemp} />}
       <TempPasswordModal value={temp} onClose={() => setTemp(null)} />
     </div>
@@ -214,8 +215,8 @@ interface Detail {
   history: { at: string; action: string; old: unknown; new: unknown; actor: string }[];
 }
 
-function UserDrawer({ user, roles, godowns, onClose, onChanged, onTempPassword }: {
-  user: AdminUser; roles: Role[]; godowns: Godown[]; onClose: () => void; onChanged: () => void;
+function UserDrawer({ user, roles, onClose, onChanged, onTempPassword }: {
+  user: AdminUser; roles: Role[]; onClose: () => void; onChanged: () => void;
   onTempPassword: (v: { email: string; password: string }) => void;
 }) {
   const companyId = useCompanyId();
@@ -229,8 +230,8 @@ function UserDrawer({ user, roles, godowns, onClose, onChanged, onTempPassword }
   const d = detail.data;
   const tabs = internal
     ? [{ id: 'profile', label: 'Profile' }, { id: 'roles', label: 'Roles' }, { id: 'perms', label: 'Permissions' },
-       { id: 'scope', label: 'Godown access' }, { id: 'security', label: 'Login & security' }, { id: 'history', label: 'History' }]
-    : [{ id: 'security', label: 'Login & security' }, { id: 'history', label: 'History' }];
+       { id: 'scope', label: 'Data access' }, { id: 'security', label: 'Login & security' }, { id: 'history', label: 'History' }]
+    : [{ id: 'security', label: 'Login & security' }, { id: 'portal', label: 'Portal role' }, { id: 'history', label: 'History' }];
   const after = () => { detail.reload(); onChanged(); };
 
   return (
@@ -254,7 +255,8 @@ function UserDrawer({ user, roles, godowns, onClose, onChanged, onTempPassword }
           {tab === 'profile' && <ProfileTab key={JSON.stringify(d.membership)} d={d} onSaved={after} />}
           {tab === 'roles' && <RolesTab key={d.role_ids.join()} d={d} roles={roles} self={self} onSaved={after} />}
           {tab === 'perms' && <OverridesTab key={JSON.stringify(d.overrides)} d={d} self={self} onSaved={after} />}
-          {tab === 'scope' && <ScopeTab key={JSON.stringify(d.scopes)} d={d} godowns={godowns} self={self} onSaved={after} />}
+          {tab === 'scope' && <ScopeTab key={JSON.stringify(d.scopes)} d={d} self={self} onSaved={after} />}
+          {tab === 'portal' && <PortalRoleTab userId={d.user_id} onSaved={after} />}
           {tab === 'security' && (
             <div className="space-y-3 text-sm">
               <dl className="grid gap-x-6 gap-y-1 sm:grid-cols-[180px_1fr]">
@@ -283,7 +285,7 @@ function UserDrawer({ user, roles, godowns, onClose, onChanged, onTempPassword }
                         await adminUsers({ action: 'set_status', company_id: companyId, user_id: d.user_id, active: true }); after(); onClose(); }, 'User enabled')}>Enable user</Button>)}
                 </div>)}
               {!internal && <p className="text-slate-500">What this customer / vendor login can see is set in Settings → Portals and per customer / vendor
-                (Customers &amp; vendors → Portal access). Portal roles follow in the next release.</p>}
+                (Customers / Vendors → Portal &amp; visibility) and by the portal role (tab “Portal role”).</p>}
             </div>)}
           {tab === 'history' && (
             <Table><thead><tr><th>When</th><th>Action</th><th>By</th><th>Details</th></tr></thead>
@@ -384,23 +386,42 @@ function OverridesTab({ d, self, onSaved }: { d: Detail; self: boolean; onSaved:
   );
 }
 
-function ScopeTab({ d, godowns, self, onSaved }: { d: Detail; godowns: Godown[]; self: boolean; onSaved: () => void }) {
+function ScopeTab({ d, self, onSaved }: { d: Detail; self: boolean; onSaved: () => void }) {
   const companyId = useCompanyId();
   const { can } = useSession();
-  const { busy, run } = useAction();
-  const [gd, setGd] = useState<string[]>(d.scopes.GODOWN ?? []);
-  const eff = d.effective_scopes.GODOWN;
   const dis = !can('users.assign_scope') || d.is_owner || (self && !d.is_owner);
-  if (d.is_owner) return <p className="text-sm">The owner always has access to all godowns.</p>;
+  if (d.is_owner) return <p className="text-sm">The owner always has access to all records.</p>;
+  return (
+    <ScopeEditor stored={d.scopes} effective={d.effective_scopes} disabled={dis}
+      intro="A setting here overrides the user's roles. Godowns limit stock, locations, reservations and godown documents; customers and vendors limit the master, rates and their documents; items limit the item master, rates, images, stock and document lines. Enforced by the database."
+      onSave={async (dimension, ids) => {
+        await rpc('user_set_scope', { p_company_id: companyId, p_user_id: d.user_id, p_dimension: dimension, p_entity_ids: ids }); onSaved(); }} />
+  );
+}
+
+/** Portal role of a customer / vendor login: which portal features it may use (Roles → Customer / Vendor portal roles). */
+function PortalRoleTab({ userId, onSaved }: { userId: string; onSaved: () => void }) {
+  const companyId = useCompanyId();
+  const { can } = useSession();
+  const { run } = useAction();
+  const links = useData(async () => must<{ id: string; kind: string; role_id: string | null; is_active: boolean; parties: { name: string } | null }[]>(
+    await sb().from('portal_users').select('id, kind, role_id, is_active, parties(name)').eq('company_id', companyId).eq('user_id', userId)), [companyId, userId]);
+  const roles = useData(async () => must<Role[]>(await sb().from('roles')
+    .select('id, code, name, description, kind, is_active, is_locked, grants_all, is_system, sort_order')
+    .eq('company_id', companyId).neq('kind', 'INTERNAL').order('sort_order').order('name')), [companyId]);
+  if (!links.data || !roles.data) return <Spinner />;
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-600">Effective access now: <b>{eff ? eff.map((id) => godowns.find((g) => g.id === id)?.name ?? '?').join(', ') : 'All godowns'}</b>
-        {!(d.scopes.GODOWN?.length) && eff ? ' (from the roles)' : ''}. A selection here overrides the roles. Enforced by the database for stock, locations,
-        reservations and godown documents.</p>
-      <GodownScopePicker godowns={godowns} value={gd} onChange={setGd} disabled={dis} />
-      {!dis && <div className="text-right"><Button busy={busy} onClick={() => run(async () => {
-        await rpc('user_set_scope', { p_company_id: companyId, p_user_id: d.user_id, p_dimension: 'GODOWN', p_entity_ids: gd }); onSaved(); },
-        'Godown access saved')}>Save godown access</Button></div>}
+      <ErrorBox error={links.error || roles.error} />
+      {links.data.map((l) => (
+        <Field key={l.id} label={`${l.kind === 'CUSTOMER' ? 'Customer' : 'Vendor'} portal · ${l.parties?.name ?? ''}`}>
+          <Select aria-label="Portal role" className="max-w-sm" value={l.role_id ?? ''} disabled={!can('portal.edit')}
+            onChange={(e) => run(async () => {
+              await rpc('portal_user_set_role', { p_portal_user_id: l.id, p_role_id: e.target.value }); links.reload(); onSaved();
+            }, 'Portal role saved')}
+            options={roles.data!.filter((r) => r.kind === `${l.kind}_PORTAL` && r.is_active).map((r) => ({ value: r.id, label: r.name }))} />
+        </Field>))}
+      {links.data.length === 0 && <p className="text-sm text-slate-500">No portal access.</p>}
     </div>
   );
 }

@@ -1,9 +1,11 @@
+app.data_scope_registry
 app.default_accounts
 app.default_approvals
 app.default_roles
 app.default_sequences
 app.doc_types
 app.godown_scoped_tables
+app.import_entities
 public.data_scope_dimensions
 public.permission_modules
 storage.buckets

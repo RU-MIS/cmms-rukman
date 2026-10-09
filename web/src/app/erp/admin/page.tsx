@@ -4,18 +4,22 @@ import { useSession } from '@/lib/session';
 import { PageHeader } from '@/components/ui';
 
 /** Sections of the Admin Control Center; each is shown only with its permission. */
-const SECTIONS: { href: string; title: string; text: string; perm: string }[] = [
+const SECTIONS: { href: string; title: string; text: string; perm: string | string[] }[] = [
   { href: '/erp/admin/users/', title: 'Users', text: 'Internal, customer and vendor logins: create, temporary password, reset, disable, roles, overrides, godown access.', perm: 'users.view' },
   { href: '/erp/admin/roles/', title: 'Roles & permissions', text: 'Create, duplicate, disable roles; permission matrix; godown access per role.', perm: 'roles.view' },
   { href: '/erp/settings/', title: 'Company & settings', text: 'Company profile, portals, stock visibility, email, reminders, inventory rules.', perm: 'settings.view' },
   { href: '/erp/godowns/', title: 'Godowns & locations', text: 'Godowns, racks, shelves and bins.', perm: 'godowns.view' },
-  { href: '/erp/items/', title: 'Items & packing', text: 'Item master, units and packing.', perm: 'items.view' },
-  { href: '/erp/parties/', title: 'Customers & vendors', text: 'Customer and vendor master, portal access and visibility overrides.', perm: 'parties.view' },
+  { href: '/erp/admin/items/', title: 'Items', text: 'Item master: packing, barcode, SKU, rates and rate history, customer / vendor rates, images, custom fields.', perm: 'items.view' },
+  { href: '/erp/admin/customers/', title: 'Customers', text: 'Customer master, addresses, special rates, credit, portal visibility and customer logins.', perm: 'parties.view' },
+  { href: '/erp/admin/vendors/', title: 'Vendors', text: 'Vendor master, purchase rates, portal visibility and vendor logins.', perm: 'parties.view' },
+  { href: '/erp/admin/import-export/', title: 'Import / Export', text: 'Excel templates, validated imports (all-or-nothing by default) and permission-filtered exports.',
+    perm: ['items.import', 'items.export', 'parties.import', 'parties.export', 'godowns.import', 'godowns.export', 'rates.import', 'rates.export', 'stock_adjustment.import', 'users.import', 'users.export'] },
+  { href: '/erp/admin/custom-fields/', title: 'Custom fields', text: 'Extra fields for items, customers and vendors.', perm: 'settings.view' },
 ];
 
 export default function AdminCenter() {
   const { can } = useSession();
-  const visible = SECTIONS.filter((s) => can(s.perm));
+  const visible = SECTIONS.filter((s) => (Array.isArray(s.perm) ? s.perm : [s.perm]).some((p) => can(p)));
   return (
     <div>
       <PageHeader title="Admin control center" subtitle="Business configuration without code changes." />
