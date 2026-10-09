@@ -37,14 +37,26 @@ create table public.company_branding (
   email_from_name text check (email_from_name is null or length(email_from_name) <= 80),
   email_reply_to  text check (email_reply_to is null or email_reply_to ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
   updated_at      timestamptz not null default now(),
-  updated_by      uuid
+  updated_by      uuid,
+  -- files live in the company's own folder of the company-assets bucket
+  constraint company_branding_logo_path check (logo_path is null or (logo_path like company_id::text || '/%' and position('..' in logo_path) = 0)),
+  constraint company_branding_favicon_path check (favicon_path is null or (favicon_path like company_id::text || '/%' and position('..' in favicon_path) = 0))
 );
 alter table public.company_branding enable row level security;
+-- companies where the caller has an active portal login (definer: portal_users has its own RLS)
+create or replace function app.portal_company_ids()
+returns uuid[]
+language sql stable security definer
+set search_path = public, app, pg_temp
+as $$
+  select coalesce(array_agg(distinct company_id), '{}') from public.portal_users where user_id = auth.uid() and is_active
+$$;
+revoke all on function app.portal_company_ids() from public, anon;
+grant execute on function app.portal_company_ids() to authenticated, service_role;
 -- readable by members and by the company's portal users (portal shell, documents)
 create policy company_branding_read on public.company_branding for select to authenticated
   using (company_id = any ((select app.user_company_ids())::uuid[])
-         or exists (select 1 from public.portal_users pu where pu.user_id = auth.uid() and pu.company_id = company_branding.company_id
-                    and pu.is_active));
+         or company_id = any ((select app.portal_company_ids())::uuid[]));
 grant select on public.company_branding to authenticated;
 grant all on public.company_branding to service_role;
 insert into public.company_branding (company_id) select id from public.companies on conflict do nothing;
@@ -278,9 +290,8 @@ begin
     on conflict (id) do nothing;
     execute $p$create policy company_assets_read on storage.objects for select to authenticated
               using (bucket_id = 'company-assets'
-                     and (app.is_member(app.try_uuid(split_part(name, '/', 1)))
-                          or exists (select 1 from public.portal_users pu where pu.user_id = auth.uid() and pu.is_active
-                                     and pu.company_id = app.try_uuid(split_part(name, '/', 1)))))$p$;
+                     and (app.try_uuid(split_part(name, '/', 1)) = any ((select app.user_company_ids())::uuid[])
+                          or app.try_uuid(split_part(name, '/', 1)) = any ((select app.portal_company_ids())::uuid[])))$p$;
     execute $p$create policy company_assets_insert on storage.objects for insert to authenticated
               with check (bucket_id = 'company-assets'
                           and app.has_permission(app.try_uuid(split_part(name, '/', 1)), 'settings_branding.edit'))$p$;
