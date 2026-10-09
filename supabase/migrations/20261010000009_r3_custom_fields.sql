@@ -275,6 +275,9 @@ set search_path = public, app, pg_temp
 as $$
 declare d public.custom_field_definitions; v uuid[];
 begin
+  if not app.is_member(p_company_id) then
+    raise exception 'Unknown company' using errcode = 'P0001';
+  end if;
   select * into d from public.custom_field_definitions where company_id = p_company_id and entity = p_entity and field_key = p_field_key
     and is_searchable and is_active;
   if d.id is null then
@@ -416,7 +419,15 @@ begin
       continue;
     end if;
     if k = 'custom' and jsonb_typeof(p_data->'custom') = 'object' then
-      continue;   -- restricted custom values never reach `custom` (stored in custom_field_private_values)
+      -- stored rows never hold restricted values, but audited request payloads (doc_save, party_save) may
+      v := jsonb_set(v, '{custom}', coalesce((
+             select jsonb_object_agg(c.key, case when exists (select 1 from public.custom_field_definitions d
+                                                              where d.company_id = p_company_id and d.field_key = c.key
+                                                                and d.view_permission is not null
+                                                                and not app.has_permission(p_company_id, d.view_permission))
+                                                 then to_jsonb('•••'::text) else c.value end)
+             from jsonb_each(p_data->'custom') c), '{}'::jsonb));
+      continue;
     end if;
     v_class := app.audit_field_class(p_table, k, p_data);
     if v_class is not null and not secure.class_ok(p_company_id, v_class) then
