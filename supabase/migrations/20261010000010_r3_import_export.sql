@@ -510,3 +510,41 @@ update secure.reviewed_functions set treatment = 'invoker: masked views / row-le
 where function_name = 'public.export_rows';
 insert into secure.reviewed_functions values ('app.export_rows_r2', 'invoker (R2 export), reads v_items / row-level tables')
 on conflict do nothing;
+
+-- -----------------------------------------------------------------------------
+-- Master codes in imports (AC-2.5): while the ITEM / CUSTOMER / VENDOR / GODOWN
+-- sequence is active, an empty `code` is allowed (the next code is assigned on
+-- commit by the master-code trigger / party_save) and empty codes are not
+-- reported as duplicates of each other
+-- -----------------------------------------------------------------------------
+create or replace function app.import_auto_code(p_company_id uuid, p_entity text)
+returns boolean
+language sql stable security definer
+set search_path = public, app, pg_temp
+as $$
+  select exists (select 1 from public.document_sequences
+                 where company_id = p_company_id and is_active
+                   and doc_type = case p_entity when 'ITEMS' then 'ITEM' when 'CUSTOMERS' then 'CUSTOMER'
+                                                when 'VENDORS' then 'VENDOR' when 'GODOWNS' then 'GODOWN' end)
+$$;
+revoke all on function app.import_auto_code(uuid, text) from public, anon;
+grant execute on function app.import_auto_code(uuid, text) to authenticated, service_role;
+
+do $$
+declare v_def text;
+begin
+  select pg_get_functiondef('app.import_run_validation'::regproc) into v_def;
+  v_def := replace(v_def, $x$  v_cols := app.import_columns(p_job.company_id, p_job.entity);$x$,
+                   $x$  v_cols := app.import_columns(p_job.company_id, p_job.entity);
+  if app.import_auto_code(p_job.company_id, p_job.entity) then
+    v_cols := (select jsonb_agg(case when cc->>'key' = 'code' then cc || '{"required": false}' else cc end order by o)
+               from jsonb_array_elements(v_cols) with ordinality as z(cc, o));
+  end if;$x$);
+  v_def := replace(v_def, $x$  where row_no <> first_row;$x$, $x$  where row_no <> first_row and k <> '';$x$);
+  v_def := replace(v_def, $x$select row_no, min(row_no) over (partition by k) as first_row$x$,
+                   $x$select row_no, k, min(row_no) over (partition by k) as first_row$x$);
+  if position('import_auto_code' in v_def) = 0 or position($x$k <> ''$x$ in v_def) = 0 or position('select row_no, k,' in v_def) = 0 then
+    raise exception 'import_run_validation has an unexpected shape';
+  end if;
+  execute v_def;
+end $$;
