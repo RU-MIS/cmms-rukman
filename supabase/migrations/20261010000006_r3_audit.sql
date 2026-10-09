@@ -28,15 +28,17 @@ create or replace function app.audit_redact(p jsonb)
 returns jsonb
 language sql immutable
 as $$
-  select case jsonb_typeof(p)
-    when 'object' then coalesce((select jsonb_object_agg(k, case when k ~* '(password|passwd|pwd|secret|token|otp|api[_-]?key|service[_-]?role|smtp|encrypted|credential|private[_-]?key|jwt)'
-                                                            then to_jsonb('[REDACTED]'::text) else app.audit_redact(v) end)
+  select case
+    -- fast path: no sensitive key name anywhere in the document (one regex over the text)
+    when p is null or p::text !~* '(password|passwd|pwd|secret|token|otp|api[_-]?key|service[_-]?role|smtp|encrypted|credential|private[_-]?key|jwt)' then p
+    when jsonb_typeof(p) = 'object' then coalesce((select jsonb_object_agg(k, case when k ~* '(password|passwd|pwd|secret|token|otp|api[_-]?key|service[_-]?role|smtp|encrypted|credential|private[_-]?key|jwt)'
+                                                            then to_jsonb('[REDACTED]'::text)
+                                                            when jsonb_typeof(v) in ('object', 'array') then app.audit_redact(v) else v end)
                                  from jsonb_each(p) e(k, v)), '{}'::jsonb)
-    when 'array' then coalesce((select jsonb_agg(app.audit_redact(v)) from jsonb_array_elements(p) a(v)), '[]'::jsonb)
+    when jsonb_typeof(p) = 'array' then coalesce((select jsonb_agg(case when jsonb_typeof(v) in ('object', 'array') then app.audit_redact(v) else v end)
+                                                  from jsonb_array_elements(p) a(v)), '[]'::jsonb)
     else p end
 $$;
-
--- request metadata from the PostgREST request headers / JWT
 create or replace function app.request_meta()
 returns jsonb
 language plpgsql stable
@@ -66,7 +68,8 @@ as $$
 declare v_data jsonb; v_stored jsonb; d app.doc_types; v_hdr jsonb; c text; r record;
 begin
   -- the stored row (callers often audit only an action payload), overlaid with the audited data
-  if p_row_id ~ '^[0-9a-f-]{36}$'
+  -- (a full row, e.g. from tg_audit_row, carries its id: nothing to fetch)
+  if p_row_id ~ '^[0-9a-f-]{36}$' and not (coalesce(p_data, '{}'::jsonb) ? 'id' and p_data->>'id' = p_row_id)
      and exists (select 1 from pg_attribute where attrelid = to_regclass('public.' || quote_ident(p_table)) and attname = 'id' and not attisdropped) then
     begin
       execute format('select to_jsonb(x) from public.%I x where x.id = $1::uuid', p_table) into v_stored using p_row_id;
@@ -111,13 +114,14 @@ returns void
 language plpgsql security definer
 set search_path = public, app, pg_temp
 as $$
-declare k record;
+-- values are computed into variables first: an inlined redaction inside the INSERT would be re-planned on
+-- every call (3x slower on bulk writes such as imports)
+declare k record; v_old jsonb := app.audit_redact(p_old); v_new jsonb := app.audit_redact(p_new); v_meta jsonb := app.request_meta();
 begin
   select * into k from app.audit_scope_keys(p_table, p_row_id, coalesce(p_new, p_old));
   insert into public.audit_log (company_id, table_name, row_id, action, old_data, new_data, actor_id, request_meta,
                                 scope_godowns, scope_parties, scope_items)
-  values (p_company_id, p_table, p_row_id, p_action, app.audit_redact(p_old), app.audit_redact(p_new), auth.uid(), app.request_meta(),
-          k.godowns, k.parties, k.items);
+  values (p_company_id, p_table, p_row_id, p_action, v_old, v_new, auth.uid(), v_meta, k.godowns, k.parties, k.items);
 end;
 $$;
 

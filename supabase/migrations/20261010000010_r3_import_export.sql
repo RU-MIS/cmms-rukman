@@ -573,3 +573,108 @@ begin
   end if;
   execute v_def;
 end $$;
+
+-- -----------------------------------------------------------------------------
+-- Large imports (AC-11.5). With the R3 checks a write costs about 0.9 ms per
+-- row, so a 10,000-row commit (~9 s) no longer fits the 8 s statement timeout
+-- of API users. A confirmed import above app.import_sync_limit() rows is
+-- therefore QUEUED, and the worker commits it through import_commit_next():
+--   * one transaction per job: all-or-nothing keeps its meaning;
+--   * it runs under the importer's own identity (auth.uid() = created_by, role
+--     authenticated): permissions, scopes and triggers are checked exactly as
+--     for an API call, at commit time (rights revoked meanwhile = failure);
+--   * only the service role may call it (the worker); the job status is
+--     polled by the screen.
+-- -----------------------------------------------------------------------------
+alter table public.import_jobs drop constraint import_jobs_status_check;
+alter table public.import_jobs add constraint import_jobs_status_check
+  check (status in ('STAGING', 'VALIDATED', 'QUEUED', 'COMMITTED', 'FAILED', 'CANCELLED'));
+alter table public.import_jobs add column queued_at timestamptz;
+
+create or replace function app.import_sync_limit()
+returns integer language sql immutable as $$ select 2000 $$;
+
+-- the R2 / R3 commit body becomes the internal runner
+do $$
+declare v_def text;
+begin
+  select pg_get_functiondef('public.import_commit(uuid, boolean)'::regprocedure) into v_def;
+  v_def := replace(v_def, 'FUNCTION public.import_commit(', 'FUNCTION app.import_commit_run(');
+  -- a queued job keeps the freshness it had when it was confirmed
+  v_def := replace(v_def, $x$if j.validated_at < now() - interval '15 minutes' then$x$,
+                   $x$if j.validated_at < coalesce(j.queued_at, now()) - interval '15 minutes' then$x$);
+  if position('app.import_commit_run(' in v_def) = 0 or position('coalesce(j.queued_at, now())' in v_def) = 0 then
+    raise exception 'import_commit has an unexpected shape';
+  end if;
+  execute v_def;
+end $$;
+revoke all on function app.import_commit_run(uuid, boolean) from public, anon, authenticated;
+
+create or replace function public.import_commit(p_job_id uuid, p_confirm boolean)
+returns jsonb
+language plpgsql security definer
+set search_path = public, app, pg_temp
+as $$
+declare j public.import_jobs := app.import_job_for(p_job_id);
+begin
+  if coalesce(p_confirm, false) and j.status = 'VALIDATED' and j.valid_rows > app.import_sync_limit()
+     and not (j.mode = 'ALL_OR_NOTHING' and j.invalid_rows > 0)
+     and not exists (select 1 from public.import_errors where job_id = j.id and row_no = 0)
+     and j.validated_at >= now() - interval '15 minutes' then
+    update public.import_jobs set status = 'QUEUED', queued_at = now() where id = j.id;
+    perform app.audit(j.company_id, 'import_jobs', j.id::text, 'IMPORT_QUEUED', null,
+                      jsonb_build_object('entity', j.entity, 'file', j.file_name, 'rows', j.valid_rows));
+    return (select to_jsonb(jj) - 'columns' from public.import_jobs jj where id = j.id)
+           || jsonb_build_object('committed', false, 'queued', true,
+                                 'message', 'Large file: the import runs in the background. This page shows the result when it is done.');
+  end if;
+  return app.import_commit_run(p_job_id, p_confirm);
+end;
+$$;
+
+-- worker: commit the oldest queued job as its importer (service role only)
+create or replace function public.import_commit_next()
+returns jsonb
+language plpgsql security definer
+set search_path = public, app, pg_temp
+as $$
+declare j public.import_jobs; v jsonb;
+        v_claims text := current_setting('request.jwt.claims', true); v_sub text := current_setting('request.jwt.claim.sub', true);
+        v_role text := current_setting('request.jwt.claim.role', true);
+begin
+  if not app.is_trusted_caller() then
+    raise exception 'Only the background worker commits queued imports' using errcode = '42501';
+  end if;
+  select * into j from public.import_jobs where status = 'QUEUED' order by queued_at, id for update skip locked limit 1;
+  if j.id is null then
+    return null;
+  end if;
+  -- act as the importer for the rest of this transaction
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', j.created_by, 'role', 'authenticated')::text, true);
+  perform set_config('request.jwt.claim.sub', j.created_by::text, true);
+  perform set_config('request.jwt.claim.role', 'authenticated', true);
+  perform set_config('app.authz_cache', '', true);
+  begin
+    update public.import_jobs set status = 'VALIDATED' where id = j.id;
+    v := app.import_commit_run(j.id, true);
+  exception when others then
+    -- e.g. the importer lost the right meanwhile: nothing was written
+    update public.import_jobs set status = 'FAILED', error = sqlerrm, committed_at = now(), imported_rows = 0 where id = j.id;
+    perform app.audit(j.company_id, 'import_jobs', j.id::text, 'IMPORT_FAILED', null, jsonb_build_object('entity', j.entity, 'error', sqlerrm));
+    v := (select to_jsonb(jj) - 'columns' from public.import_jobs jj where id = j.id) || jsonb_build_object('committed', false);
+  end;
+  -- back to the worker's own identity
+  perform set_config('request.jwt.claims', coalesce(v_claims, ''), true);
+  perform set_config('request.jwt.claim.sub', coalesce(v_sub, ''), true);
+  perform set_config('request.jwt.claim.role', coalesce(v_role, ''), true);
+  perform set_config('app.authz_cache', '', true);
+  return v || jsonb_build_object('job_id', j.id);
+end;
+$$;
+revoke all on function public.import_commit_next() from public, anon, authenticated;
+grant execute on function public.import_commit_next() to service_role;
+revoke all on function public.import_commit(uuid, boolean) from public, anon;
+grant execute on function public.import_commit(uuid, boolean) to authenticated, service_role;
+insert into secure.reviewed_functions values
+  ('public.import_commit_next', 'worker only; runs the import as its importer (same checks as the API)')
+on conflict do nothing;

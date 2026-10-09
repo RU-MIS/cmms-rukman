@@ -127,4 +127,33 @@ select test.user_with_role(test.id('company'), 'STOCK_IMPORTER') as v \gset si_
 select test.login(:'si_v');
 select pg_temp.imp('OPENING_STOCK', '[{"item_code":"FG-4766","godown_code":"WAREHOUSE","qty":5,"rate":190}]') as v \gset j6_
 select test.ok(pg_temp.errors(:'j6_v'::jsonb) like '%rate%', 'Opening-stock rate refused without the landed-cost right');
+-- ------------------------------------------------------------ AC-11.5: large files are committed by the worker as the importer
+select test.login(test.id('admin'));
+select public.import_create(test.id('company'), 'UNITS', 'big.xlsx', 'ALL_OR_NOTHING', false, array['code', 'name'])->>'job_id' as big \gset
+select public.import_add_rows(:'big', (select jsonb_agg(jsonb_build_object('row_no', n + 1, 'data', jsonb_build_object('code', 'U' || n, 'name', 'Unit ' || n)))
+                                       from generate_series(1, 2000) n));
+select public.import_add_rows(:'big', '[{"row_no": 2002, "data": {"code": "U2001", "name": "Unit 2001"}}]');
+select public.import_validate(:'big')->>'valid_rows';
+select test.eq(public.import_commit(:'big', true)->>'status', 'QUEUED', 'More than 2,000 rows: the confirmed import is queued');
+select test.eq((select count(*) from public.units where company_id = test.id('company') and code like 'U%')::int, 0, 'Nothing written yet');
+select test.throws('select public.import_commit_next()', 'permission denied%', 'API users cannot run the queue');
+select test.login(null);   -- the worker (service role)
+select test.eq(public.import_commit_next()->>'status', 'COMMITTED', 'Worker commits the queued job');
+select test.eq((select count(*) from public.units where company_id = test.id('company') and code like 'U%')::int, 2001, 'All rows written in one transaction');
+select test.eq((select string_agg(distinct actor_id::text, ',') from public.audit_log where table_name = 'import_jobs' and row_id = :'big'),
+               test.id('admin')::text, 'Written and audited as the importer, not as the worker');
+select test.ok(public.import_commit_next() is null, 'Queue empty');
+-- rights checked again at commit time
+select test.login(:'adm_v');
+select public.import_create(test.id('company'), 'UNITS', 'big2.xlsx', 'ALL_OR_NOTHING', false, array['code', 'name'])->>'job_id' as big2 \gset
+select public.import_add_rows(:'big2', (select jsonb_agg(jsonb_build_object('row_no', n + 1, 'data', jsonb_build_object('code', 'W' || n, 'name', 'W ' || n)))
+                                        from generate_series(1, 2000) n));
+select public.import_add_rows(:'big2', '[{"row_no": 2002, "data": {"code": "W2001", "name": "W 2001"}}]');
+select public.import_validate(:'big2')->>'valid_rows';
+select public.import_commit(:'big2', true)->>'status';
+select test.login(test.id('admin'));
+select public.user_set_status(test.id('company'), :'adm_v', false, 'left');
+select test.login(null);
+select test.eq(public.import_commit_next()->>'status', 'FAILED', 'Importer disabled before the worker ran: the job fails');
+select test.eq((select count(*) from public.units where code like 'W%')::int, 0, '... and nothing is written');
 rollback;
