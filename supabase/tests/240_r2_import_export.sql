@@ -29,7 +29,10 @@ select test.login(test.id('admin'));
 select public.custom_field_save(test.id('company'), null, '{"entity":"ITEM","field_key":"finish","label":"Finish","field_type":"DROPDOWN","options":["ZINC","BLACK"]}');
 
 -- ------------------------------------------------ registry and templates
-select test.ok((select count(*) from jsonb_array_elements(public.import_entities(test.id('company')))) = 10, 'Ten import / export entities');
+-- R3 adds entities; the ten R2 entities must all still be there
+select test.ok((select count(*) from jsonb_array_elements(public.import_entities(test.id('company'))) x
+                where x->>'code' in ('ITEMS', 'ITEM_RATES', 'CUSTOMERS', 'VENDORS', 'GODOWNS', 'LOCATIONS', 'OPENING_STOCK', 'USERS',
+                                     'CUSTOMER_RATES', 'VENDOR_RATES')) = 10, 'Ten import / export entities');
 select test.ok(exists (select 1 from jsonb_array_elements(public.import_entities(test.id('company'))) e, jsonb_array_elements(e->'columns') c
                        where e->>'code' = 'ITEMS' and c->>'key' = 'cf_finish'), 'Custom fields appear as template columns');
 
