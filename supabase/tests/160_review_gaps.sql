@@ -88,7 +88,7 @@ select test.login(test.id('admin'));
 select test.eq((select row(company_id::text, party_id::text, status::text)::text from public.customer_pos where id = (select v from t where k = 'cpo')),
                format('(%s,%s,SUBMITTED)', test.id('company'), :'ca_v'),
                'company_id, party_id and status from the request are ignored');
-select test.ok((select approved_rate is null from public.customer_po_lines where customer_po_id = (select v from t where k = 'cpo')),
+select test.ok(test.raw($q$select approved_rate is null from public.customer_po_lines where customer_po_id = (select v from t where k = 'cpo')$q$)::boolean,
                'approved_rate from the request is ignored');
 select test.login(:'pca_v');
 select test.throws(format($$ update public.customer_pos set company_id = %L $$, :'co2_v'), 'permission denied%',

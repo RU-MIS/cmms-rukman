@@ -32,8 +32,8 @@ insert into t values ('cpo', ((public.portal_customer_po_create(test.id('company
 select test.login(test.id('admin'));
 select test.eq((select row(party_id, status::text)::text from public.customer_pos where id = (select v from t where k = 'cpo')),
                format('(%s,SUBMITTED)', :'ca_v'), 'PO belongs to the logged-in customer, status SUBMITTED');
-select test.eq((select row(quoted_rate, reference_rate, approved_rate)::text from public.customer_po_lines
-                where customer_po_id = (select v from t where k = 'cpo')),
+select test.eq(test.raw($q$select row(quoted_rate, reference_rate, approved_rate)::text from public.customer_po_lines
+                where customer_po_id = (select v from t where k = 'cpo')$q$),
                '(140.0000,145.0000,)', 'Quote 140 stored; reference = customer price 145; NOT approved automatically');
 select test.ok(not exists (select 1 from public.sales_orders where customer_po_id = (select v from t where k = 'cpo')),
                'No sales order before internal review');
@@ -50,7 +50,7 @@ select test.throws(format($$ select public.portal_customer_po_create(%L, jsonb_b
   '%already exists%', 'Duplicate PO number rejected');
 select public.portal_customer_po_cancel(test.id('company'), (select v from t where k = 'cpo2'));
 select test.login(test.id('admin'));
-select test.ok((select quoted_rate is null from public.customer_po_lines where customer_po_id = (select v from t where k = 'cpo2')),
+select test.ok(test.raw($q$select quoted_rate is null from public.customer_po_lines where customer_po_id = (select v from t where k = 'cpo2')$q$)::boolean,
                'Quote price ignored when quoting is OFF');
 select test.eq((select status::text from public.customer_pos where id = (select v from t where k = 'cpo2')), 'CANCELLED',
                'Customer cancelled his SUBMITTED PO');
@@ -75,8 +75,8 @@ insert into t values ('so', (public.customer_po_approve((select v from t where k
   'Agreed at 143', test.id('b336'), true)->>'sales_order_id')::uuid);
 select test.eq((select status::text from public.customer_pos where id = (select v from t where k = 'cpo')), 'APPROVED',
                'Customer PO APPROVED');
-select test.eq((select row(rate, quoted_rate, reference_rate)::text from public.sales_order_lines
-                where order_id = (select v from t where k = 'so')),
+select test.eq(test.raw($q$select row(rate, quoted_rate, reference_rate)::text from public.sales_order_lines
+                where order_id = (select v from t where k = 'so')$q$),
                '(143.0000,140.0000,145.0000)', 'Sales order keeps quote 140 and final approved price 143');
 select test.eq((select row(status::text, customer_po_no)::text from public.sales_orders where id = (select v from t where k = 'so')),
                '(OPEN,PO-A-001)', 'Sales order created (OPEN) from the customer PO');
@@ -100,8 +100,8 @@ select test.login(test.id('admin'));
 insert into t values ('cpo3', public.customer_po_create(test.id('company'), :'cb_v', jsonb_build_object(
   'po_no', 'B-77', 'lines', jsonb_build_array(jsonb_build_object('item_id', test.id('fg'), 'qty', 16000, 'unit_id', test.id('pair'))))));
 insert into t values ('so3', (public.customer_po_approve((select v from t where k = 'cpo3'))->>'sales_order_id')::uuid);
-select test.eq((select rate from public.sales_order_lines where order_id = (select v from t where k = 'so3')),
-               150.0000::numeric(14,4), 'No quote → approved at the price list (150)');
+select test.eq(test.raw($q$select rate from public.sales_order_lines where order_id = (select v from t where k = 'so3')$q$),
+               '150.0000', 'No quote → approved at the price list (150)');
 insert into t select 'so3line', id from public.sales_order_lines where order_id = (select v from t where k = 'so3');
 select test.throws(format($$ select public.sales_order_reserve(%L, %L, 16000) $$, (select v from t where k = 'so3line'), test.id('b336')),
                    'Cannot reserve%16000 PAIR%only%15000 PAIR%', 'Reservation cannot exceed available stock');

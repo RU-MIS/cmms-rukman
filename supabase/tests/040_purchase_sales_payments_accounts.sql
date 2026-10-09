@@ -59,7 +59,7 @@ create or replace function pg_temp.purchase(p_qty numeric, p_po boolean) returns
 $$;
 insert into t select 'pr1', (pg_temp.purchase(60, true)->>'id')::uuid;
 set constraints all immediate; set constraints all deferred;
-select test.eq((select row(taxable_amount, gst_amount, total_amount)::text from public.purchase_receipts where id = (select v from t where k = 'pr1')),
+select test.eq(test.raw($q$select row(taxable_amount, gst_amount, total_amount)::text from public.purchase_receipts where id = (select v from t where k = 'pr1')$q$),
                '(12000.00,600.00,12600.00)', 'GST split: taxable 12000 + 5% = 12600');
 select test.eq((select status::text from public.purchase_orders where id = (select v from t where k = 'po')),
                'PARTIALLY_RECEIVED', 'RM PO partially received');
@@ -226,6 +226,10 @@ select test.eq((select count(*) from public.journal_entries e
                 where e.company_id = test.id('company')
                   and (select sum(debit) - sum(credit) from public.journal_entry_lines where journal_entry_id = e.id) <> 0)::int,
                0, 'Every journal entry balances');
+-- R3 (D3): the result contains the closing stock value -> only with the stock valuation right
+select test.ok((select amount from public.profit_loss(test.id('company'), date '2026-04-01', date '2027-03-31')
+                where section = 'RESULT') is null, 'P&L result masked for a user without stock valuation');
+select test.login(test.id('admin'));
 select test.ok((select amount from public.profit_loss(test.id('company'), date '2026-04-01', date '2027-03-31')
                 where section = 'RESULT') is not null, 'P&L computes a result');
 select test.eq((select sum(case when section = 'ASSET' then amount else -amount end)

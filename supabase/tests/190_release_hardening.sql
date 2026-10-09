@@ -76,7 +76,7 @@ insert into t values ('so', public.doc_save('SALES_ORDER', jsonb_build_object('c
   'party_id', :'cr_v', 'customer_po_no', 'PHONE-1',
   'lines', jsonb_build_array(jsonb_build_object('item_id', test.id('fg'), 'qty', 1, 'unit_id', test.id('pair'), 'rate', 9, 'quoted_rate', 1)))));
 select public.doc_submit('SALES_ORDER', (select v from t where k = 'so'));
-select test.ok((select quoted_rate is null and reference_rate is null and rate = 9 from public.sales_order_lines where order_id = (select v from t where k = 'so')),
+select test.ok(test.raw($q$select quoted_rate is null and reference_rate is null and rate = 9 from public.sales_order_lines where order_id = (select v from t where k = 'so')$q$)::boolean,
                'Manual order keeps its entered rate but no fake quote');
 
 -- ------------------------------------------------ M3 duplicate reminder enqueue is silently skipped

@@ -59,7 +59,7 @@ select test.ok(not exists (select 1 from public.item_rate_history where item_id 
                'Sales does not see the purchase rate history');
 update public.items set sale_price = 9 where id = :'b1_v';
 select test.eq((select sale_price from public.v_items where id = :'b1_v'), 1.6000::numeric, 'Sales cannot change the item (RLS: no row updated)');
-select test.throws($$ select * from public.stock_valuation(test.id('company'), current_date) $$, 'Permission denied: items.view_cost%',
+select test.throws($$ select * from public.stock_valuation(test.id('company'), current_date) $$, 'Permission denied: Stock valuation needs the stock valuation right%',
                    'No stock valuation without the cost right');
 select test.throws($$ select rate from public.stock_movements limit 1 $$, '%permission denied%', 'Movement cost not readable');
 

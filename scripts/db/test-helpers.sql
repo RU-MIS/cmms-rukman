@@ -177,3 +177,15 @@ begin
 end $$;
 
 grant execute on all functions in schema test to authenticated;
+
+-- Stored values for business-logic assertions (posting results), read as the
+-- test owner: R3 revokes the money columns from `authenticated`, and access
+-- itself is tested separately (310_r3_financial_security).
+create or replace function test.raw(p_sql text)
+returns text language plpgsql security definer as $$
+declare v text;
+begin
+  execute 'select (' || p_sql || ')::text' into v;
+  return v;
+end $$;
+grant execute on function test.raw(text) to authenticated;
