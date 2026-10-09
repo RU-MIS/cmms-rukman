@@ -220,17 +220,8 @@ grant select on public.v_items to authenticated, service_role;
 -- Inventory list: same columns as before, sale price masked.
 drop view public.v_inventory_items;
 create view public.v_inventory_items with (security_invoker = true) as
- WITH phys AS (
-         SELECT stock_balances.company_id, stock_balances.item_id, sum(stock_balances.base_qty) AS physical,
-            count(*) FILTER (WHERE stock_balances.base_qty <> 0::numeric) AS locations,
-            count(DISTINCT stock_balances.godown_id) FILTER (WHERE stock_balances.base_qty <> 0::numeric) AS godowns
-           FROM stock_balances
-          GROUP BY stock_balances.company_id, stock_balances.item_id
-        ), res AS (
-         SELECT stock_reserved.company_id, stock_reserved.item_id, sum(stock_reserved.reserved_qty) AS reserved
-           FROM stock_reserved
-          GROUP BY stock_reserved.company_id, stock_reserved.item_id
-        )
+ -- per item through the primary-key index (a lateral lookup per item keeps
+ -- the plan stable with the masked item view and the RLS InitPlans)
  SELECT i.company_id, i.id AS item_id, i.code AS item_code, i.name AS item_name, i.item_kind, i.category_id,
     c.name AS category_name, i.brand_id, i.is_active, u.code AS base_unit, dp.factor AS pack_factor, pu.code AS pack_unit,
     i.sale_price, i.min_stock, i.reorder_level, i.max_stock,
@@ -247,8 +238,14 @@ create view public.v_inventory_items with (security_invoker = true) as
    FROM public.v_items i
      JOIN units u ON u.id = i.base_unit_id
      LEFT JOIN item_categories c ON c.id = i.category_id
-     LEFT JOIN phys ON phys.item_id = i.id AND phys.company_id = i.company_id
-     LEFT JOIN res ON res.item_id = i.id AND res.company_id = i.company_id
+     LEFT JOIN LATERAL (
+         SELECT sum(b.base_qty) AS physical,
+                count(*) FILTER (WHERE b.base_qty <> 0::numeric) AS locations,
+                count(DISTINCT b.godown_id) FILTER (WHERE b.base_qty <> 0::numeric) AS godowns
+           FROM stock_balances b WHERE b.company_id = i.company_id AND b.item_id = i.id) phys ON true
+     LEFT JOIN LATERAL (
+         SELECT sum(r.reserved_qty) AS reserved
+           FROM stock_reserved r WHERE r.company_id = i.company_id AND r.item_id = i.id) res ON true
      LEFT JOIN LATERAL app.default_packing(i.id, CURRENT_DATE) dp(unit_id, factor) ON true
      LEFT JOIN units pu ON pu.id = dp.unit_id
   WHERE NOT i.is_deleted AND i.is_stock_tracked;
