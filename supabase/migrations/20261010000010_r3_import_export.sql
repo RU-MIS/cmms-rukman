@@ -251,6 +251,28 @@ begin
 end;
 $$;
 
+-- a code from the name when the optional code column is left empty (brands / categories), unique in the company
+create or replace function app.code_from_name(p_company_id uuid, p_table text, p_name text)
+returns text
+language plpgsql stable security definer
+set search_path = public, app, pg_temp
+as $$
+declare v_base text := left(trim(both '-' from upper(regexp_replace(coalesce(p_name, ''), '[^A-Za-z0-9]+', '-', 'g'))), 20);
+        v text; i int := 1; v_taken boolean;
+begin
+  if v_base = '' then v_base := 'X'; end if;
+  v := v_base;
+  loop
+    execute format('select exists (select 1 from public.%I where company_id = $1 and upper(code) = $2)', p_table) into v_taken using p_company_id, v;
+    exit when not v_taken;
+    i := i + 1;
+    v := v_base || '-' || i;
+  end loop;
+  return v;
+end;
+$$;
+revoke all on function app.code_from_name(uuid, text, text) from public, anon;
+
 create or replace function app.import_apply_r3(p_company_id uuid, p_entity text, p_job_id uuid, r jsonb, p_action text,
                                                p_target uuid, x jsonb)
 returns uuid
@@ -275,13 +297,16 @@ begin
     end if;
     if p_action = 'CREATE' then
       insert into public.item_categories (company_id, code, name, parent_id)
-      values (p_company_id, nullif(upper(r->>'code'), ''), r->>'name', v_parent) returning id into v_id;
+      values (p_company_id, coalesce(nullif(upper(r->>'code'), ''), app.code_from_name(p_company_id, 'item_categories', r->>'name')), r->>'name', v_parent)
+      returning id into v_id;
     else
       update public.item_categories set code = coalesce(nullif(upper(r->>'code'), ''), code), parent_id = coalesce(v_parent, parent_id) where id = v_id;
     end if;
   when 'BRANDS' then
     if p_action = 'CREATE' then
-      insert into public.brands (company_id, code, name) values (p_company_id, nullif(upper(r->>'code'), ''), r->>'name') returning id into v_id;
+      insert into public.brands (company_id, code, name)
+      values (p_company_id, coalesce(nullif(upper(r->>'code'), ''), app.code_from_name(p_company_id, 'brands', r->>'name')), r->>'name')
+      returning id into v_id;
     else
       update public.brands set code = coalesce(nullif(upper(r->>'code'), ''), code) where id = v_id;
     end if;

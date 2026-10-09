@@ -63,17 +63,18 @@ returns record
 language plpgsql stable security definer
 set search_path = public, app, pg_temp
 as $$
-declare v_data jsonb := p_data; d app.doc_types; v_hdr jsonb; c text; r record;
+declare v_data jsonb; v_stored jsonb; d app.doc_types; v_hdr jsonb; c text; r record;
 begin
-  -- the data of the row itself (fetched when the caller audited only an action)
-  if v_data is null and p_row_id ~ '^[0-9a-f-]{36}$'
+  -- the stored row (callers often audit only an action payload), overlaid with the audited data
+  if p_row_id ~ '^[0-9a-f-]{36}$'
      and exists (select 1 from pg_attribute where attrelid = to_regclass('public.' || quote_ident(p_table)) and attname = 'id' and not attisdropped) then
     begin
-      execute format('select to_jsonb(x) from public.%I x where x.id = $1::uuid', p_table) into v_data using p_row_id;
-    exception when others then v_data := null;
+      execute format('select to_jsonb(x) from public.%I x where x.id = $1::uuid', p_table) into v_stored using p_row_id;
+    exception when others then v_stored := null;
     end;
   end if;
-  if v_data is null then return; end if;
+  if v_stored is null and p_data is null then return; end if;
+  v_data := coalesce(v_stored, '{}'::jsonb) || case when jsonb_typeof(p_data) = 'object' then p_data else '{}'::jsonb end;
   -- lines: godown / party from the header
   select * into d from app.doc_types where line_table = p_table;
   if d.doc_type is not null and v_data ? d.line_fk then
@@ -235,7 +236,7 @@ begin
     into v
   from (select a.id, a.at, a.table_name, a.row_id, a.action, a.actor_id, a.request_meta from public.audit_log a
         where a.company_id = p_company_id
-          and (p_before_id is null or a.id < p_before_id)
+          and (p_before_id is null or (a.at, a.id) < (select b.at, b.id from public.audit_log b where b.id = p_before_id))
           and (p_filters->>'from' is null or a.at >= (p_filters->>'from')::date)
           and (p_filters->>'to' is null or a.at < (p_filters->>'to')::date + 1)
           and (p_filters->>'actor_id' is null or a.actor_id = (p_filters->>'actor_id')::uuid)
@@ -260,12 +261,18 @@ returns jsonb
 language plpgsql
 set search_path = public, app, pg_temp
 as $$
-declare v jsonb;
+declare v jsonb := '[]'; v_page jsonb; v_before bigint;
 begin
   if not app.has_permission(p_company_id, 'audit.export') then
     raise exception 'Permission denied: audit.export is required' using errcode = '42501';
   end if;
-  v := public.audit_search(p_company_id, p_filters, 500, null);
+  -- every filtered row (pages of 500), up to the export limit of 50,000 rows
+  loop
+    v_page := public.audit_search(p_company_id, p_filters, 500, v_before);
+    v := v || v_page;
+    exit when jsonb_array_length(v_page) < 500 or jsonb_array_length(v) >= 50000;
+    v_before := (v_page->-1->>'id')::bigint;
+  end loop;
   perform app.log_export(p_company_id, 'AUDIT', jsonb_array_length(v));
   return v;
 end;
