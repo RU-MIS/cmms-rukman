@@ -37,7 +37,10 @@ as $$
     when 'LANDED'          then app.has_permission(p_company_id, 'costs.view_landed_cost')
     when 'AVERAGE'         then app.has_permission(p_company_id, 'items.view_cost')
     when 'VALUATION'       then app.has_permission(p_company_id, 'costs.view_stock_valuation')
+                                and app.has_permission(p_company_id, 'items.view_cost')   -- value ÷ qty = average cost
     when 'AMOUNT'          then app.has_permission(p_company_id, 'accounts.view_amounts')
+    when 'LANDED_PURCHASE' then app.has_permission(p_company_id, 'costs.view_landed_cost')
+                                and app.has_permission(p_company_id, 'items.view_purchase_rate')
     when 'AMOUNT_SALE'     then app.has_permission(p_company_id, 'accounts.view_amounts')
                                 and app.has_permission(p_company_id, 'items.view_sale_rate')
     when 'AMOUNT_PURCHASE' then app.has_permission(p_company_id, 'accounts.view_amounts')
@@ -50,7 +53,7 @@ as $$
                                 and app.has_permission(p_company_id, 'items.view_sale_rate')
                                 and app.has_permission(p_company_id, 'items.view_purchase_rate')
     when 'PROFIT_STOCK'    then secure.class_ok(p_company_id, 'PROFIT')
-                                and app.has_permission(p_company_id, 'costs.view_stock_valuation')
+                                and secure.class_ok(p_company_id, 'VALUATION')
     else false end
 $$;
 
@@ -198,8 +201,9 @@ insert into secure.value_sources values
   ('job_work_returns',       'public.job_work_returns t', 't.company_id', null),
   ('worker_earning_lines',   'public.worker_earning_lines t join public.worker_earnings h on h.id = t.earning_id', 'h.company_id', null),
   ('worker_earnings',        'public.worker_earnings t', 't.company_id', null),
-  ('stock_movements',        'public.stock_movements t', 't.company_id', null),
-  ('stock_adjustment_lines', 'public.stock_adjustment_lines t join public.stock_adjustments h on h.id = t.adjustment_id', 'h.company_id', null),
+  ('stock_movements',        'public.stock_movements t', 't.company_id', 'secure.movement_class(t.movement_type::text, t.direction)'),
+  ('stock_adjustment_lines', 'public.stock_adjustment_lines t join public.stock_adjustments h on h.id = t.adjustment_id', 'h.company_id',
+                             'secure.movement_class(null, t.direction)'),
   ('vouchers',               'public.vouchers t', 't.company_id', 't.party_side'),
   ('voucher_lines',          'public.voucher_lines t join public.vouchers h on h.id = t.voucher_id', 'h.company_id', 'h.party_side'),
   ('voucher_allocations',    'public.voucher_allocations t join public.vouchers h on h.id = t.voucher_id', 'h.company_id', 'h.party_side'),
@@ -209,13 +213,31 @@ insert into secure.value_sources values
 -- -----------------------------------------------------------------------------
 -- Value views (generated from the registry) + column privileges
 -- -----------------------------------------------------------------------------
+-- the rate on a stock movement is the rate of its source document: a dispatch carries the sale rate, a
+-- return the purchase rate, a receipt the purchase rate that is also its landed cost; other inward rows
+-- carry a landed cost, other outward rows the average cost
+create or replace function secure.movement_class(p_movement_type text, p_direction smallint)
+returns text
+language sql immutable
+as $$
+  select case
+    when p_movement_type in ('SALE_DISPATCH', 'JOB_WORK_ISSUE') then 'SALE'
+    when p_movement_type in ('PURCHASE_RETURN', 'JOB_WORK_RETURN') then 'PURCHASE'
+    when p_movement_type in ('PURCHASE_RECEIPT', 'JOB_WORK_RECEIPT') then 'LANDED_PURCHASE'
+    when p_direction = 1 then 'LANDED'
+    else 'AVERAGE' end
+$$;
+
 create or replace function secure.class_condition(p_class text, p_company text, p_side text)
 returns text
 language sql immutable
 as $$
   select case p_class
-    when 'MOVEMENT' then format('(case when t.direction = 1 then %1$s = any ((select secure.allowed(''LANDED''))::uuid[]) '
-                                || 'else %1$s = any ((select secure.allowed(''AVERAGE''))::uuid[]) end)', p_company)
+    when 'MOVEMENT' then format('(case %2$s when ''SALE'' then %1$s = any ((select secure.allowed(''SALE''))::uuid[]) '
+                                || 'when ''PURCHASE'' then %1$s = any ((select secure.allowed(''PURCHASE''))::uuid[]) '
+                                || 'when ''LANDED_PURCHASE'' then %1$s = any ((select secure.allowed(''LANDED_PURCHASE''))::uuid[]) '
+                                || 'when ''LANDED'' then %1$s = any ((select secure.allowed(''LANDED''))::uuid[]) '
+                                || 'else %1$s = any ((select secure.allowed(''AVERAGE''))::uuid[]) end)', p_company, p_side)
     when 'AMOUNT_SIDE' then format('(case %2$s when ''RECEIVABLE'' then %1$s = any ((select secure.allowed(''AMOUNT_SALE''))::uuid[]) '
                                    || 'when ''PAYABLE'' then %1$s = any ((select secure.allowed(''AMOUNT_PURCHASE''))::uuid[]) '
                                    || 'else %1$s = any ((select secure.allowed(''PROFIT''))::uuid[]) end)', p_company, p_side)
@@ -261,6 +283,7 @@ create table public.item_cost_summary (
   in_value   numeric not null default 0
 );
 alter table public.item_cost_summary enable row level security;   -- no policy: read only through secure views
+revoke all on public.item_cost_summary from anon, authenticated;
 grant all on public.item_cost_summary to service_role;
 insert into public.item_cost_summary (item_id, company_id, in_qty, in_value)
 select m.item_id, m.company_id, sum(m.base_qty), sum(m.base_qty * m.rate)
@@ -926,6 +949,11 @@ values ('item_cost_summary', 'ITEM', '{item_id}', false, false) on conflict do n
 create policy item_cost_summary_item_scope on public.item_cost_summary as restrictive for select to authenticated
   using ((company_id = any ((select app.scope_unrestricted_company_ids('ITEM'))::uuid[]))
          or (item_id = any ((select app.scope_allowed_ids('ITEM'))::uuid[])));
+
+insert into secure.column_whitelist values
+  ('item_cost_summary', 'in_value', 'not readable by API users; served through secure.item_cost_values (AVERAGE)'),
+  ('v_customer_bill_register', 'debit_note_refs', 'document references, not a value')
+on conflict do nothing;
 
 insert into secure.reviewed_functions values
   ('public.profit_loss', 'PROFIT; stock lines and result need VALUATION'),

@@ -767,3 +767,11 @@ insert into secure.reviewed_functions values
   ('public.party_rate_save', 'invoker write: row-level policies + rate-change trigger'),
   ('public.rate_change_decide', 'write; requires rates.approve + class + scope; returns no values')
 on conflict do nothing;
+insert into secure.sensitive_columns (table_name, column_name, class, note) values
+  ('rate_change_requests', 'old_rate', 'ROW_LEVEL', 'read policy by rate_type (SALE / PURCHASE) + item / party scope'),
+  ('rate_change_requests', 'new_rate', 'ROW_LEVEL', 'read policy by rate_type (SALE / PURCHASE) + item / party scope')
+on conflict do nothing;
+insert into secure.column_whitelist values
+  ('rate_change_requests', 'rate_type', 'type, not a value'),
+  ('approval_rules', 'min_amount', 'approval threshold (configuration), not a business value')
+on conflict do nothing;

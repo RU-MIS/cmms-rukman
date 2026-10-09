@@ -174,10 +174,12 @@ as $$
   select case
     when p_column in ('rate', 'old_rate', 'new_rate') and p_table in ('party_item_rates', 'item_rate_history', 'rate_change_requests') then
       case when p_data->>'rate_type' in ('SALE', 'ISSUE') then 'SALE' else 'PURCHASE' end
+    when p_table = 'party_opening_balances' and p_column = 'amount' then
+      case p_data->>'side' when 'RECEIVABLE' then 'AMOUNT_SALE' else 'AMOUNT_PURCHASE' end
     when p_table = 'journal_entry_lines' and p_column in ('debit', 'credit') then
       case p_data->>'ledger_class' when 'RECEIVABLE' then 'AMOUNT_SALE' when 'PAYABLE' then 'AMOUNT_PURCHASE' else 'PROFIT' end
     else (select case s.class
-                   when 'MOVEMENT' then case when p_data->>'direction' = '1' then 'LANDED' else 'AVERAGE' end
+                   when 'MOVEMENT' then secure.movement_class(p_data->>'movement_type', (p_data->>'direction')::smallint)
                    when 'AMOUNT_SIDE' then case coalesce(p_data->>'party_side', case p_data->>'side' when 'CUSTOMER' then 'RECEIVABLE'
                                                                                     when 'VENDOR' then 'PAYABLE' end)
                                              when 'RECEIVABLE' then 'AMOUNT_SALE' when 'PAYABLE' then 'AMOUNT_PURCHASE' else 'PROFIT' end

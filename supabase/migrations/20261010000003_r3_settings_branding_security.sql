@@ -507,3 +507,9 @@ grant execute on function public.settings_get(uuid), public.settings_save(uuid, 
                           public.password_policy() to authenticated, service_role;
 grant execute on function app.temp_password_expired(uuid), app.branding_json(uuid) to authenticated, service_role;
 revoke all on function app.tg_company_branding_row() from public, anon, authenticated;
+
+-- financial-security registry (migration 2): new money-like setting columns
+insert into secure.column_whitelist values
+  ('company_settings', 'rate_change_approval', 'setting'),
+  ('company_settings', 'sale_rate_limit_policy', 'setting')
+on conflict do nothing;

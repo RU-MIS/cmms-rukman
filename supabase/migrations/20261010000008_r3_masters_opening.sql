@@ -706,3 +706,18 @@ grant execute on function public.sales_order_set_override_reason(uuid, text), pu
                           public.opening_balance_reverse(uuid, text) to authenticated, service_role;
 revoke all on function app.tg_items_rate_limit_guard(), app.tg_sale_rate_limit(), app.tg_godown_transaction_flags(),
                        app.tg_party_on_hold(), app.master_references(text, uuid) from public, anon, authenticated;
+
+-- financial-security registry (migration 2)
+insert into secure.sensitive_columns (table_name, column_name, class, note) values
+  ('party_opening_balances', 'amount', 'ROW_LEVEL', 'read policy by side: AMOUNT_SALE / AMOUNT_PURCHASE')
+on conflict do nothing;
+insert into secure.column_whitelist values ('sales_orders', 'rate_override_reason', 'text, not a value')
+on conflict do nothing;
+insert into secure.column_whitelist values
+  ('v_items', 'can_edit_rate', 'flag, not a value'), ('v_items', 'can_view_sale_rate', 'flag, not a value'),
+  ('v_items', 'can_view_purchase_rate', 'flag, not a value'), ('v_items', 'gst_rate', 'tax percentage, not a value')
+on conflict do nothing;
+insert into secure.reviewed_functions values
+  ('public.opening_balance_post', 'write; accounts.opening_balance + AMOUNT_SALE / AMOUNT_PURCHASE of the side; returns ids only'),
+  ('public.opening_balance_reverse', 'write; accounts.opening_balance + class of the side; returns ids only')
+on conflict do nothing;

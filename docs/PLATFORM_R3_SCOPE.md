@@ -380,6 +380,7 @@ Rights (field level, configured in the permission matrix):
 
 Inference rules (database-enforced): payable-side amounts need `accounts.view_amounts` **and** `items.view_purchase_rate`; receivable-side
 amounts need `accounts.view_amounts` **and** `items.view_sale_rate`; margin needs `sales.view_margin` + sale rate + average cost; accounting
+stock valuation needs `costs.view_stock_valuation` **and** average cost (value ÷ quantity is the average cost); accounting
 reports and non-party journal lines need `reports.view_profit` + financial amounts + both rate rights; P&L / balance-sheet stock lines and
 anything computed from them (net profit, totals) additionally need `costs.view_stock_valuation`. OWNER has every right.
 

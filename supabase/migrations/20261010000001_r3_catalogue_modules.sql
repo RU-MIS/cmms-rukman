@@ -177,6 +177,8 @@ insert into app.permission_derivations (source_code, target_code) values
   ('voucher.view', 'items.view_sale_rate'), ('voucher.view', 'items.view_purchase_rate'),
   ('accounts.view', 'items.view_sale_rate'), ('accounts.view', 'items.view_purchase_rate'),
   ('accounts.view', 'costs.view_stock_valuation'), ('voucher.view', 'costs.view_stock_valuation'),
+  -- stock value ÷ quantity is the average cost: valuation implies the average-cost right (inference rule)
+  ('accounts.view', 'items.view_cost'), ('voucher.view', 'items.view_cost'),
   ('accounts.create', 'accounts.opening_balance'),
   ('sales_order.approve', 'sales_order.override_rate_limit');
 -- document / accounting views -> rate and cost rights only where R2 made no decision

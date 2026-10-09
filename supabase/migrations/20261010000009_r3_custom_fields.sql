@@ -435,3 +435,6 @@ revoke all on function public.custom_private_values(uuid, text, uuid[]), public.
 grant execute on function public.custom_private_values(uuid, text, uuid[]), public.custom_search(uuid, text, text, text) to authenticated, service_role;
 grant execute on function app.custom_field_columns(uuid, text), app.custom_record_allowed(text, uuid, uuid) to authenticated, service_role;
 revoke all on function app.tg_custom_fields() from public, anon, authenticated;
+
+insert into secure.column_whitelist values ('custom_field_definitions', 'default_value', 'field configuration, not a business value')
+on conflict do nothing;
