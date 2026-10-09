@@ -22,7 +22,7 @@ export default function CustomFieldsPage() {
     .eq('company_id', companyId).order('entity').order('sort_order').order('label')), [companyId]);
   const [entity, setEntity] = useState('');
   const [draft, setDraft] = useState<Draft | null>(null);
-  const edit = can('settings.edit');
+  const edit = can('settings_custom_fields.edit');
   const rows = (list.data ?? []).filter((d) => !entity || d.entity === entity);
 
   const save = () => run(async () => {

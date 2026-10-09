@@ -26,7 +26,7 @@ export default function GodownsPage() {
     if (!g?.code?.trim() || !g?.name?.trim()) throw new Error('Code and name are required');
     const row: Record<string, unknown> = { code: g.code.trim(), name: g.name.trim(), godown_type: g.godown_type ?? 'OWN_STORE',
       is_active: g.is_active ?? true, portal_visible: g.portal_visible ?? true };
-    if (can('settings.edit')) row.allow_negative = g.allow_negative ?? false;
+    if (can('settings_inventory.edit')) row.allow_negative = g.allow_negative ?? false;
     if (g.id) must(await sb().from('godowns').update(row).eq('id', g.id));
     else must(await sb().from('godowns').insert({ ...row, company_id: companyId }));
     setG(null); godowns.reload(); locs.reload();
@@ -98,7 +98,7 @@ export default function GodownsPage() {
             <Toggle label="Active" checked={g.is_active ?? true} onChange={(v) => setG({ ...g, is_active: v })} />
             <Toggle label="Counted in portal stock" hint="Stock of this godown is used for customer / vendor stock visibility"
               checked={g.portal_visible ?? true} onChange={(v) => setG({ ...g, portal_visible: v })} />
-            {can('settings.edit') && <Toggle label="Allow negative stock in this godown only" hint="Owner/Admin only. Company-wide setting is in Settings."
+            {can('settings_inventory.edit') && <Toggle label="Allow negative stock in this godown only" hint="Owner/Admin only. Company-wide setting is in Settings."
               checked={g.allow_negative ?? false} onChange={(v) => setG({ ...g, allow_negative: v })} />}
             <div className="flex justify-end"><Button busy={busy} onClick={saveGodown}>Save</Button></div>
           </div>

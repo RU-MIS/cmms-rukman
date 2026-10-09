@@ -2,7 +2,7 @@
 import { Suspense, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { must, rpc, sb } from '@/lib/supabase';
+import { must, rpc, sb, withValues } from '@/lib/supabase';
 import { useCompanyId, useSession } from '@/lib/session';
 import { useData } from '@/lib/useData';
 import { useGodowns, useItems, useLocations, useParties, usePackings, useUnitsAll } from '@/lib/masters';
@@ -22,10 +22,10 @@ function Receiving() {
   const [po, setPo] = useState<string>(poParam ?? '');
   const pending = useData(async () => must<Pending[]>(await sb().from('v_purchase_pending_lines').select('*').eq('company_id', companyId)
     .order('po_date').order('po_no')), [companyId]);
-  const recent = useData(async () => must<{ id: string; doc_no: string; doc_date: string; status: string; total_amount: number; supplier_bill_no: string | null;
+  const recent = useData(async () => await withValues(must<{ id: string; doc_no: string; doc_date: string; status: string; total_amount: number; supplier_bill_no: string | null;
     parties: { name: string } | null; godowns: { name: string } | null }[]>(await sb().from('purchase_receipts')
-    .select('id, doc_no, doc_date, status, total_amount, supplier_bill_no, parties(name), godowns(name)').eq('company_id', companyId)
-    .order('created_at', { ascending: false }).limit(20)), [companyId]);
+    .select('id, doc_no, doc_date, status, supplier_bill_no, parties(name), godowns(name)').eq('company_id', companyId)
+    .order('created_at', { ascending: false }).limit(20)), 'v_purchase_receipts', ['total_amount']), [companyId]);
   const pos = useMemo(() => {
     const m = new Map<string, Pending[]>();
     for (const r of pending.data ?? []) m.set(r.order_id, [...(m.get(r.order_id) ?? []), r]);

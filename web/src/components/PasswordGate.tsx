@@ -2,14 +2,19 @@
 import { useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { sb } from '@/lib/supabase';
-import { useSession } from '@/lib/session';
+import { useSession, type PasswordPolicy } from '@/lib/session';
 import { Button, Card, Field, Input, useAction } from './ui';
 import { UserMenu } from './AppShell';
 
-/** Password rules shown to the user; Supabase Auth enforces its own minimum as well. */
-export function passwordProblem(pw: string, repeat: string): string | null {
-  if (pw.length < 10) return 'Password must have at least 10 characters';
-  if (!/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return 'Use letters and digits';
+/**
+ * Password rules of the company (Security settings; the strictest over the
+ * user's companies). The admin-users function enforces the same policy and
+ * Supabase Auth its own minimum.
+ */
+export function passwordProblem(pw: string, repeat: string, policy?: PasswordPolicy): string | null {
+  const min = Math.max(policy?.min_length ?? 10, 8);
+  if (pw.length < min) return `Password must have at least ${min} characters`;
+  if ((policy?.require_mixed ?? true) && (!/[A-Za-z]/.test(pw) || !/\d/.test(pw))) return 'Use letters and digits';
   if (pw !== repeat) return 'Passwords do not match';
   return null;
 }
@@ -27,6 +32,18 @@ export function PasswordGate({ children }: { children: ReactNode }) {
   const [pw2, setPw2] = useState('');
   const { busy, run } = useAction();
   if (!session || !boot?.must_change_password || path.startsWith('/login')) return <>{children}</>;
+  if (boot.temp_password_expired) {
+    return (
+      <div className="mx-auto max-w-md p-4 pt-10">
+        <div className="mb-4 flex justify-end"><UserMenu /></div>
+        <Card title="Temporary password expired">
+          <p role="alert" className="text-sm text-slate-700">
+            The temporary password for <b>{boot.email}</b> has expired. Ask your administrator for a new password.
+          </p>
+        </Card>
+      </div>
+    );
+  }
   return (
     <div className="mx-auto max-w-md p-4 pt-10">
       <div className="mb-4 flex justify-end"><UserMenu /></div>
@@ -37,7 +54,7 @@ export function PasswordGate({ children }: { children: ReactNode }) {
         <form className="space-y-3" onSubmit={(e) => {
           e.preventDefault();
           run(async () => {
-            const problem = passwordProblem(pw, pw2);
+            const problem = passwordProblem(pw, pw2, boot.password_policy);
             if (problem) throw new Error(problem);
             const { error } = await sb().auth.updateUser({ password: pw });
             if (error) throw error;

@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { must, rpc, sb } from '@/lib/supabase';
+import { must, rpc, sb, withValues } from '@/lib/supabase';
 import { useCompanyId, useSession } from '@/lib/session';
 import { useData } from '@/lib/useData';
 import { useParties } from '@/lib/masters';
@@ -15,10 +15,10 @@ export default function PaymentsPage() {
   const companyId = useCompanyId();
   const { can } = useSession();
   const [form, setForm] = useState<'RECEIPT' | 'PAYMENT' | 'CONTRA' | null>(null);
-  const list = useData(async () => must<{ id: string; doc_no: string | null; doc_date: string; voucher_type: string; payment_method: string | null; amount: number;
+  const list = useData(async () => await withValues(must<{ id: string; doc_no: string | null; doc_date: string; voucher_type: string; payment_method: string | null; amount: number;
     status: string; instrument_ref: string | null; parties: { name: string } | null; acc: { name: string } | null; to: { name: string } | null }[]>(
-    await sb().from('vouchers').select('id, doc_no, doc_date, voucher_type, payment_method, amount, status, instrument_ref, parties(name), acc:accounts!vouchers_cash_bank_account_id_fkey(name), to:accounts!vouchers_to_account_id_fkey(name)')
-      .eq('company_id', companyId).in('voucher_type', ['RECEIPT', 'PAYMENT', 'CONTRA']).order('created_at', { ascending: false }).limit(100)), [companyId]);
+    await sb().from('vouchers').select('id, doc_no, doc_date, voucher_type, payment_method, status, instrument_ref, parties(name), acc:accounts!vouchers_cash_bank_account_id_fkey(name), to:accounts!vouchers_to_account_id_fkey(name)')
+      .eq('company_id', companyId).in('voucher_type', ['RECEIPT', 'PAYMENT', 'CONTRA']).order('created_at', { ascending: false }).limit(100)), 'v_vouchers', ['amount']), [companyId]);
   return (
     <div>
       <PageHeader title="Payments" subtitle="Customer receipts, vendor payments and cash ↔ bank transfers — one payment can settle many bills, one bill can get many payments"

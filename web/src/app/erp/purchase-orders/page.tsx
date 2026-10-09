@@ -2,7 +2,7 @@
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { must, rpc, sb } from '@/lib/supabase';
+import { must, rpc, sb, withValues } from '@/lib/supabase';
 import { useCompanyId, useSession } from '@/lib/session';
 import { useData } from '@/lib/useData';
 import { useGodowns, useItems, useParties, usePackings, useUnitsAll } from '@/lib/masters';
@@ -95,8 +95,8 @@ function PoDetail({ id }: { id: string }) {
   const { busy, run } = useAction();
   const po = useData(async () => must<PO>(await sb().from('purchase_orders').select('id, doc_no, doc_date, expected_date, status, remarks, party_id, godown_id, close_reason, parties(name, email)').eq('id', id).single()), [id]);
   const lines = useData(async () => must<Record<string, string | number>[]>(await sb().from('v_purchase_order_lines').select('*').eq('order_id', id).order('line_no')), [id]);
-  const draftLines = useData(async () => must<{ id: string; qty: number; rate: number | null; items: { name: string } | null; units: { code: string } | null }[]>(
-    await sb().from('purchase_order_lines').select('id, qty, rate, items(name), units(code)').eq('order_id', id).order('line_no')), [id]);
+  const draftLines = useData(async () => await withValues(must<{ id: string; qty: number; rate: number | null; items: { name: string } | null; units: { code: string } | null }[]>(
+    await sb().from('purchase_order_lines').select('id, qty, items(name), units(code)').eq('order_id', id).order('line_no')), 'v_purchase_order_line_rates', ['rate']), [id]);
   const mails = useData(async () => must<{ id: string; kind: string; status: string; to_emails: string[]; created_at: string; last_error: string | null }[]>(
     await sb().from('email_outbox').select('id, kind, status, to_emails, created_at, last_error').eq('entity_type', 'purchase_order').eq('entity_id', id).order('created_at')), [id]);
   const reload = () => { po.reload(); lines.reload(); mails.reload(); };

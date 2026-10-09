@@ -2,10 +2,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { errorText, rpc, sb } from './supabase';
+import type { Branding } from './branding';
 
-export interface CompanyAccess { id: string; name: string; code: string; roles: string[] }
-export interface PortalAccess { company_id: string; company_name: string; kind: 'CUSTOMER' | 'VENDOR'; party_id: string; party_name: string; enabled: boolean }
-export interface Bootstrap { user_id: string; email: string; full_name: string; must_change_password?: boolean; companies: CompanyAccess[]; portals: PortalAccess[] }
+export interface CompanyAccess { id: string; name: string; code: string; roles: string[]; branding?: Branding;
+  idle_logout_minutes?: number | null; disabled_modules?: string[] }
+export interface PortalAccess { company_id: string; company_name: string; kind: 'CUSTOMER' | 'VENDOR'; party_id: string; party_name: string; enabled: boolean;
+  branding?: Branding }
+export interface PasswordPolicy { min_length: number; require_mixed: boolean }
+export interface Bootstrap { user_id: string; email: string; full_name: string; must_change_password?: boolean; temp_password_expired?: boolean;
+  password_policy?: PasswordPolicy; companies: CompanyAccess[]; portals: PortalAccess[] }
 
 interface SessionState {
   ready: boolean;

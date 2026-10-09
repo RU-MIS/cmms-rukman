@@ -38,3 +38,15 @@ export function must<T>(res: { data: unknown; error: unknown }): T {
 export async function rpc<T = unknown>(fn: string, args?: Record<string, unknown>): Promise<T> {
   return must<T>(await sb().rpc(fn, args ?? {}));
 }
+
+/**
+ * Money columns are not readable on the base tables (R3 field security). Rows
+ * are read from the table (with its joins) and their values are added from the
+ * masked `v_*` view: NULL where the user may not see them.
+ */
+export async function withValues<T extends { id: string }>(rows: T[], view: string, columns: string[], key = 'id'): Promise<T[]> {
+  if (rows.length === 0) return rows;
+  const vals = must<Record<string, unknown>[]>(await sb().from(view).select([key, ...columns].join(', ')).in(key, rows.map((r) => r.id)));
+  const byId = new Map(vals.map((v) => [String(v[key]), v]));
+  return rows.map((r) => ({ ...r, ...Object.fromEntries(columns.map((c) => [c, byId.get(r.id)?.[c] ?? null])) }));
+}

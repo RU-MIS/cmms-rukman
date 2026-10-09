@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from 'react';
 import { brand, rpc } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { useData } from '@/lib/useData';
+import { useApplyBranding, useAssetUrl } from '@/lib/branding';
 import { ErrorBox, Spinner } from './ui';
 import { UserMenu } from './AppShell';
 
@@ -24,6 +25,9 @@ export function portalTabs(ctx: PortalContext, tabs: { id: string; label: string
 export function PortalShell({ companyId, kind, children }: { companyId: string; kind: 'CUSTOMER' | 'VENDOR'; children: (ctx: PortalContext) => ReactNode }) {
   const { ready, session, boot } = useSession();
   const router = useRouter();
+  const branding = boot?.portals.find((x) => x.company_id === companyId)?.branding;
+  useApplyBranding(branding, kind === 'CUSTOMER' ? 'Customer portal' : 'Vendor portal');
+  const logo = useAssetUrl(branding?.logo_path);
   useEffect(() => { if (ready && !session) router.replace('/login/'); }, [ready, session, router]);
   const ctx = useData(async () => (session && companyId ? rpc<PortalContext>('portal_context', { p_company_id: companyId, p_kind: kind }) : null), [session?.user.id, companyId, kind]);
   if (!ready || !session || (ctx.loading && !ctx.data)) return <Spinner />;
@@ -31,9 +35,13 @@ export function PortalShell({ companyId, kind, children }: { companyId: string; 
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <div>
-            <div className="font-semibold text-slate-800">{ctx.data?.company_name ?? brand.name}</div>
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {logo && <img src={logo} alt="" data-testid="company-logo" className="h-8 w-auto" />}
+            <div>
+            <div className="font-semibold text-slate-800" data-testid="brand-name">{branding?.app_name || ctx.data?.company_name || brand.name}</div>
             <div className="text-xs text-slate-500">{kind === 'CUSTOMER' ? 'Customer portal' : 'Vendor portal'}{ctx.data ? ` · ${ctx.data.party_name}` : ''}</div>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             {(boot?.portals.length ?? 0) > 1 && <Link className="text-sm text-brand" href="/portal/">Switch</Link>}

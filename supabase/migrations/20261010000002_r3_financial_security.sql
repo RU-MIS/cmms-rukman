@@ -635,6 +635,12 @@ create view public.v_purchase_order_line_rates with (security_invoker = true) as
 select l.id, l.order_id, l.line_no, l.item_id, l.qty, l.unit_id, l.ordered_base_qty, f.rate
 from public.purchase_order_lines l left join secure.purchase_order_lines_values f on f.id = l.id;
 
+-- new: purchase receipt headers with their (masked) totals (receiving screen)
+create view public.v_purchase_receipts with (security_invoker = true) as
+select h.id, h.company_id, h.doc_no, h.doc_date, h.status, h.party_id, h.godown_id, h.supplier_bill_no, h.supplier_bill_date,
+       h.due_date, h.remarks, h.created_at, h.created_by, f.taxable_amount, f.gst_amount, f.total_amount
+from public.purchase_receipts h left join secure.purchase_receipts_values f on f.id = h.id;
+
 -- new: stock movement cost (item page, cost reports)
 create view public.v_stock_movement_costs with (security_invoker = true) as
 select m.id as movement_id, m.company_id, m.item_id, m.godown_id, m.movement_date, m.movement_type, m.direction,
@@ -646,7 +652,8 @@ declare v text;
 begin
   foreach v in array array['v_bills', 'v_bill_outstanding', 'v_customer_bill_register', 'v_payment_allocations',
                            'v_payment_reminders', 'v_purchase_order_lines', 'v_sales_order_lines', 'v_customer_po_lines',
-                           'v_party_balances', 'v_vouchers', 'v_purchase_order_line_rates', 'v_stock_movement_costs'] loop
+                           'v_party_balances', 'v_vouchers', 'v_purchase_order_line_rates', 'v_stock_movement_costs',
+                           'v_purchase_receipts'] loop
     execute format('revoke insert, update, delete on public.%I from authenticated, anon', v);
     execute format('grant select on public.%I to authenticated', v);
   end loop;

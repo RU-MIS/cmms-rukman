@@ -123,8 +123,9 @@ update public.permissions set label = 'See sale rates', description = 'Sale rate
 where code = 'items.view_sale_rate';
 update public.permissions set label = 'See purchase rates', description = 'Purchase rates and purchase amounts (item, party rates, purchase / job-work documents, vendor bills)'
 where code = 'items.view_purchase_rate';
-update public.permissions set label = 'Customers & vendors (other parties / combined page)'
-where code = 'parties.view' and label is null;
+-- parties.* is the umbrella over every party (customers, vendors, job workers, cutters …); customers.* / vendors.* split it
+update public.permissions set description = 'All parties: customers, vendors and other parties (umbrella right). Use the customer / vendor rights to grant only one kind.'
+where module = 'parties';
 
 -- -----------------------------------------------------------------------------
 -- Backfill: nobody gains or loses access by this migration
@@ -573,8 +574,10 @@ create trigger party_roles_flags after insert or update or delete on public.part
 
 -- read: customer rows need customers.view, vendor rows vendors.view (either
 -- when both); other parties stay member-readable as before
+-- parties.* stays the umbrella right over every party (R2 roles keep working); customers.* / vendors.* split it
 create policy parties_kind_read on public.parties as restrictive for select to authenticated
   using ((not is_customer and not is_vendor)
+         or company_id = any ((select app.permitted_company_ids('parties.view'))::uuid[])
          or (is_customer and company_id = any ((select app.permitted_company_ids('customers.view'))::uuid[]))
          or (is_vendor and company_id = any ((select app.permitted_company_ids('vendors.view'))::uuid[])));
 
@@ -584,9 +587,10 @@ returns boolean
 language sql stable security definer
 set search_path = public, app, pg_temp
 as $$
-  select (not p_is_customer or app.has_permission(p_company_id, 'customers.' || p_action))
-     and (not p_is_vendor or app.has_permission(p_company_id, 'vendors.' || p_action))
-     and ((p_is_customer or p_is_vendor) or app.has_permission(p_company_id, 'parties.' || p_action))
+  select app.has_permission(p_company_id, 'parties.' || p_action)
+      or ((not p_is_customer or app.has_permission(p_company_id, 'customers.' || p_action))
+          and (not p_is_vendor or app.has_permission(p_company_id, 'vendors.' || p_action))
+          and (p_is_customer or p_is_vendor))
 $$;
 
 drop policy parties_insert on public.parties;
