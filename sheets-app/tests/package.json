@@ -1,0 +1,15 @@
+{
+  "name": "rukman-dms-sheets-tests",
+  "private": true,
+  "type": "module",
+  "description": "Local tests for the Google Sheets edition (not deployed)",
+  "scripts": {
+    "test": "npm run test:backend && npm run test:browser",
+    "test:backend": "node --test backend.test.mjs",
+    "test:browser": "playwright test -c playwright.config.mjs",
+    "check:deployment": "node check-deployment.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

@@ -1,0 +1,4 @@
+# local test output and Netlify CLI folder
+tests/test-results/
+tests/node_modules/
+.netlify/

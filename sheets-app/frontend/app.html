@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Rukman Dataflow Management System</title>
+  <meta name="theme-color" content="#1f4e79">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Rukman DMS">
+  <link rel="icon" href="img/logo.png">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="js/config.js" defer></script>
+  <script src="js/api.js" defer></script>
+  <script src="js/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <button type="button" class="btn small menu-btn" id="menu-btn" aria-controls="sidebar" aria-expanded="false">Menu</button>
+    <span class="title">Rukman DMS</span>
+    <span class="who" id="who"></span>
+    <button type="button" class="btn small" id="logout-btn">Sign out</button>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Main menu">
+      <div class="brand">Rukman Dataflow Management System</div>
+      <div class="nav" id="nav"></div>
+    </nav>
+    <main class="content" id="view" tabindex="-1">
+      <p class="loading">Loading…</p>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# Netlify site for the Rukman Dataflow Management System (Google Sheets edition).
+# In Netlify set Base directory = sheets-app. There is no build step: the files in
+# frontend/ are published as they are (no package.json here, so nothing is installed).
+# No secrets are needed on Netlify. Security headers: frontend/_headers.
+
+[build]
+  publish = "frontend"
