@@ -1,7 +1,7 @@
 'use client';
 import { useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { sb } from '@/lib/supabase';
+import { adminUsers } from '@/lib/admin';
 import { useSession, type PasswordPolicy } from '@/lib/session';
 import { Button, Card, Field, Input, useAction } from './ui';
 import { UserMenu } from './AppShell';
@@ -56,8 +56,7 @@ export function PasswordGate({ children }: { children: ReactNode }) {
           run(async () => {
             const problem = passwordProblem(pw, pw2, boot.password_policy);
             if (problem) throw new Error(problem);
-            const { error } = await sb().auth.updateUser({ password: pw });
-            if (error) throw error;
+            await adminUsers({ action: 'change_password', password: pw });
             setPw(''); setPw2('');
             await refresh();
           }, 'Password changed');

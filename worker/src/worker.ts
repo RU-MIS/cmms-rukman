@@ -36,6 +36,35 @@ export interface RunResult {
   sent: number;
   failed: number;
   reminders?: unknown;
+  imports?: number;
+  orphanImages?: number;
+}
+
+/**
+ * Removes item-image files that no item_images row references and that are
+ * older than 24 hours (an upload whose registration failed or was abandoned).
+ */
+export async function cleanOrphanImages(db: SupabaseClient, log: Logger, minAgeMs = 24 * 3600_000): Promise<number> {
+  const cutoff = Date.now() - minAgeMs;
+  let removed = 0;
+  const { data: companies } = await db.storage.from('item-images').list('', { limit: 1000 });
+  for (const c of companies ?? []) {
+    const { data: items } = await db.storage.from('item-images').list(c.name, { limit: 10000 });
+    for (const it of items ?? []) {
+      const { data: files } = await db.storage.from('item-images').list(`${c.name}/${it.name}`, { limit: 1000 });
+      const paths = (files ?? []).filter((f) => f.id && Date.parse(f.created_at ?? '') < cutoff).map((f) => `${c.name}/${it.name}/${f.name}`);
+      if (paths.length === 0) continue;
+      const { data: known } = await db.from('item_images').select('storage_path').in('storage_path', paths);
+      const keep = new Set((known ?? []).map((k: { storage_path: string }) => k.storage_path));
+      const orphans = paths.filter((p) => !keep.has(p));
+      if (orphans.length) {
+        const { error } = await db.storage.from('item-images').remove(orphans);
+        if (error) log.error(`orphan cleanup failed: ${error.message}`); else removed += orphans.length;
+      }
+    }
+  }
+  if (removed) log.info(`removed ${removed} orphaned item image(s)`);
+  return removed;
 }
 
 export interface Logger {
@@ -69,12 +98,28 @@ function htmlBody(text: string): string {
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">${esc}</div>`;
 }
 
+export interface CompanyBranding { email_from_name: string | null; email_reply_to: string | null; document_footer: string | null; logo_path: string | null }
+
+/** Company branding for e-mails and PDFs (service role; empty values fall back to the company profile). */
+export async function companyBranding(db: SupabaseClient, companyId: string): Promise<CompanyBranding | null> {
+  const { data } = await db.from('company_branding').select('email_from_name, email_reply_to, document_footer, logo_path')
+    .eq('company_id', companyId).maybeSingle();
+  return (data as CompanyBranding | null) ?? null;
+}
+
+async function readLogo(db: SupabaseClient, path: string | null | undefined): Promise<Uint8Array | null> {
+  if (!path) return null;
+  const { data } = await db.storage.from('company-assets').download(path);
+  return data ? new Uint8Array(await data.arrayBuffer()) : null;
+}
+
 async function buildAttachments(db: SupabaseClient, email: ClaimedEmail) {
   const out: { filename: string; content: Buffer; contentType?: string }[] = [];
   for (const a of email.attachments) {
     if (a.type === 'po_pdf') {
       if (!a.data) throw new Error('PO data missing for PDF attachment');
-      out.push({ filename: a.file_name, content: Buffer.from(await buildPoPdf(a.data)), contentType: 'application/pdf' });
+      const logo = await readLogo(db, a.data.branding?.logo_path);
+      out.push({ filename: a.file_name, content: Buffer.from(await buildPoPdf(a.data, logo)), contentType: 'application/pdf' });
     } else {
       const { data, error } = await db.storage.from(a.bucket ?? 'documents').download(a.path ?? '');
       if (error || !data) throw new Error(`Attachment ${a.file_name} could not be read: ${error?.message ?? 'not found'}`);
@@ -88,15 +133,20 @@ async function buildAttachments(db: SupabaseClient, email: ClaimedEmail) {
 export async function deliver(db: SupabaseClient, transport: Transporter, mailFrom: string, email: ClaimedEmail, log: Logger) {
   try {
     const attachments = await buildAttachments(db, email);
-    const from = mailFrom.includes('<') ? mailFrom : `"${email.company_name.replace(/"/g, '')}" <${mailFrom}>`;
+    const b = await companyBranding(db, email.company_id);
+    // sender name / reply-to / footer of the company's branding; the sending address stays the instance's SMTP sender
+    const name = (b?.email_from_name || email.company_name).replace(/["<>\r\n]/g, '');
+    const address = mailFrom.match(/<([^>]+)>/)?.[1] ?? mailFrom;
+    const from = `"${name}" <${address}>`;
+    const body = b?.document_footer ? `${email.body_text}\n\n--\n${b.document_footer}` : email.body_text;
     const info = await transport.sendMail({
       from,
       to: email.to,
       cc: email.cc.length ? email.cc : undefined,
-      replyTo: email.company_email ?? undefined,
+      replyTo: b?.email_reply_to || email.company_email || undefined,
       subject: email.subject,
-      text: email.body_text,
-      html: htmlBody(email.body_text),
+      text: body,
+      html: htmlBody(body),
       attachments,
       // stable Message-ID: a retry of the same outbox row is recognisable as the
       // same message (mail servers / clients de-duplicate on it)
@@ -134,6 +184,16 @@ export async function runOnce(opts: {
     if (r.error) throw new Error(`run_payment_reminders failed: ${r.error.message}`);
     result.reminders = r.data;
     log.info(`payment reminders: ${JSON.stringify(r.data)}`);
+    result.orphanImages = await cleanOrphanImages(opts.db, log);   // daily, with the reminders
+  }
+  // large imports queued by the screen: committed here as the importer (one transaction each)
+  for (let i = 0; i < 5; i++) {
+    const r = await opts.db.rpc('import_commit_next');
+    if (r.error) { log.error(`import_commit_next failed: ${r.error.message}`); break; }
+    if (!r.data) break;
+    const j = r.data as { job_id: string; status: string; imported_rows: number };
+    log.info(`import ${j.job_id}: ${j.status} (${j.imported_rows} rows)`);
+    result.imports = (result.imports ?? 0) + 1;
   }
   for (let i = 0; i < (opts.maxBatches ?? 50); i++) {
     const { data, error } = await opts.db.rpc('email_claim', { p_limit: opts.batchSize ?? 20 });

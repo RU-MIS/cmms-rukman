@@ -88,6 +88,9 @@ class Api {
   updateUser(id: string, body: Record<string, unknown>) {
     return this.call(`/auth/v1/admin/users/${id}`, 'PUT', this.env.serviceKey, this.env.serviceKey, body);
   }
+  selectAsService(path: string) {
+    return this.call(path, 'GET', this.env.serviceKey, this.env.serviceKey);
+  }
   deleteUser(id: string) {
     return this.call(`/auth/v1/admin/users/${id}`, 'DELETE', this.env.serviceKey, this.env.serviceKey);
   }
@@ -124,6 +127,25 @@ export function generatePassword(length = 16): string {
   return chars.join('');
 }
 
+/** Company password policy (Security settings) as the database reports it. */
+export interface PasswordPolicy { min_length: number; require_mixed: boolean }
+
+/** Problem of a new password under the policy (null = acceptable). Supabase Auth applies its own minimum on top. */
+export function passwordProblem(pw: string, policy: PasswordPolicy): string | null {
+  const min = Math.max(policy.min_length ?? 10, 8);
+  if (pw.length < min) return `The password must have at least ${min} characters`;
+  if (pw.length > 72) return 'The password may have at most 72 characters';
+  if ((policy.require_mixed ?? true) && (!/[A-Za-z]/.test(pw) || !/\d/.test(pw))) return 'The password needs letters and digits';
+  return null;
+}
+
+/** Temporary passwords always satisfy the company policy: at least 16 characters, longer if the policy asks for it. */
+async function tempPasswordLength(api: Api, companyId: string): Promise<number> {
+  const r = await api.selectAsService(`/rest/v1/company_settings?company_id=eq.${companyId}&select=password_min_length`);
+  const min = Number(r.data?.[0]?.password_min_length ?? 0);
+  return Math.min(Math.max(16, min), 64);
+}
+
 function requireUuid(v: unknown, name: string): string {
   if (typeof v !== 'string' || !UUID.test(v)) throw new HttpError(400, `${name} is required`);
   return v;
@@ -153,8 +175,10 @@ export async function handle(req: Request, env: Env): Promise<Response> {
     const who = await api.getUser(jwt);
     if (who.error || !who.data?.id) throw new HttpError(401, 'Not signed in');
 
-    const companyId = requireUuid(body.company_id, 'company_id');
     action = String(body.action ?? 'unknown').slice(0, 40);
+    // the caller changes his own password: checked against the company policy before Supabase Auth stores it
+    if (body.action === 'change_password') return json(200, await changePassword(api, jwt, who.data.id, body.password));
+    const companyId = requireUuid(body.company_id, 'company_id');
     switch (body.action) {
       case 'create':
         return json(200, await createUser(api, jwt, companyId, body.payload));
@@ -192,7 +216,7 @@ async function createUser(api: Api, jwt: string, companyId: string, payload: unk
     return { user_id: check.data.existing_user_id, email, existing_login: true, temporary_password: null };
   }
 
-  const password = generatePassword();
+  const password = generatePassword(await tempPasswordLength(api, companyId));
   const created = await api.createUser({
     email, password, email_confirm: true,
     user_metadata: typeof p.full_name === 'string' ? { full_name: p.full_name } : {},
@@ -214,7 +238,7 @@ async function createUser(api: Api, jwt: string, companyId: string, payload: unk
 async function resetPassword(api: Api, jwt: string, companyId: string, userId: string) {
   const begin = await api.rpcAsUser(jwt, 'user_password_reset_begin', { p_company_id: companyId, p_user_id: userId });
   if (begin.error) dbError(begin.error);
-  const password = generatePassword();
+  const password = generatePassword(await tempPasswordLength(api, companyId));
   const upd = await api.updateUser(userId, { password });
   if (upd.error) throw new HttpError(400, 'The password could not be reset');
   await api.rpcAsService('auth_revoke_sessions', { p_user_id: userId });
@@ -232,4 +256,19 @@ async function setStatus(api: Api, jwt: string, companyId: string, userId: strin
   if (upd.error) throw new HttpError(400, 'Status saved, but the login could not be updated');
   if (!hasAccess) await api.rpcAsService('auth_revoke_sessions', { p_user_id: userId });
   return { user_id: userId, active, login_blocked: !hasAccess };
+}
+
+async function changePassword(api: Api, jwt: string, userId: string, password: unknown) {
+  if (typeof password !== 'string' || password.length === 0) throw new HttpError(400, 'password is required');
+  const pol = await api.rpcAsUser(jwt, 'password_policy', {});
+  if (pol.error) dbError(pol.error);
+  const problem = passwordProblem(password, pol.data as PasswordPolicy);
+  if (problem) throw new HttpError(400, problem);
+  // the database refuses the change when the temporary password has expired (it must be reset by an administrator)
+  const upd = await api.updateUser(userId, { password });
+  if (upd.error) {
+    throw new HttpError(400, /temporary password has expired/i.test(upd.error.message)
+      ? 'The temporary password has expired. Ask your administrator for a new one.' : 'The password could not be changed');
+  }
+  return { user_id: userId, changed: true };
 }

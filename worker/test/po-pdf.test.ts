@@ -36,3 +36,16 @@ test('web copy of the PO PDF generator is identical', async () => {
   const b = await readFile(new URL('../../web/src/lib/po-pdf.ts', import.meta.url), 'utf8');
   assert.equal(strip(a), strip(b));
 });
+
+test('PO PDF carries the company logo, purchase terms and document footer', async () => {
+  // 1×1 PNG
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  const plain = await buildPoPdf({ ...data, lines: data.lines.slice(0, 3) });
+  const branded = await buildPoPdf({ ...data, lines: data.lines.slice(0, 3), purchase_terms: 'Delivery within 7 days.\nPayment 30 days.',
+    branding: { document_footer: 'Thank you for your business' } }, png);
+  assert.ok(branded.length > plain.length, 'logo, terms and footer add content');
+  const doc = await PDFDocument.load(branded);
+  assert.equal(doc.getPageCount(), 1);
+  // an unsupported logo format never breaks the PDF
+  assert.ok((await buildPoPdf(data, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9]))).length > 500);
+});

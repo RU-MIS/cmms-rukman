@@ -9,6 +9,23 @@ export interface PoPrintData {
   lines: Array<{ line_no: number; item_code: string; item_name: string; description?: string | null; qty: number; unit: string;
                  rate?: number | null; amount?: number | null }>;
   total?: number | null;
+  /** company branding (company_branding) and purchase terms (Settings → Purchase) */
+  branding?: { app_name?: string | null; logo_path?: string | null; document_footer?: string | null } | null;
+  purchase_terms?: string | null;
+}
+
+/** Wraps text to lines of at most `width` points. */
+function wrap(s: string, font: PDFFont, size: number, width: number): string[] {
+  const out: string[] = [];
+  for (const para of pdfText(s).split(/\r?\n/)) {
+    let line = '';
+    for (const w of para.split(' ')) {
+      const next = line ? `${line} ${w}` : w;
+      if (font.widthOfTextAtSize(next, size) > width && line) { out.push(line); line = w; } else line = next;
+    }
+    out.push(line);
+  }
+  return out;
 }
 
 // Standard PDF fonts only cover WinAnsi: replace anything else (₹ etc.).
@@ -32,7 +49,8 @@ function fmtDate(d: string | null | undefined): string {
   return `${day}-${m}-${y}`;
 }
 
-export async function buildPoPdf(data: PoPrintData): Promise<Uint8Array> {
+/** `logo`: PNG / JPEG bytes of the company logo (private bucket company-assets, read by the caller). */
+export async function buildPoPdf(data: PoPrintData, logo?: Uint8Array | null): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(`Purchase Order ${pdfText(data.po.doc_no)}`);
   doc.setProducer('Rukman Dataflow Management System');
@@ -46,6 +64,14 @@ export async function buildPoPdf(data: PoPrintData): Promise<Uint8Array> {
   const text = (p: PDFPage, s: string, x: number, yy: number, size = 10, f: PDFFont = font) =>
     p.drawText(pdfText(s), { x, y: yy, size, font: f, color: rgb(0.1, 0.1, 0.1) });
 
+  if (logo && logo.length > 8) {
+    try {
+      const png = logo[0] === 0x89 && logo[1] === 0x50;
+      const img = png ? await doc.embedPng(logo) : await doc.embedJpg(logo);
+      const s = Math.min(120 / img.width, 48 / img.height, 1);
+      page.drawImage(img, { x: 595.28 - margin - img.width * s, y: 800 - img.height * s + 12, width: img.width * s, height: img.height * s });
+    } catch { /* unsupported image type (e.g. WebP / ICO): no logo */ }
+  }
   text(page, data.company.name, margin, y, 16, bold); y -= 16;
   if (data.company.address) { text(page, data.company.address, margin, y, 9); y -= 12; }
   const contact = [data.company.gstin && `GSTIN ${data.company.gstin}`, data.company.phone, data.company.email].filter(Boolean).join('  |  ');
@@ -94,6 +120,16 @@ export async function buildPoPdf(data: PoPrintData): Promise<Uint8Array> {
     y -= 20;
   }
   if (data.po.remarks) { y -= 6; text(page, `Remarks: ${data.po.remarks}`, margin, y, 9); y -= 14; }
-  text(page, 'This is a computer generated purchase order.', margin, 50, 8);
+  if (data.purchase_terms) {
+    const lines = wrap(data.purchase_terms, font, 8.5, 595.28 - 2 * margin);
+    if (y - 14 - lines.length * 11 < 80) { page = doc.addPage([595.28, 841.89]); y = 800; }
+    y -= 8; text(page, 'Terms', margin, y, 9, bold); y -= 12;
+    for (const l of lines) { text(page, l, margin, y, 8.5); y -= 11; }
+  }
+  const footer = data.branding?.document_footer ? wrap(data.branding.document_footer, font, 8, 595.28 - 2 * margin).slice(0, 3) : [];
+  for (const p of doc.getPages()) {
+    footer.forEach((l, i) => text(p, l, margin, 62 + (footer.length - 1 - i) * 10, 8));
+    text(p, 'This is a computer generated purchase order.', margin, 50, 8);
+  }
   return doc.save();
 }

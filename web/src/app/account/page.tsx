@@ -1,7 +1,8 @@
 'use client';
+import { adminUsers } from '@/lib/admin';
+import { passwordProblem } from '@/components/PasswordGate';
 import { useState } from 'react';
 import Link from 'next/link';
-import { sb } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
 import { Button, Card, Field, Input, PageHeader, Spinner, useAction } from '@/components/ui';
 import { UserMenu } from '@/components/AppShell';
@@ -21,10 +22,10 @@ export default function AccountPage() {
         <form className="space-y-3" onSubmit={(e) => {
           e.preventDefault();
           run(async () => {
-            if (pw.length < 8) throw new Error('Password must have at least 8 characters');
-            if (pw !== pw2) throw new Error('Passwords do not match');
-            const { error } = await sb().auth.updateUser({ password: pw });
-            if (error) throw error;
+            const problem = passwordProblem(pw, pw2, boot.password_policy);
+            if (problem) throw new Error(problem);
+            // the admin-users function checks the company password policy before Supabase Auth stores the password
+            await adminUsers({ action: 'change_password', password: pw });
             setPw(''); setPw2('');
           }, 'Password changed');
         }}>
