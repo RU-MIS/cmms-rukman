@@ -32,17 +32,25 @@ test.describe.serial('inventory + portals + purchase + documents + payments', ()
   });
 
   test('owner configures the control center', async () => {
-    await owner.getByRole('link', { name: 'Settings' }).click();
+    await owner.getByRole('link', { name: 'Settings', exact: true }).click();
     await expect(owner.getByRole('heading', { name: /Settings/ })).toBeVisible();
     const sw = (name: string) => owner.getByRole('switch', { name, exact: true });
+    // R3: settings are grouped in sections (tabs), each saved on its own
+    await owner.getByRole('tab', { name: 'Inventory' }).click();
     await expect(sw('Allow negative stock')).toHaveAttribute('aria-checked', 'false');
-    for (const name of ['Customer portal', 'Vendor portal', 'Customer rate visibility', 'Email automation (master switch)']) {
+    await owner.getByRole('tab', { name: 'Portals' }).click();
+    for (const name of ['Customer portal', 'Vendor portal', 'Customers see their rates']) {
       await sw(name).click();
       await expect(sw(name)).toHaveAttribute('aria-checked', 'true');
     }
     await owner.getByLabel('Customer stock visibility').selectOption('EXACT_QUANTITY');
-    await owner.getByRole('button', { name: 'Save settings' }).click();
-    await toast(owner, 'Settings saved');
+    await owner.getByTestId('settings-save').click();
+    await toast(owner, 'Portals settings saved');
+    await owner.getByRole('tab', { name: 'Email' }).click();
+    await sw('Email automation (master switch)').click();
+    await expect(sw('Email automation (master switch)')).toHaveAttribute('aria-checked', 'true');
+    await owner.getByTestId('settings-save').click();
+    await toast(owner, 'Email settings saved');
   });
 
   test('godown, rack/bin location and item with packing', async () => {
@@ -64,7 +72,7 @@ test.describe.serial('inventory + portals + purchase + documents + payments', ()
     await owner.getByRole('link', { name: 'Items & packing' }).click();
     await owner.getByRole('button', { name: 'New item' }).click();
     const item = owner.getByRole('dialog');
-    await item.getByLabel('Item code *').fill(ITEM);
+    await item.getByLabel('Item code', { exact: true }).fill(ITEM);   // R3: optional (automatic numbering)
     await item.getByLabel('Item name *').fill(ITEM_NAME);
     await item.getByLabel('Kind').selectOption('RAW_MATERIAL');
     await item.getByLabel(/Base unit \*/).selectOption({ label: 'PCS — Pieces' });

@@ -457,12 +457,15 @@ returns void
 language plpgsql security definer
 set search_path = public, app, pg_temp
 as $$
-declare l jsonb; v_old jsonb; i int := 0;
+declare l jsonb; v_old jsonb; i int := 0; v_default text;
 begin
   if not app.is_member(p_company_id) then
     raise exception 'Unknown company' using errcode = 'P0001';
   end if;
   perform app.require_permission(p_company_id, 'settings_approvals.edit');
+  -- a level without a role or a right: anyone with the approve right of the document
+  v_default := coalesce((select perm_prefix from app.doc_types where doc_type = p_doc_type),
+                        case p_doc_type when 'CUSTOMER_PO' then 'customer_po' end) || '.approve';
   if p_doc_type <> 'CUSTOMER_PO' and not exists (select 1 from app.doc_types where doc_type = p_doc_type) then
     raise exception 'Unknown document type %', p_doc_type using errcode = 'P0001';
   end if;
@@ -487,7 +490,9 @@ begin
       end if;
       insert into public.approval_rules (company_id, doc_type, level_no, approver_role_id, approver_permission, min_amount,
                                          allow_self, allow_same_approver, notify_email, created_by, updated_by)
-      values (p_company_id, p_doc_type, i, nullif(l->>'approver_role_id', '')::uuid, nullif(l->>'approver_permission', ''),
+      values (p_company_id, p_doc_type, i, nullif(l->>'approver_role_id', '')::uuid,
+              case when nullif(l->>'approver_role_id', '') is null then coalesce(nullif(l->>'approver_permission', ''), v_default)
+                   else nullif(l->>'approver_permission', '') end,
               nullif(l->>'min_amount', '')::numeric, coalesce((l->>'allow_self')::boolean, false),
               coalesce((l->>'allow_same_approver')::boolean, false), coalesce((l->>'notify_email')::boolean, false),
               auth.uid(), auth.uid());

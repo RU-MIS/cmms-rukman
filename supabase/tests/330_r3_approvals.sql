@@ -123,6 +123,11 @@ select test.throws(format($$ delete from public.approval_actions where doc_id = 
                    '%', 'Approval history is immutable even for the service role');
 select test.login(test.id('admin'));
 
+-- a level without role or right (UI: "empty = anyone with the approve right") defaults to the document's approve right
+select public.approval_rules_save(test.id('company'), 'PURCHASE_ORDER', true, '[{}]');
+select test.eq((select approver_permission from public.approval_rules where company_id = test.id('company') and doc_type = 'PURCHASE_ORDER'),
+               'purchase_order.approve', 'Empty level = the approve right of the document');
+
 -- ------------------------------------------------------------ same approver on two levels
 select public.approval_rules_save(test.id('company'), 'PURCHASE_ORDER', true, jsonb_build_array(
   jsonb_build_object('approver_permission', 'purchase_order.approve'),

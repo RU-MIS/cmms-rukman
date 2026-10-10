@@ -45,7 +45,7 @@ test.describe.serial('R2 master data + import / export (UI)', () => {
     await expect(owner).toHaveURL(/\/erp\/admin\/items\/$/);
     await owner.getByRole('button', { name: 'New item' }).click();
     const dlg = owner.getByRole('dialog');
-    await dlg.getByLabel('Item code *').fill(ITEM);
+    await dlg.getByLabel('Item code', { exact: true }).fill(ITEM);
     await dlg.getByLabel('Item name *').fill(`R2 item ${R}`);
     await dlg.getByLabel('Base unit * (stock is kept in this unit)').selectOption({ label: 'PCS — Pieces' });
     await dlg.getByLabel('SKU').fill(`SKU-${R}`);
@@ -93,7 +93,7 @@ test.describe.serial('R2 master data + import / export (UI)', () => {
     await owner.goto('/erp/admin/customers/');
     await owner.getByRole('button', { name: 'New customer' }).click();
     let dlg = owner.getByRole('dialog');
-    await dlg.getByLabel('Code *').fill(`C2-${R}`);
+    await dlg.getByLabel('Code (empty = next automatic code)').fill(`C2-${R}`);
     await dlg.getByLabel('Name *').fill(`Customer Two ${R}`);
     await dlg.getByLabel('Credit limit').fill('250000');
     await dlg.getByRole('button', { name: 'Save' }).click();
@@ -119,7 +119,7 @@ test.describe.serial('R2 master data + import / export (UI)', () => {
     await owner.goto('/erp/admin/vendors/');
     await owner.getByRole('button', { name: 'New vendor' }).click();
     dlg = owner.getByRole('dialog');
-    await dlg.getByLabel('Code *').fill(`V2-${R}`);
+    await dlg.getByLabel('Code (empty = next automatic code)').fill(`V2-${R}`);
     await dlg.getByLabel('Name *').fill(`Vendor Two ${R}`);
     await dlg.getByRole('group', { name: 'Vendor type' }).getByLabel(/job worker/i).check();
     await dlg.getByRole('button', { name: 'Save' }).click();

@@ -17,11 +17,12 @@ test('company setting HIDDEN / rate OFF, then customer override EXACT', async ({
   const owner = await (await browser.newContext()).newPage();
   await login(owner, fx.owner);
   await expect(owner).toHaveURL(/\/erp\/$/);
-  await owner.goto('/erp/settings/');
+  await owner.goto('/erp/settings/');                       // R3: redirects to the sectioned settings
+  await owner.getByRole('tab', { name: 'Portals' }).click();
   await owner.getByLabel('Customer stock visibility').selectOption('HIDDEN');
-  await owner.getByRole('switch', { name: 'Customer rate visibility', exact: true }).click();
-  await owner.getByRole('button', { name: 'Save settings' }).click();
-  await expect(owner.getByRole('status').filter({ hasText: 'Settings saved' })).toBeVisible();
+  await owner.getByRole('switch', { name: 'Customers see their rates', exact: true }).click();
+  await owner.getByTestId('settings-save').click();
+  await expect(owner.getByRole('status').filter({ hasText: 'Portals settings saved' })).toBeVisible();
 
   const cust = await (await browser.newContext()).newPage();
   await login(cust, fx.customer);

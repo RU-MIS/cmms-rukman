@@ -2,7 +2,7 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { rpc, sb } from '@/lib/supabase';
-import { useCompanyId } from '@/lib/session';
+import { useCompanyId, useSession } from '@/lib/session';
 import { useData } from '@/lib/useData';
 import { ASSET_BUCKET, ASSET_MAX_BYTES, ASSET_TYPES, contrastRatio, readableBrand, useAssetUrl } from '@/lib/branding';
 import { Button, Card, ErrorBox, Field, Input, PageHeader, Select, Spinner, Tabs, TextArea, Toggle, useAction } from '@/components/ui';
@@ -92,6 +92,7 @@ export default function SettingsPage() {
 
 function SettingsSections() {
   const companyId = useCompanyId();
+  const { refresh } = useSession();
   const data = useData(() => rpc<Record<string, Section>>('settings_get', { p_company_id: companyId }), [companyId]);
   const [picked, setTab] = useState('');
   const want = useSearchParams().get('section');
@@ -105,7 +106,7 @@ function SettingsSections() {
       {visible.length === 0 ? <ErrorBox error="You cannot view any settings section." /> : (
         <>
           <Tabs tabs={visible.map((s) => ({ id: s.id, label: s.label }))} active={tab} onChange={setTab} />
-          {sec && data.data[sec.id] && <SectionForm key={sec.id} companyId={companyId} section={sec} values={data.data[sec.id]} onSaved={data.reload} />}
+          {sec && data.data[sec.id] && <SectionForm key={sec.id} companyId={companyId} section={sec} values={data.data[sec.id]} onSaved={() => { data.reload(); void refresh(); }} />}
         </>)}
     </div>
   );
