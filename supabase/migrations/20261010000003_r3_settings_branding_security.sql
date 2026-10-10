@@ -257,16 +257,16 @@ grant update on public.company_branding to authenticated;
 -- remaining permission checks of the umbrella right -> section rights
 drop policy app_settings_write on public.app_settings;
 create policy app_settings_write on public.app_settings for all to authenticated
-  using (app.has_permission(company_id, 'settings_inventory.edit'))
-  with check (app.has_permission(company_id, 'settings_inventory.edit'));
+  using (company_id = any ((select app.permitted_company_ids('settings_inventory.edit'))::uuid[]))
+  with check (company_id = any ((select app.permitted_company_ids('settings_inventory.edit'))::uuid[]));
 drop policy approval_policies_write on public.approval_policies;
 create policy approval_policies_write on public.approval_policies for all to authenticated
-  using (app.has_permission(company_id, 'settings_approvals.edit'))
-  with check (app.has_permission(company_id, 'settings_approvals.edit'));
+  using (company_id = any ((select app.permitted_company_ids('settings_approvals.edit'))::uuid[]))
+  with check (company_id = any ((select app.permitted_company_ids('settings_approvals.edit'))::uuid[]));
 drop policy document_sequences_write on public.document_sequences;
 create policy document_sequences_write on public.document_sequences for all to authenticated
-  using (app.has_permission(company_id, 'settings_numbering.edit'))
-  with check (app.has_permission(company_id, 'settings_numbering.edit'));
+  using (company_id = any ((select app.permitted_company_ids('settings_numbering.edit'))::uuid[]))
+  with check (company_id = any ((select app.permitted_company_ids('settings_numbering.edit'))::uuid[]));
 do $$
 declare f record; v_def text;
 begin

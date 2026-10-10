@@ -298,8 +298,8 @@ alter table public.party_types enable row level security;
 create policy party_types_read on public.party_types for select to authenticated
   using (company_id = any ((select app.user_company_ids())::uuid[]));
 create policy party_types_write on public.party_types for all to authenticated
-  using (app.has_permission(company_id, 'customers.edit') or app.has_permission(company_id, 'vendors.edit'))
-  with check (app.has_permission(company_id, 'customers.edit') or app.has_permission(company_id, 'vendors.edit'));
+  using (company_id = any ((select app.permitted_company_ids('customers.edit'))::uuid[]) or company_id = any ((select app.permitted_company_ids('vendors.edit'))::uuid[]))
+  with check (company_id = any ((select app.permitted_company_ids('customers.edit'))::uuid[]) or company_id = any ((select app.permitted_company_ids('vendors.edit'))::uuid[]));
 grant select, insert, update, delete on public.party_types to authenticated;
 grant all on public.party_types to service_role;
 create trigger party_types_audit after insert or update or delete on public.party_types

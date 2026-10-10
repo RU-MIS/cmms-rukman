@@ -25,7 +25,7 @@ alter table public.departments enable row level security;
 create policy departments_read on public.departments for select to authenticated
   using (company_id = any ((select app.user_company_ids())::uuid[]));
 create policy departments_write on public.departments for all to authenticated
-  using (app.has_permission(company_id, 'users.edit')) with check (app.has_permission(company_id, 'users.edit'));
+  using (company_id = any ((select app.permitted_company_ids('users.edit'))::uuid[])) with check (company_id = any ((select app.permitted_company_ids('users.edit'))::uuid[]));
 grant select, insert, update, delete on public.departments to authenticated;
 grant all on public.departments to service_role;
 create trigger departments_audit after insert or update or delete on public.departments
