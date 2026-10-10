@@ -7,6 +7,7 @@ import type { Permission, PermissionModule, Role } from '@/lib/admin';
 import { Badge, Button, Card, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Tabs, Toggle, useAction } from '@/components/ui';
 import { PermissionMatrix } from '@/components/admin/PermissionMatrix';
 import { ScopeEditor } from '@/components/admin/ScopeEditor';
+import { RecordScopePicker } from '@/components/admin/widgets';
 
 const KINDS = [{ id: 'INTERNAL', label: 'Staff roles' }, { id: 'CUSTOMER_PORTAL', label: 'Customer portal roles' },
   { id: 'VENDOR_PORTAL', label: 'Vendor portal roles' }];
@@ -111,6 +112,7 @@ function RoleEditor({ role, perms, modules, roles, users, onChanged, onDeleted }
       .select('dimension, entity_id').eq('role_id', role.id))) (out[r.dimension] ??= []).push(r.entity_id);
     return out;
   }, [role.id]);
+  const recScope = useData(async () => must<{ record_scope: string }>(await sb().from('roles').select('record_scope').eq('id', role.id).single()).record_scope, [role.id]);
   // edits; null = unchanged (shows what is stored)
   const [edit, setSel] = useState<Set<string> | null>(null);
   const [filter, setFilter] = useState('');
@@ -177,9 +179,13 @@ function RoleEditor({ role, perms, modules, roles, users, onChanged, onDeleted }
         </div>))}
       {tab === 'scope' && (role.grants_all ? <p className="text-sm">The owner always has access to all records.</p>
         : scope.data === null ? <Spinner /> : (
+          <div className="space-y-4">
+          <RecordScopePicker key={recScope.data ?? 'ALL'} value={recScope.data ?? 'ALL'} disabled={!editable || !can('users.assign_scope')}
+            onSave={async (v) => { await rpc('role_set_record_scope', { p_role_id: role.id, p_scope: v ?? 'ALL' }); recScope.reload(); }} />
           <ScopeEditor key={JSON.stringify(scope.data)} stored={scope.data} disabled={!editable || !can('users.assign_scope')}
             intro="Users whose roles are all limited see and post only these records. A user-level setting overrides the roles. Godowns limit stock, locations, reservations and godown documents; customers / vendors limit the master, rates and their documents; items limit the item master, rates, images, stock and document lines. Enforced by the database."
-            onSave={async (dimension, ids) => { await rpc('role_set_scope', { p_role_id: role.id, p_dimension: dimension, p_entity_ids: ids }); scope.reload(); }} />))}
+            onSave={async (dimension, ids) => { await rpc('role_set_scope', { p_role_id: role.id, p_dimension: dimension, p_entity_ids: ids }); scope.reload(); }} />
+          </div>))}
     </Card>
   );
 }

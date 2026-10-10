@@ -7,7 +7,7 @@ import { useGodowns, useParties, type Godown } from '@/lib/masters';
 import { dateTime } from '@/lib/format';
 import { adminUsers, type AdminUser, type Permission, type PermissionModule, type Role } from '@/lib/admin';
 import { Badge, Button, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Table, Tabs, useAction } from '@/components/ui';
-import { GodownScopePicker, TempPasswordModal } from '@/components/admin/widgets';
+import { GodownScopePicker, RecordScopePicker, TempPasswordModal } from '@/components/admin/widgets';
 import { ScopeEditor } from '@/components/admin/ScopeEditor';
 import { buildMatrix } from '@/components/admin/PermissionMatrix';
 
@@ -306,7 +306,13 @@ function ProfileTab({ d, onSaved }: { d: Detail; onSaved: () => void }) {
   const [f, setF] = useState({ full_name: d.full_name ?? '', mobile: m?.mobile ?? '', department: m?.department ?? '',
     designation: m?.designation ?? '', employee_code: m?.employee_code ?? '', notes: m?.notes ?? '' });
   const dis = !can('users.edit');
-  const field = (k: keyof typeof f, label: string) => (
+  const depts = useData(async () => must<{ id: string; name: string }[]>(await sb().from('departments').select('id, name')
+    .eq('company_id', companyId).eq('is_active', true).order('name')), [companyId]);
+  const field = (k: keyof typeof f, label: string) => k === 'department' ? (
+    <Field label={label}><Select aria-label="Department" value={f.department} disabled={dis} placeholder="— none —"
+      options={[...(depts.data ?? []).map((x) => ({ value: x.name, label: x.name })),
+                ...(f.department && !(depts.data ?? []).some((x) => x.name === f.department) ? [{ value: f.department, label: f.department }] : [])]}
+      onChange={(e) => setF({ ...f, department: e.target.value })} /></Field>) : (
     <Field label={label}><Input value={f[k]} disabled={dis} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></Field>);
   return (
     <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); run(async () => {
@@ -390,12 +396,18 @@ function ScopeTab({ d, self, onSaved }: { d: Detail; self: boolean; onSaved: () 
   const companyId = useCompanyId();
   const { can } = useSession();
   const dis = !can('users.assign_scope') || d.is_owner || (self && !d.is_owner);
+  const rec = useData(async () => (await sb().from('company_users').select('record_scope').eq('company_id', companyId).eq('user_id', d.user_id)
+    .maybeSingle()).data?.record_scope ?? null, [companyId, d.user_id]);
   if (d.is_owner) return <p className="text-sm">The owner always has access to all records.</p>;
   return (
+    <div className="space-y-4">
+    {rec.loading ? <Spinner /> : <RecordScopePicker key={rec.data ?? ''} value={rec.data} allowInherit disabled={dis} onSave={async (v) => {
+      await rpc('user_set_record_scope', { p_company_id: companyId, p_user_id: d.user_id, p_scope: v }); rec.reload(); onSaved(); }} />}
     <ScopeEditor stored={d.scopes} effective={d.effective_scopes} disabled={dis}
       intro="A setting here overrides the user's roles. Godowns limit stock, locations, reservations and godown documents; customers and vendors limit the master, rates and their documents; items limit the item master, rates, images, stock and document lines. Enforced by the database."
       onSave={async (dimension, ids) => {
         await rpc('user_set_scope', { p_company_id: companyId, p_user_id: d.user_id, p_dimension: dimension, p_entity_ids: ids }); onSaved(); }} />
+    </div>
   );
 }
 

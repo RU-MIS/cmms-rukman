@@ -25,7 +25,7 @@ export default function PartiesPage() {
   return (
     <div>
       <PageHeader title="Customers & vendors" subtitle="Party master, portal access, visibility overrides and party-specific prices"
-        actions={can('parties.create') && <Button onClick={() => setSel({ is_active: true, credit_days: 0, party_roles: [{ role: role || 'CUSTOMER' }] })}>New party</Button>} />
+        actions={(can('parties.create') || can('customers.create') || can('vendors.create')) && <Button onClick={() => setSel({ is_active: true, credit_days: 0, party_roles: [{ role: role || 'CUSTOMER' }] })}>New party</Button>} />
       <div className="mb-3 flex flex-wrap gap-3">
         <Select aria-label="Role" className="max-w-[200px]" value={role} onChange={(e) => setRole(e.target.value)} placeholder="All roles"
           options={ROLES.map((r) => ({ value: r, label: r.replace('_', ' ') }))} />
@@ -91,7 +91,7 @@ function PartyModal({ party, onClose, onSaved }: { party: Partial<Party>; onClos
             <label key={r} className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={roles.includes(r)}
               onChange={(e) => setRoles(e.target.checked ? [...roles, r] : roles.filter((x) => x !== r))} />{r.replace('_', ' ')}</label>))}</div></div>
           <Toggle label="Active" checked={p.is_active ?? true} onChange={(v) => setP({ ...p, is_active: v })} />
-          {(can('parties.edit') || (!p.id && can('parties.create'))) && <div className="flex justify-end"><Button busy={busy} onClick={save}>Save</Button></div>}
+          {(can('parties.edit') || can('customers.edit') || can('vendors.edit') || (!p.id && (can('parties.create') || can('customers.create') || can('vendors.create')))) && <div className="flex justify-end"><Button busy={busy} onClick={save}>Save</Button></div>}
         </div>
       )}
       {tab === 'portal' && p.id && <PortalAccess partyId={p.id} isCustomer={isCustomer} isVendor={isVendor} defaultEmail={p.email ?? ''} />}

@@ -109,3 +109,31 @@ export function DataScopePicker({ dimension, label, one, options, value, onChang
     </div>
   );
 }
+
+export const RECORD_SCOPES = [
+  { value: 'ALL', label: 'All records' },
+  { value: 'DEPARTMENT', label: 'My department — documents created by colleagues of the same department' },
+  { value: 'OWN', label: 'Own records — documents the user created' },
+];
+
+/** Record scope of transaction documents (W8); combined with the godown / customer / vendor / item scopes. */
+export function RecordScopePicker({ value, onSave, disabled, allowInherit }: { value: string | null; onSave: (v: string | null) => Promise<void>;
+  disabled?: boolean; allowInherit?: boolean }) {
+  const [v, setV] = useState(value ?? '');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="rounded-md border border-slate-200 p-3" role="group" aria-label="Record access">
+      <div className="field-label">Documents (record scope)</div>
+      <div className="flex flex-wrap items-end gap-2">
+        <select aria-label="Record scope" className="input max-w-xl" disabled={disabled} value={v} onChange={(e) => setV(e.target.value)}>
+          {allowInherit && <option value="">As the user&apos;s roles allow (widest role)</option>}
+          {RECORD_SCOPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        {!disabled && <Button busy={busy} disabled={v === (value ?? '')} onClick={async () => {
+          setBusy(true);
+          try { await onSave(v || null); } finally { setBusy(false); }
+        }}>Save</Button>}
+      </div>
+    </div>
+  );
+}
