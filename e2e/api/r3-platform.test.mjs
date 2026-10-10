@@ -192,10 +192,12 @@ test('approvals: thresholds, no self-approval, rejection reason, history, cross-
   assert.ok((await service.from('approval_actions').delete().eq('doc_id', big.id)).error, 'history immutable');
 });
 
-test('large import is queued and committed by the worker as the importer', async () => {
+// AC-11.5 through the real gateway timeouts: every call of the importer must finish within authenticated's 8 s,
+// the worker commits through PostgREST as service_role (own statement timeout, R4 fix)
+test('10,000-row import: user calls within 8 s, queued, committed by the worker as the importer', async () => {
   const { companyId, owner } = await company('R3I');
   const other = await company('R3I2');
-  const n = 2100;
+  const n = 10000;
   const job = ok(await owner.client.rpc('import_create', { p_company_id: companyId, p_entity: 'ITEMS', p_file_name: 'big.xlsx',
     p_mode: 'ALL_OR_NOTHING', p_update_existing: false, p_columns: ['code', 'name', 'item_kind', 'base_unit'] }));
   for (let o = 0; o < n; o += 1000) {
@@ -206,11 +208,16 @@ test('large import is queued and committed by the worker as the importer', async
   assert.equal(ok(await owner.client.rpc('import_validate', { p_job_id: job.job_id })).valid_rows, n);
   assert.ok((await other.owner.client.rpc('import_commit', { p_job_id: job.job_id, p_confirm: true })).error, 'other company refused');
   assert.equal(ok(await owner.client.rpc('import_commit', { p_job_id: job.job_id, p_confirm: true })).status, 'QUEUED', 'large import queued');
-  assert.ok((await owner.client.rpc('import_commit_next')).error, 'users cannot run the queue');
-  const done = ok(await service.rpc('import_commit_next'));
+  assert.ok((await owner.client.rpc('import_claim_next')).error, 'users cannot claim queued jobs');
+  assert.ok((await owner.client.rpc('import_commit_job', { p_job_id: job.job_id })).error, 'users cannot run the queue');
+  const claimed = ok(await service.rpc('import_claim_next'));
+  assert.equal(claimed, job.job_id, 'the worker claims the job');
+  const started = Date.now();
+  const done = ok(await service.rpc('import_commit_job', { p_job_id: claimed }));
+  console.log(`# worker commit of ${n} rows through PostgREST: ${Date.now() - started} ms`);
   assert.equal(done.job_id, job.job_id);
   assert.equal(done.imported_rows, n, 'worker committed every row');
   const items = ok(await owner.client.from('items').select('id, created_by').ilike('code', `Q%-${runId}`).limit(5));
   assert.equal(items[0].created_by, owner.id, 'rows are owned by the importer, not the service');
-  assert.equal(ok(await service.rpc('import_commit_next')), null, 'queue empty');
+  assert.equal(ok(await service.rpc('import_claim_next')), null, 'queue empty');
 });

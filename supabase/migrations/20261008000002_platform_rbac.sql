@@ -131,10 +131,13 @@ insert into app.default_roles (code, name, description, sort_order, is_locked) v
   ('FACTORY',   'Factory',   'Job work, material issues and production.',                                85, false)
 on conflict (code) do nothing;
 
+-- metadata of the system roles, not a user change: keep updated_at / updated_by of existing roles
+alter table public.roles disable trigger roles_audit_fields;
 update public.roles r
    set is_locked = d.is_locked, grants_all = d.is_locked, description = d.description, sort_order = d.sort_order
 from app.default_roles d
 where r.is_system and r.code = d.code;
+alter table public.roles enable trigger roles_audit_fields;
 
 -- Default grants of the seeded roles. Used ONCE when a role is created for a
 -- company; afterwards the role belongs to the company admin.

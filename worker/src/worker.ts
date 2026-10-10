@@ -186,11 +186,16 @@ export async function runOnce(opts: {
     log.info(`payment reminders: ${JSON.stringify(r.data)}`);
     result.orphanImages = await cleanOrphanImages(opts.db, log);   // daily, with the reminders
   }
-  // large imports queued by the screen: committed here as the importer (one transaction each)
+  // large imports queued by the screen: committed here as the importer (one transaction each).
+  // Claim first (the attempt is counted in its own transaction), then commit: a job that hits the
+  // time limit is retried at most three times and never blocks the jobs queued after it.
   for (let i = 0; i < 5; i++) {
-    const r = await opts.db.rpc('import_commit_next');
-    if (r.error) { log.error(`import_commit_next failed: ${r.error.message}`); break; }
-    if (!r.data) break;
+    const claim = await opts.db.rpc('import_claim_next');
+    if (claim.error) { log.error(`import_claim_next failed: ${claim.error.message}`); break; }
+    if (!claim.data) break;
+    const r = await opts.db.rpc('import_commit_job', { p_job_id: claim.data });
+    if (r.error) { log.error(`import ${claim.data}: commit failed (${r.error.message}); retried on the next run`); continue; }
+    if (!r.data) continue;
     const j = r.data as { job_id: string; status: string; imported_rows: number };
     log.info(`import ${j.job_id}: ${j.status} (${j.imported_rows} rows)`);
     result.imports = (result.imports ?? 0) + 1;

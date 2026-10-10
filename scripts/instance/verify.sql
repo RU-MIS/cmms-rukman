@@ -24,6 +24,12 @@ begin
   if v_n > 0 then
     raise exception 'FAIL: anonymous role has % table privileges', v_n;
   end if;
-  raise notice 'OK: instance %, % companies, RLS on every table, no anonymous access',
+  -- TRUNCATE ignores row-level security: no API role may hold it (R4)
+  select count(*) into v_n from information_schema.role_table_grants
+   where grantee in ('anon', 'authenticated') and table_schema = 'public' and privilege_type = 'TRUNCATE';
+  if v_n > 0 then
+    raise exception 'FAIL: API roles hold TRUNCATE on % public tables', v_n;
+  end if;
+  raise notice 'OK: instance %, % companies, RLS on every table, no anonymous access, no TRUNCATE for API roles',
     v_id, (select count(*) from public.companies);
 end $$;

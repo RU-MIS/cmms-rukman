@@ -309,7 +309,9 @@ alter table public.parties
   add column legal_name    text,
   add column party_type_id uuid references public.party_types (id) on delete set null,
   add column status        text not null default 'ACTIVE' check (status in ('ACTIVE', 'ON_HOLD', 'DISABLED'));
+alter table public.parties disable trigger parties_audit_fields;   -- backfill: keep updated_at / updated_by
 update public.parties set status = 'DISABLED' where not is_active;
+alter table public.parties enable trigger parties_audit_fields;
 
 -- status and is_active stay consistent (existing code uses is_active)
 create or replace function app.tg_party_status()

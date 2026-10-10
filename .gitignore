@@ -33,3 +33,4 @@ backups/
 e2e/ui/.fixture.json
 e2e/ui/test-results/
 playwright-report/
+rehearsal-*/

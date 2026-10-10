@@ -156,4 +156,37 @@ select public.user_set_status(test.id('company'), :'adm_v', false, 'left');
 select test.login(null);
 select test.eq(public.import_commit_next()->>'status', 'FAILED', 'Importer disabled before the worker ran: the job fails');
 select test.eq((select count(*) from public.units where code like 'W%')::int, 0, '... and nothing is written');
+
+-- R4: a job that cannot be committed (e.g. the time limit cancels the commit) is retried at most three times,
+-- then failed with a message; it never blocks the jobs queued after it
+select test.login(test.id('admin'));
+select public.import_create(test.id('company'), 'UNITS', 'stuck.xlsx', 'ALL_OR_NOTHING', false, array['code', 'name'])->>'job_id' as stuck \gset
+select public.import_add_rows(:'stuck', (select jsonb_agg(jsonb_build_object('row_no', n + 1, 'data', jsonb_build_object('code', 'S' || n, 'name', 'S ' || n)))
+                                         from generate_series(1, 2000) n));
+select public.import_add_rows(:'stuck', '[{"row_no": 2002, "data": {"code": "S2001", "name": "S 2001"}}]');
+select public.import_validate(:'stuck')->>'valid_rows';
+select public.import_commit(:'stuck', true)->>'status';
+select public.import_create(test.id('company'), 'UNITS', 'next.xlsx', 'ALL_OR_NOTHING', false, array['code', 'name'])->>'job_id' as nxt \gset
+select public.import_add_rows(:'nxt', (select jsonb_agg(jsonb_build_object('row_no', n + 1, 'data', jsonb_build_object('code', 'N' || n, 'name', 'N ' || n)))
+                                       from generate_series(1, 2000) n));
+select public.import_add_rows(:'nxt', '[{"row_no": 2002, "data": {"code": "N2001", "name": "N 2001"}}]');
+select public.import_validate(:'nxt')->>'valid_rows';
+select public.import_commit(:'nxt', true)->>'status';
+select test.throws('select public.import_claim_next()', 'permission denied%', 'API users cannot claim queued imports');
+select test.login(null);
+update public.import_jobs set status = 'CANCELLED' where status = 'QUEUED' and id not in (:'stuck', :'nxt');   -- earlier jobs of this file
+update public.import_jobs set queued_at = queued_at + interval '1 second' where id = :'nxt';   -- queued after the stuck one (same transaction here)
+-- three claims whose commit never completes (the worker's commit call was cancelled)
+select test.eq(public.import_claim_next(), :'stuck'::uuid, 'Attempt 1 claims the oldest job');
+select test.eq(public.import_claim_next(), :'stuck'::uuid, 'Attempt 2: still the same job');
+select test.eq(public.import_claim_next(), :'stuck'::uuid, 'Attempt 3: still the same job');
+select test.eq(public.import_claim_next(), :'nxt'::uuid, 'After three attempts the queue moves on');
+select test.eq((select status from public.import_jobs where id = :'stuck'), 'FAILED', 'The stuck job is failed ...');
+select test.ok((select error like '%could not be committed in 3 attempts%' from public.import_jobs where id = :'stuck'), '... with a message for the importer');
+select test.ok(exists (select 1 from public.audit_log where row_id = :'stuck' and action = 'IMPORT_FAILED'), '... and audited');
+select test.eq(public.import_commit_job(:'nxt')->>'status', 'COMMITTED', 'The next job commits');
+select test.ok(public.import_commit_job(:'nxt') is null, 'Committing it again (second worker) does nothing');
+select test.eq((select count(*) from public.units where code like 'S%' and company_id = test.id('company'))::int, 0, 'Nothing of the failed job was written');
+select test.eq((select rolconfig::text from pg_roles where rolname = 'service_role'), '{statement_timeout=120s}',
+               'The worker role has its own statement timeout (PostgREST applies it per request)');
 rollback;

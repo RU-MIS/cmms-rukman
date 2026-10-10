@@ -551,9 +551,12 @@ $$;
 alter table public.parties
   add column is_customer boolean not null default false,
   add column is_vendor   boolean not null default false;
+-- derived flags, not a user change: keep updated_at / updated_by of existing parties (the audit trigger still records it)
+alter table public.parties disable trigger parties_audit_fields;
 update public.parties p set
   is_customer = exists (select 1 from public.party_roles r where r.party_id = p.id and r.role = 'CUSTOMER'),
   is_vendor   = exists (select 1 from public.party_roles r where r.party_id = p.id and r.role in ('SUPPLIER', 'JOB_WORKER', 'CUTTER'));
+alter table public.parties enable trigger parties_audit_fields;
 
 create or replace function app.tg_party_role_flags()
 returns trigger
