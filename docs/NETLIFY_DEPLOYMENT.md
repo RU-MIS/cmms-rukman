@@ -22,6 +22,9 @@ is the remaining check (§4 step 7).
 
 ## 1. Read this first — which code Netlify builds
 
+The measured comparison of the branches, schema compatibility, deploy-preview risks and the two release options are in
+[`DEPLOYMENT_READINESS_PLAN.md`](./DEPLOYMENT_READINESS_PLAN.md).
+
 The web app and the database schema must match. The code on this branch includes the R1–R4 changes, which need the **47
 migrations** of the R4 release candidate (production has 24).
 
