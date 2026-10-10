@@ -49,18 +49,19 @@ Nothing has been deployed. All steps below are manual.
    ```bash
    npm ci
    npx supabase link --project-ref <ref>          # asks for the DB password
-   npx supabase db push                           # applies all 35 migrations
+   npx supabase db push                           # applies all 46 migrations
    DATABASE_URL='<session pooler URI>' npm run db:seed
    npx supabase functions deploy admin-users      # User Management Center (create login / reset / disable)
    ```
    The function gets `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` from Supabase automatically — set no secret for it.
-   The migrations create the private buckets `documents` and `item-images` and all RLS / storage policies — create nothing by hand.
+   The migrations create the private buckets `documents`, `item-images` and `company-assets` (branding) and all RLS / storage policies — create nothing by hand.
 5. **Authentication → Sign In / Providers → Email**:
    - Email provider: **ON**
    - Allow new users to sign up: **ON**
    - **Confirm email: ON** (mandatory; never switch off — finding C1)
    - Email OTP length: **6**, OTP expiry: 3600 s
    - Secure password change: **OFF** (default)
+   - **Authentication → Policies → Minimum password length**: at least the strictest company password policy (Settings → Security, default 10). The ERP enforces the company policy in the `admin-users` function; this setting covers direct Auth API calls.
 6. **Authentication → Email Templates** → *Magic Link* and *Confirm signup*: subject `Your sign-in code`; body = full content of `supabase/templates/otp.html` (contains `{{ .Token }}` and `{{ .ConfirmationURL }}`).
 7. **Authentication → URL Configuration**: Site URL `https://erp.company.com`; Redirect URLs `https://erp.company.com/**` (add the `*.pages.dev` URL too until the custom domain is live).
 8. **Authentication → Emails → SMTP Settings**: Enable custom SMTP → host / port / user / password of your mailbox, sender email `erp@company.com`, sender name = company name. **Rate limits**: emails per hour ≥ 100.
@@ -177,7 +178,7 @@ GO only if **every** box is ticked:
 - [ ] PR merged to the default branch; deployed commit = tested commit.
 - [ ] Release suite green on that commit (`docs/DEPLOYMENT.md` §11): SQL 19/19, API e2e 7/7, browser e2e 22/22, lint, typecheck, build, worker unit, worker container smoke, backup drill.
 - [ ] `docs/RELEASE_AUDIT.md` reviewed and the LOW risks accepted by the owner.
-- [ ] Supabase: 35 migrations applied, seed applied, buckets `documents` and `item-images` exist (Storage), Edge Function `admin-users` deployed (Edge Functions list), `instance:verify` OK.
+- [ ] Supabase: 46 migrations applied, seed applied, buckets `documents`, `item-images` and `company-assets` exist (Storage), Edge Function `admin-users` deployed (Edge Functions list), `instance:verify` OK.
 - [ ] Auth: sign-ups ON, **Confirm email ON**, OTP 6 digits, both templates show the code, custom SMTP set, Site URL + Redirect URLs = production domain.
 - [ ] DNS: SPF, DKIM, DMARC published and verified in the SMTP provider; test mail not in spam.
 - [ ] Cloudflare Pages: only `NEXT_PUBLIC_*` + `NODE_VERSION`; custom domain with TLS; security headers present.

@@ -209,7 +209,7 @@ Acceptance criteria
 
 Deliverables
 - **Branding** section, per company: app name, short name, logo, favicon, primary colour, document footer text, email sender **name** and **reply-to** address.
-- Files are stored in a private bucket `company-assets` (company-isolated policies; read = members and that company's portal users; write = `settings.branding.edit`), with type and size validation (PNG / SVG / WebP / ICO, ≤ 1 MB).
+- Files are stored in a private bucket `company-assets` (company-isolated policies; read = members and that company's portal users; write = `settings.branding.edit`), with type and size validation (PNG / JPEG / WebP / ICO, ≤ 1 MB; SVG was dropped during implementation because it can carry script).
 - Applied:
   - after login: ERP shell, portal shell, browser title, favicon;
   - generated PDFs (PO): logo + footer;
@@ -347,7 +347,7 @@ Acceptance criteria
 - **AC-11.2** An unknown godown code shows the suggested existing code in the error table and the error file.
 - **AC-11.3** A role-assignment import that would grant a role with more rights than the importer holds is refused for that row. Assigning OWNER needs `users.manage_owners`.
 - **AC-11.4** A stock export by a Godown-A user contains only Godown A, and without `items.view_cost` it has no value columns.
-- **AC-11.5** The 10,000-item all-or-nothing import commits successfully on the local stack with `statement_timeout = 8s` for `authenticated`.
+- **AC-11.5** The 10,000-item all-or-nothing import commits successfully on the local stack with `statement_timeout = 8s` for `authenticated`. *Implemented as:* the API calls (add rows, validate, confirm) stay under 8 s; a confirmed commit above 2,000 rows is queued and committed by the worker as the importer in one transaction (`import_commit_next`).
 - **AC-11.6** All R2 import / export tests stay green.
 
 ### W12 — List UX
@@ -457,6 +457,7 @@ Acceptance criteria
 | 8 | `20261010000008_r3_masters_opening` | item / godown / party fields, rate-limit policy, godown flags, party status, delete-where-safe, opening balances |
 | 9 | `20261010000009_r3_custom_fields` | entities, types, properties, restricted values |
 | 10 | `20261010000010_r3_import_export` | mappings, suggestions, new entities, stock exports, commit robustness |
+| 11 | `20261010000011_r3_privileges` | added during the security review: no `anon` privileges, no TRUNCATE for API roles, writes only where a policy exists, default privileges |
 
 ## 8. Process (unchanged)
 
