@@ -1,0 +1,28 @@
+# Netlify hosting of the web app (Next.js static export in web/out).
+#
+# The app is a static single-page application: all data access goes to
+# Supabase (PostgreSQL row-level security + permission-checked functions), so
+# Netlify serves files only — no Netlify Functions, no server secrets.
+# Set ONLY the public NEXT_PUBLIC_* variables in Netlify (see
+# docs/NETLIFY_DEPLOYMENT.md). Never add SUPABASE_SERVICE_ROLE_KEY,
+# DATABASE_URL, SMTP or backup secrets to Netlify.
+#
+# Security headers come from web/public/_headers (copied into web/out/_headers
+# by the build; Netlify and Cloudflare Pages read the same file).
+
+[build]
+  base    = "."                                   # npm workspaces root (web, worker, e2e)
+  command = "npm --workspace web run build"
+  publish = "web/out"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_TELEMETRY_DISABLED = "1"
+  # e2e / worker dependencies are not needed to build the site
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
+
+# Long-lived caching for content-hashed build assets only; HTML is always revalidated.
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
