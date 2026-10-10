@@ -116,7 +116,8 @@ select test.eq((select string_agg(decision || coalesce(':' || level_no, ''), ','
                 where doc_id = (select v from t where k = 'po_big')), 'SUBMITTED,APPROVED:1,APPROVED:2', 'Approval history per level');
 select test.eq((select count(*) from public.audit_log where row_id = (select v from t where k = 'po_big')::text and action = 'APPROVE')::int, 2,
                'Each approval is in the audit log');
-update public.approval_actions set comment = 'changed' where doc_id = (select v from t where k = 'po_big');
+select test.throws(format($$ update public.approval_actions set comment = 'changed' where doc_id = %L $$, (select v from t where k = 'po_big')),
+                   '%permission denied%', 'Approval history: no update privilege for API users');
 select test.ok(not exists (select 1 from public.approval_actions where comment = 'changed'), 'Approval history cannot be changed through the API');
 select test.login(null);
 select test.throws(format($$ delete from public.approval_actions where doc_id = %L $$, (select v from t where k = 'po_big')),

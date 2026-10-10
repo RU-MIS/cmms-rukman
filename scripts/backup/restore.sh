@@ -16,5 +16,5 @@ fi
 # no company yet, so nothing references it).
 psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1 -c 'truncate public.permissions cascade'
 psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1 -f "$WORK/data.sql"
-for b in documents item-images; do (cd worker && node src/storage-backup.ts restore "$WORK/files" "$b"); done
+for b in documents item-images company-assets; do (cd worker && node src/storage-backup.ts restore "$WORK/files" "$b"); done
 echo "Restored $(psql "$DATABASE_URL" -X -At -c 'select count(*) from public.companies') companies."

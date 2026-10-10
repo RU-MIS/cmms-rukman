@@ -25,5 +25,6 @@ $$;
 grant usage on schema auth to anon, authenticated, service_role;
 grant select on auth.users to service_role;
 grant usage on schema public to anon, authenticated, service_role;
-alter default privileges in schema public grant select, insert, update, delete on tables to authenticated, service_role;
+-- as on Supabase: every new table / view is granted to all API roles (migrations must revoke what they do not need)
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant usage, select on sequences to authenticated, service_role;

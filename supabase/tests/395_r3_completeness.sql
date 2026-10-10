@@ -20,6 +20,16 @@ select test.eq((select string_agg(t.name, ', ') from r3_tables t where t.company
                'Every company table has company_id');
 select test.eq((select string_agg(t.name || ':' || p, ', ') from r3_tables t, unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) p
                 where has_table_privilege('anon', 'public.' || t.name, p)), null, 'anon has no privilege on the new tables');
+select test.eq((select string_agg(table_name, ', ') from information_schema.role_table_grants where grantee = 'anon' and table_schema = 'public'),
+               null, 'anon has no privilege on any public table or view (Supabase default privileges revoked)');
+select test.eq((select string_agg(distinct table_name, ', ') from information_schema.role_table_grants
+                where grantee in ('anon', 'authenticated') and table_schema = 'public' and privilege_type = 'TRUNCATE'),
+               null, 'No API role may TRUNCATE (it ignores row-level security)');
+select test.eq((select string_agg(c.relname, ', ') from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                where n.nspname = 'public' and c.relkind in ('r', 'v') and has_table_privilege('authenticated', c.oid, 'INSERT')
+                  and c.relname in ('app_modules', 'approval_actions', 'approval_rules', 'company_modules', 'rate_change_requests',
+                                    'party_opening_balances', 'v_vouchers', 'v_purchase_receipts')), null,
+               'Function-only tables and masked views are not writable through the API');
 -- policies of the new tables (and the ones R3 rewrote): permission / scope lookups only inside (SELECT …) — once per query
 select test.eq((select string_agg(tablename || '.' || policyname, ', ') from pg_policies
                 where schemaname = 'public' and cmd in ('SELECT', 'ALL')

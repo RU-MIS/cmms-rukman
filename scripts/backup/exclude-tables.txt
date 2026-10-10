@@ -1,3 +1,4 @@
+app.audit_coverage
 app.data_scope_registry
 app.default_accounts
 app.default_approvals
@@ -5,9 +6,19 @@ app.default_roles
 app.default_sequences
 app.doc_types
 app.godown_scoped_tables
+app.hidden_permissions
 app.import_entities
+app.module_tables
+app.permission_derivations
+app.record_scope_tables
+app.settings_fields
+public.app_modules
 public.data_scope_dimensions
 public.permission_modules
+secure.column_whitelist
+secure.reviewed_functions
+secure.sensitive_columns
+secure.value_sources
 storage.buckets
 storage.buckets_analytics
 storage.buckets_vectors
