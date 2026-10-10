@@ -96,7 +96,7 @@ returns trigger
 language plpgsql security definer
 set search_path = public, app, pg_temp
 as $$
-declare h public.sales_orders; i public.items; v_policy text; v_base numeric;
+declare h public.sales_orders; i public.items; v_policy text; v_base numeric; v_reason text;
 begin
   if new.rate is null or (tg_op = 'UPDATE' and new.rate is not distinct from old.rate and new.item_id = old.item_id) then
     return new;
@@ -107,10 +107,11 @@ begin
   select * into i from public.items where id = new.item_id;
   v_base := new.rate / nullif(new.factor_to_base, 0);
   if (i.min_sale_rate is not null and v_base < i.min_sale_rate) or (i.max_sale_rate is not null and v_base > i.max_sale_rate) then
-    if auth.uid() is not null and app.has_permission(h.company_id, 'sales_order.override_rate_limit')
-       and coalesce(trim(h.rate_override_reason), '') <> '' then
+    -- the reason comes with the order, or with the customer PO approval that creates it (customer_po_approve_checked)
+    v_reason := coalesce(nullif(trim(h.rate_override_reason), ''), nullif(trim(current_setting('app.rate_override_reason', true)), ''));
+    if auth.uid() is not null and app.has_permission(h.company_id, 'sales_order.override_rate_limit') and v_reason is not null then
       perform app.audit(h.company_id, 'sales_orders', h.id::text, 'RATE_LIMIT_OVERRIDE', null,
-                        jsonb_build_object('item_id', i.id, 'rate_per_base', round(v_base, 4), 'reason', h.rate_override_reason));
+                        jsonb_build_object('item_id', i.id, 'rate_per_base', round(v_base, 4), 'reason', v_reason));
       return new;
     end if;
     raise exception 'Rate % for % is outside the allowed sale rate (% – %)%', round(v_base, 4), i.name,
@@ -140,6 +141,48 @@ begin
   update public.sales_orders set rate_override_reason = nullif(trim(p_reason), '') where id = p_order_id;
 end;
 $$;
+
+-- Customer PO approval with the sale-rate limits: an optional override reason
+-- (needs sales_order.override_rate_limit, audited per line) and, with the WARN
+-- policy, warnings for rates outside the limits
+create or replace function public.customer_po_approve_checked(p_id uuid, p_lines jsonb, p_remarks text, p_godown_id uuid, p_reserve boolean,
+                                                              p_override_reason text default null, p_custom jsonb default null)
+returns jsonb
+language plpgsql security definer
+set search_path = public, app, pg_temp
+as $$
+declare v jsonb; v_company uuid := (select company_id from public.customer_pos where id = p_id); v_warn jsonb;
+begin
+  if nullif(trim(p_override_reason), '') is not null then
+    if v_company is null or not app.is_member(v_company) then
+      raise exception 'Customer PO not found' using errcode = 'P0001';
+    end if;
+    perform app.require_permission(v_company, 'sales_order.override_rate_limit');
+    perform set_config('app.rate_override_reason', trim(p_override_reason), true);
+  end if;
+  -- custom fields of the sales order it creates (validated by the custom-field trigger)
+  perform set_config('app.new_sales_order_custom', coalesce(p_custom, '{}')::text, true);
+  v := public.customer_po_approve(p_id, p_lines, p_remarks, p_godown_id, p_reserve);
+  perform set_config('app.rate_override_reason', '', true);
+  perform set_config('app.new_sales_order_custom', '', true);
+  if (select sale_rate_limit_policy from public.company_settings where company_id = v_company) = 'WARN' then
+    select coalesce(jsonb_agg(format('Rate %s for %s is outside the allowed sale rate (%s – %s)', round(l.rate / nullif(l.factor_to_base, 0), 4), i.name,
+                                     coalesce(i.min_sale_rate::text, '—'), coalesce(i.max_sale_rate::text, '—'))), '[]')
+      into v_warn
+    from public.sales_order_lines l join public.items i on i.id = l.item_id
+    where l.order_id = (v->>'sales_order_id')::uuid
+      and ((i.min_sale_rate is not null and l.rate / nullif(l.factor_to_base, 0) < i.min_sale_rate)
+           or (i.max_sale_rate is not null and l.rate / nullif(l.factor_to_base, 0) > i.max_sale_rate));
+    v := jsonb_set(v, '{warnings}', coalesce(v->'warnings', '[]') || v_warn);
+  end if;
+  return v;
+end;
+$$;
+revoke all on function public.customer_po_approve_checked(uuid, jsonb, text, uuid, boolean, text, jsonb) from public, anon;
+grant execute on function public.customer_po_approve_checked(uuid, jsonb, text, uuid, boolean, text, jsonb) to authenticated, service_role;
+insert into secure.reviewed_functions values
+  ('public.customer_po_approve_checked', 'wraps customer_po_approve; warnings only to the approver (customer_po.approve + sale rates)')
+on conflict do nothing;
 
 -- -----------------------------------------------------------------------------
 -- Party rates: active / inactive (inactive rates are not used for new documents)

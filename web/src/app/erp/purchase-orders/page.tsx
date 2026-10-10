@@ -10,6 +10,8 @@ import { date, money, num, today } from '@/lib/format';
 import { downloadPoPdf } from '@/lib/po-download';
 import { LineEditor, emptyLine, payloadLines, type Line } from '@/components/LineEditor';
 import { DocumentsPanel } from '@/components/Documents';
+import { ApprovalHistory } from '@/components/ApprovalHistory';
+import { CustomFieldsEditor, useCustomFields } from '@/components/admin/CustomFields';
 import { Badge, Button, Card, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Table, TextArea, useAction } from '@/components/ui';
 
 interface PO { id: string; doc_no: string | null; doc_date: string; expected_date: string | null; status: string; remarks: string | null;
@@ -58,11 +60,13 @@ function PoForm({ onClose, onSaved }: { onClose: () => void; onSaved: (id: strin
   const { busy, run } = useAction();
   const [h, setH] = useState({ party_id: '', doc_date: today(), expected_date: '', godown_id: '', remarks: '' });
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
+  const defs = useCustomFields(companyId, ['PURCHASE_ORDER']);
+  const [custom, setCustom] = useState<Record<string, unknown>>({});
   const save = (confirm: boolean) => run(async () => {
     if (!h.party_id) throw new Error('Choose the vendor');
     const id = await rpc<string>('doc_save', { p_doc_type: 'PURCHASE_ORDER', p_payload: { company_id: companyId, doc_date: h.doc_date,
       party_id: h.party_id, expected_date: h.expected_date || null, godown_id: h.godown_id || null, remarks: h.remarks || null,
-      lines: payloadLines(lines, { rate: true }) } });
+      custom, lines: payloadLines(lines, { rate: true }) } });
     if (confirm) await rpc('doc_submit', { p_doc_type: 'PURCHASE_ORDER', p_id: id });
     onSaved(id);
   }, confirm ? 'PO confirmed' : 'Draft saved');
@@ -78,6 +82,7 @@ function PoForm({ onClose, onSaved }: { onClose: () => void; onSaved: (id: strin
             options={(godowns.data ?? []).map((g) => ({ value: g.id, label: g.name }))} /></Field>
           <Field label="Remarks" className="md:col-span-4"><TextArea rows={2} value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} /></Field>
         </div>
+        <CustomFieldsEditor defs={defs.data ?? []} value={custom} onChange={setCustom} />
         <LineEditor lines={lines} onChange={setLines} items={items.data} units={units.data} packings={packings.data} rate unitKind="purchase" />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" busy={busy} onClick={() => save(false)}>Save draft</Button>
@@ -139,6 +144,7 @@ function PoDetail({ id }: { id: string }) {
             <td>{date(m.created_at)}</td><td className="text-red-600">{m.last_error}</td></tr>))}
             {mails.data?.length === 0 && <tr><td colSpan={5} className="text-slate-500">No emails (email automation may be off — Settings → Email)</td></tr>}</tbody></Table>
       </Card>
+      <ApprovalHistory docType="PURCHASE_ORDER" docId={id} />
       {posted && <DocumentsPanel companyId={companyId} entityType="purchase_order" entityId={id} defaultCategory="PURCHASE_DOCUMENT"
         title="Vendor documents (uploading emails the vendor PO PDF + document when enabled)" />}
     </div>

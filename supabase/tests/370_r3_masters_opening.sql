@@ -53,6 +53,31 @@ update public.items set min_sale_rate = 1 where id = test.id('fg');
 select test.eq(test.raw(format('(select min_sale_rate from public.items where id = %L)', test.id('fg'))), '15.0000',
                'Rate limits cannot be changed without the rate rights');
 
+-- the same through a customer PO approval (which creates the sales order)
+select test.login(test.id('admin'));
+select public.settings_save(test.id('company'), 'sales', '{"sale_rate_limit_policy":"BLOCK"}');
+create or replace function pg_temp.cpo(p_no text) returns uuid language sql as $$
+  select public.customer_po_create(test.id('company'), (select id from public.parties where code = 'C1' and company_id = test.id('company')),
+    jsonb_build_object('po_no', p_no, 'lines', jsonb_build_array(jsonb_build_object('item_id', test.id('fg'), 'qty', 1, 'unit_id', test.id('pair'))))) $$;
+create or replace function pg_temp.lines(p_cpo uuid, p_rate numeric) returns jsonb language sql as $$
+  select jsonb_agg(jsonb_build_object('line_id', id, 'approved_rate', p_rate, 'qty', qty)) from public.customer_po_lines where customer_po_id = p_cpo $$;
+insert into t values ('cpo1', pg_temp.cpo('CPO-LIM-1'));
+select test.throws(format($$ select public.customer_po_approve_checked(%L, pg_temp.lines(%L, 5), null, null, false) $$,
+                          (select v from t where k = 'cpo1'), (select v from t where k = 'cpo1')), '%outside the allowed sale rate%',
+                   'Customer PO approval below the minimum refused (Block)');
+select test.login(test.id('operator'));
+select test.throws(format($$ select public.customer_po_approve_checked(%L, pg_temp.lines(%L, 5), null, null, false, 'please') $$,
+                          (select v from t where k = 'cpo1'), (select v from t where k = 'cpo1')), '%', 'Override reason needs the override right');
+select test.login(test.id('admin'));
+select test.ok(public.customer_po_approve_checked((select v from t where k = 'cpo1'), pg_temp.lines((select v from t where k = 'cpo1'), 5), null, null, false,
+                 'Old stock clearance') ? 'sales_order_id', 'Approved with an override reason');
+select test.ok(test.raw(format($q$exists (select 1 from public.audit_log where action = 'RATE_LIMIT_OVERRIDE' and company_id = %L
+                                and new_data->>'reason' = 'Old stock clearance')$q$, test.id('company')))::boolean, 'Override reason audited');
+select public.settings_save(test.id('company'), 'sales', '{"sale_rate_limit_policy":"WARN"}');
+insert into t values ('cpo2', pg_temp.cpo('CPO-LIM-2'));
+select test.ok(public.customer_po_approve_checked((select v from t where k = 'cpo2'), pg_temp.lines((select v from t where k = 'cpo2'), 5), null, null, false)->'warnings'
+               @> '["Rate 5.0000 for TOE-RING SANDAL-4766 is outside the allowed sale rate (15.0000 – 30.0000)"]', 'Warn: approved with a visible warning');
+
 -- ------------------------------------------------------------ AC-9.2: inactive party rates
 select test.login(test.id('admin'));
 insert into public.party_item_rates (company_id, rate_type, party_id, item_id, rate, effective_from)

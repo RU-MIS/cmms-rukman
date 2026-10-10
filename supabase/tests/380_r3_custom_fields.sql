@@ -32,6 +32,17 @@ select test.throws($$ select pg_temp.so('{}') $$, '%Channel is required%', 'Sale
 select test.throws($$ select pg_temp.so('{"channel":"ONLINE"}') $$, '%must be one of%', 'Value outside the dropdown refused');
 insert into t values ('so', pg_temp.so('{"channel":"DEALER"}'));
 select test.eq((select custom->>'channel' from public.sales_orders where id = (select v from t where k = 'so')), 'DEALER', 'Saved on the sales order');
+-- sales orders created by approving a customer PO take the values entered in the approval
+insert into t values ('cpo', public.customer_po_create(test.id('company'), :'c1_v', jsonb_build_object('po_no', 'CF-1',
+  'lines', jsonb_build_array(jsonb_build_object('item_id', test.id('fg'), 'qty', 1, 'unit_id', test.id('pair'))))));
+create or replace function pg_temp.cpo_lines() returns jsonb language sql as $$
+  select jsonb_agg(jsonb_build_object('line_id', id, 'approved_rate', 10, 'qty', qty)) from public.customer_po_lines where customer_po_id = (select v from t where k = 'cpo') $$;
+select test.throws($$ select public.customer_po_approve_checked((select v from t where k = 'cpo'), pg_temp.cpo_lines(), null, null, false) $$,
+                   '%Channel is required%', 'Customer PO approval without the required sales-order field refused');
+insert into t select 'so_cpo', (public.customer_po_approve_checked((select v from t where k = 'cpo'), pg_temp.cpo_lines(), null, null, false, null,
+  '{"channel":"DIRECT"}')->>'sales_order_id')::uuid;
+select test.eq((select custom->>'channel' from public.sales_orders where id = (select v from t where k = 'so_cpo')), 'DIRECT',
+               'Approval with the field creates the sales order with it');
 
 -- ------------------------------------------------------------ AC-10.2: types
 select public.custom_field_save(test.id('company'), null, '{"entity":"CUSTOMER","field_key":"buyer_email","label":"Buyer e-mail","field_type":"EMAIL"}');

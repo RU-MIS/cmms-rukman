@@ -161,6 +161,10 @@ begin
     end if;
   end if;
   v_new := coalesce(new.custom, '{}');
+  -- a sales order created by a customer PO approval takes the custom values entered in the approval
+  if tg_op = 'INSERT' and tg_table_name = 'sales_orders' and v_new = '{}'::jsonb then
+    v_new := coalesce(nullif(current_setting('app.new_sales_order_custom', true), '')::jsonb, '{}');
+  end if;
   -- parties without customer / vendor role yet (party_save adds the role afterwards): keep as is
   if cardinality(v_entities) = 0 then
     return new;

@@ -9,6 +9,7 @@ import { useGodowns, useItems, useParties, usePackings, useUnitsAll } from '@/li
 import { date, money, num, today } from '@/lib/format';
 import { LineEditor, emptyLine, payloadLines, type Line } from '@/components/LineEditor';
 import { DocumentsPanel } from '@/components/Documents';
+import { CustomFieldsEditor, useCustomFields } from '@/components/admin/CustomFields';
 import { Badge, Button, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Table, TextArea, Toggle, useAction } from '@/components/ui';
 
 interface PoLine { company_id: string; customer_po_id: string; po_no: string; po_date: string; requested_delivery_date: string | null;
@@ -74,6 +75,9 @@ function ReviewModal({ lines, onClose, onDone }: { lines: PoLine[]; onClose: () 
   const [reserve, setReserve] = useState(true);
   const [remarks, setRemarks] = useState('');
   const [reason, setReason] = useState('');
+  const [override, setOverride] = useState<string | null>(null);
+  const soDefs = useCustomFields(companyId, ['SALES_ORDER']);
+  const [soCustom, setSoCustom] = useState<Record<string, unknown>>({});
   const open = ['SUBMITTED', 'UNDER_REVIEW'].includes(h.status);
   const canApprove = open && can('customer_po.approve');
 
@@ -83,8 +87,16 @@ function ReviewModal({ lines, onClose, onDone }: { lines: PoLine[]; onClose: () 
       if (p === '' || !(Number(p) >= 0)) throw new Error(`Enter the approved price for ${l.item_name}`);
       return { line_id: l.line_id, approved_rate: Number(p), qty: Number(qtys[l.line_id]) };
     });
-    const r = await rpc<{ sales_order_no: string; warnings: string[] }>('customer_po_approve', { p_id: h.customer_po_id, p_lines: payload,
-      p_remarks: remarks || null, p_godown_id: godown || null, p_reserve: !!godown && reserve });
+    let r: { sales_order_no: string; warnings: string[] };
+    try {
+      r = await rpc<{ sales_order_no: string; warnings: string[] }>('customer_po_approve_checked', { p_id: h.customer_po_id, p_lines: payload,
+        p_remarks: remarks || null, p_godown_id: godown || null, p_reserve: !!godown && reserve, p_override_reason: override?.trim() || null,
+        p_custom: soCustom });
+    } catch (e) {
+      // Block policy: a user with the override right can approve with an audited reason
+      if (/outside the allowed sale rate/.test(String((e as Error).message)) && can('sales_order.override_rate_limit') && override === null) setOverride('');
+      throw e;
+    }
     if (r.warnings?.length) alert(r.warnings.join('\n'));
     onDone(); onClose();
   }, 'Approved — sales order created');
@@ -99,6 +111,10 @@ function ReviewModal({ lines, onClose, onDone }: { lines: PoLine[]; onClose: () 
         </div>
         {h.remarks && <p className="rounded bg-slate-50 p-2 text-sm">Customer remarks: {h.remarks}</p>}
         {h.reject_reason && <p className="rounded bg-red-50 p-2 text-sm text-red-700">Rejected: {h.reject_reason}</p>}
+        {canApprove && (soDefs.data ?? []).length > 0 && <div><div className="field-label">Sales order fields</div>
+          <CustomFieldsEditor defs={soDefs.data ?? []} value={soCustom} onChange={setSoCustom} /></div>}
+        {override !== null && <Field label="Override reason (rate outside the allowed sale rate — audited)">
+          <Input aria-label="Override reason" value={override} onChange={(e) => setOverride(e.target.value)} /></Field>}
         <Table>
           <thead><tr><th>Item</th><th className="num">Qty</th><th className="num">Our price</th><th className="num">Customer quote</th>
             <th className="num">Difference</th><th>Approved price</th></tr></thead>

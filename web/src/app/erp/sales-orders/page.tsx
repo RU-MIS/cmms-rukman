@@ -8,6 +8,7 @@ import { useData } from '@/lib/useData';
 import { useGodowns, useLocations } from '@/lib/masters';
 import { date, dateTime, money, num, today } from '@/lib/format';
 import { DocumentsPanel } from '@/components/Documents';
+import { ApprovalHistory } from '@/components/ApprovalHistory';
 import { Badge, Button, Card, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Table, useAction } from '@/components/ui';
 
 interface SO { id: string; doc_no: string; doc_date: string; customer_po_no: string; delivery_date: string | null; status: string;
@@ -121,6 +122,7 @@ function OrderDetail({ id }: { id: string }) {
               {dsp.data?.length === 0 && <tr><td colSpan={6} className="text-slate-500">No dispatches yet</td></tr>}</tbody></Table>
         </Card>
       </div>
+      <ApprovalHistory docType="SALES_ORDER" docId={id} />
       <DocumentsPanel companyId={companyId} entityType="sales_order" entityId={id} defaultCategory="DELIVERY_DOCUMENT" />
       {reserveLine && <ReserveModal line={reserveLine} godowns={godowns.data ?? []} defaultGodown={so.data.godown_id}
         onClose={() => setReserveLine(null)} onDone={() => { setReserveLine(null); reloadAll(); }} />}
