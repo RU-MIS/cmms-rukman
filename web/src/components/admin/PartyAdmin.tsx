@@ -13,7 +13,7 @@ import { PAGE_SIZE, Pager, SortTh, ilikeTerm, type Sort } from '@/components/Lis
 import { DocumentsPanel } from '@/components/Documents';
 import { AuditTrail } from '@/components/AuditTrail';
 import { Badge, Button, Card, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Table, Tabs, TextArea, Toggle, useAction, useToast } from '@/components/ui';
-import { CustomFieldsEditor, useCustomFields } from './CustomFields';
+import { CustomFieldsEditor, privateValues, useCustomFields } from './CustomFields';
 import { TempPasswordModal } from './widgets';
 
 type Kind = 'CUSTOMER' | 'VENDOR';
@@ -164,6 +164,12 @@ function Details({ kind, party, onSaved, onDeleted }: { kind: Kind; party: Parti
   const defs = useCustomFields(companyId, [kind]);
   const [p, setP] = useState<Partial<PartyRow>>(party);
   const [vroles, setVroles] = useState<string[]>((party.party_roles ?? []).map((r) => r.role).filter((r) => VENDOR_ROLES.includes(r)));
+  useEffect(() => {
+    if (!party.id || !(defs.data ?? []).some((d) => d.view_permission)) return;
+    let alive = true;
+    privateValues(companyId, kind, party.id).then((pv) => { if (alive) setP((x) => ({ ...x, custom: { ...(x.custom ?? {}), ...pv } })); }, () => undefined);
+    return () => { alive = false; };
+  }, [companyId, kind, party.id, defs.data]);
   const editable = party.id ? right('edit') : right('create');
   const set = (k: keyof PartyRow, v: unknown) => setP((x) => ({ ...x, [k]: v }));
   const f = (k: keyof PartyRow, label: string, cls = '') => (
@@ -203,7 +209,8 @@ function Details({ kind, party, onSaved, onDeleted }: { kind: Kind; party: Parti
             <label key={r} className="flex items-center gap-1.5 text-sm"><input type="checkbox" disabled={!editable} checked={vroles.includes(r)}
               onChange={(e) => setVroles(e.target.checked ? [...vroles, r] : vroles.filter((x) => x !== r))} />{r.replace('_', ' ').toLowerCase()}</label>))}
         </div>)}
-      <CustomFieldsEditor defs={defs.data ?? []} value={p.custom ?? {}} onChange={(v) => set('custom', v)} disabled={!editable} />
+      <CustomFieldsEditor defs={defs.data ?? []} value={p.custom ?? {}} onChange={(v) => set('custom', v)} disabled={!editable} existing={!!party.id}
+        files={party.id ? { companyId, entityType: 'party', entityId: party.id } : undefined} />
       <Field label="Status" hint="On hold: no new orders; existing documents continue. Disabled: not offered any more.">
         <Select aria-label="Status" className="max-w-xs" disabled={!editable} value={p.status ?? 'ACTIVE'} options={STATUS} onChange={(e) => set('status', e.target.value)} /></Field>
       <div className="flex justify-between gap-2">

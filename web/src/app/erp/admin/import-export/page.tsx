@@ -5,13 +5,14 @@ import { must, rpc, sb } from '@/lib/supabase';
 import { useCompanyId } from '@/lib/session';
 import { useData } from '@/lib/useData';
 import { dateTime } from '@/lib/format';
-import { downloadRows, downloadTemplate, exportEntity, readSpreadsheet, type ImportEntity } from '@/lib/spreadsheet';
-import { Badge, Button, Card, ErrorBox, PageHeader, Spinner, Stat, Table, useAction } from '@/components/ui';
+import { autoMapping, downloadRows, downloadTemplate, exportEntity, gridHeaders, mapGrid, readGrid, type ImportEntity } from '@/lib/spreadsheet';
+import { Badge, Button, Card, ErrorBox, Input, PageHeader, Select, Spinner, Stat, Table, useAction } from '@/components/ui';
 
 interface Job { id: string; entity: string; file_name: string; mode: string; update_existing: boolean; status: string;
   total_rows: number; valid_rows: number; invalid_rows: number; duplicate_rows: number; create_rows: number; update_rows: number;
   imported_rows: number; failed_rows: number; header_errors?: number; error: string | null; created_at: string; committed?: boolean; message?: string }
-interface ImpError { row_no: number; column_key: string | null; value: string | null; message: string }
+interface ImpError { row_no: number; column_key: string | null; value: string | null; message: string; suggestion: string | null }
+interface Template { id: string; name: string; mapping: Record<string, string> }
 
 const CHUNK = 1000;
 
@@ -64,7 +65,7 @@ function ImportExport() {
                 <tbody>{(jobs.data ?? []).map((j) => (
                   <tr key={j.id}><td className="whitespace-nowrap">{dateTime(j.created_at)}</td><td>{j.entity}</td><td>{j.file_name}</td>
                     <td>{j.mode === 'VALID_ONLY' ? 'valid rows only' : 'all-or-nothing'}{j.update_existing ? ' · update' : ''}</td>
-                    <td><Badge color={j.status === 'COMMITTED' ? 'green' : j.status === 'FAILED' ? 'red' : 'slate'}>{j.status}</Badge></td>
+                    <td><Badge color={j.status === 'COMMITTED' ? 'green' : j.status === 'FAILED' ? 'red' : j.status === 'QUEUED' ? 'blue' : 'slate'}>{j.status}</Badge></td>
                     <td className="num">{j.total_rows}</td><td className="num">{j.imported_rows}</td></tr>))}
                   {jobs.data?.length === 0 && <tr><td colSpan={7} className="text-slate-500">No imports yet</td></tr>}</tbody></Table>
             </Card>
@@ -84,23 +85,44 @@ function ImportWizard({ entity, onDone }: { entity: ImportEntity; onDone: () => 
   const [job, setJob] = useState<Job | null>(null);
   const [errors, setErrors] = useState<ImpError[]>([]);
   const [raw, setRaw] = useState<{ row_no: number; data: Record<string, string> }[]>([]);
+  const [grid, setGrid] = useState<unknown[][] | null>(null);
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [tplName, setTplName] = useState('');
+  const templates = useData(async () => must<Template[]>(await sb().from('import_templates').select('id, name, mapping')
+    .eq('company_id', companyId).eq('entity', entity.code).order('name')), [companyId, entity.code]);
   const [confirm, setConfirm] = useState(false);
   const [result, setResult] = useState<Job | null>(null);
 
   const reset = () => { setJob(null); setErrors([]); setConfirm(false); setResult(null); setProgress(''); };
-  const loadErrors = async (id: string) => setErrors(must<ImpError[]>(await sb().from('import_errors').select('row_no, column_key, value, message')
+  const loadErrors = async (id: string) => setErrors(must<ImpError[]>(await sb().from('import_errors').select('row_no, column_key, value, message, suggestion')
     .eq('job_id', id).order('row_no').order('id').limit(5000)));
 
+  // step 1: read the headers and propose a mapping (a saved mapping whose headers all occur in the file wins)
+  const readFile = (f: File | null) => run(async () => {
+    setFile(f); reset(); setGrid(null);
+    if (!f) return;
+    const g = await readGrid(f);
+    const headers = gridHeaders(g);
+    const saved = (templates.data ?? []).find((t) => Object.keys(t.mapping).length > 0 && Object.keys(t.mapping).every((h) => headers.includes(h)));
+    const auto = autoMapping(headers, entity.columns);
+    setMapping(saved ? { ...auto, ...saved.mapping } : auto);
+    if (saved) setTplName(saved.name);
+    setGrid(g);
+  });
+  const missing = entity.columns.filter((c) => c.required && !Object.values(mapping).includes(c.key));
+
   const validate = () => run(async () => {
-    if (!file) throw new Error('Choose a file');
+    if (!file || !grid) throw new Error('Choose a file');
+    if (missing.length) throw new Error(`Map the required column(s): ${missing.map((c) => c.label).join(', ')}`);
     reset();
     setProgress('Reading file…');
-    const sheet = await readSpreadsheet(file, entity.columns);
+    const sheet = mapGrid(grid, mapping);
     if (sheet.rows.length === 0) throw new Error('The file has no data rows');
     if (sheet.rows.length > 10000) throw new Error(`The file has ${sheet.rows.length} rows — at most 10,000 per file`);
     setRaw(sheet.rows);
     const created = await rpc<{ job_id: string; header_errors: number }>('import_create', { p_company_id: companyId, p_entity: entity.code,
       p_file_name: file.name, p_mode: mode, p_update_existing: update, p_columns: [...new Set(sheet.keys)] });
+    await rpc('import_job_set_mapping', { p_job_id: created.job_id, p_mapping: mapping });
     for (let i = 0; i < sheet.rows.length; i += CHUNK) {
       setProgress(`Uploading rows ${i + 1}–${Math.min(i + CHUNK, sheet.rows.length)} of ${sheet.rows.length}…`);
       await rpc('import_add_rows', { p_job_id: created.job_id, p_rows: sheet.rows.slice(i, i + CHUNK) });
@@ -113,7 +135,14 @@ function ImportWizard({ entity, onDone }: { entity: ImportEntity; onDone: () => 
   const commit = () => run(async () => {
     if (!job) return;
     setProgress('Importing…');
-    const r = await rpc<Job>('import_commit', { p_job_id: job.id, p_confirm: confirm });
+    let r = await rpc<Job>('import_commit', { p_job_id: job.id, p_confirm: confirm });
+    // large files are committed by the background worker (one transaction, as you): wait for its result
+    for (let i = 0; r.status === 'QUEUED' && i < 600; i++) {
+      setProgress('Large file: the import runs in the background (all-or-nothing). You may leave this page.');
+      await new Promise((ok) => setTimeout(ok, 2000));
+      r = { ...r, ...must<Job>(await sb().from('import_jobs').select('*').eq('id', job.id).single()) };
+      r.committed = r.status === 'COMMITTED';
+    }
     setResult(r); setProgress('');
     if (r.status !== 'COMMITTED') await loadErrors(job.id);
     onDone();
@@ -122,7 +151,8 @@ function ImportWizard({ entity, onDone }: { entity: ImportEntity; onDone: () => 
 
   const errorReport = () => run(async () => {
     const byRow = new Map<number, string[]>();
-    for (const e of errors) byRow.set(e.row_no, [...(byRow.get(e.row_no) ?? []), `${e.column_key ?? 'row'}: ${e.message}${e.value ? ` (${e.value})` : ''}`]);
+    for (const e of errors) byRow.set(e.row_no, [...(byRow.get(e.row_no) ?? []),
+      `${e.column_key ?? 'row'}: ${e.message}${e.value ? ` (${e.value})` : ''}${e.suggestion ? ` — did you mean ${e.suggestion}?` : ''}`]);
     const cols = ['row', ...entity.columns.map((c) => c.key), 'errors'];
     const rows = [...byRow.entries()].sort((a, b) => a[0] - b[0]).map(([rowNo, msgs]) => ({
       row: rowNo === 0 ? 'header' : rowNo, ...(raw.find((r) => r.row_no === rowNo)?.data ?? {}), errors: msgs.join(' | ') }));
@@ -139,7 +169,7 @@ function ImportWizard({ entity, onDone }: { entity: ImportEntity; onDone: () => 
         <div className="flex flex-wrap items-end gap-4">
           <label className="text-sm"><span className="field-label">File (.xlsx or .csv)</span>
             <input type="file" aria-label="Import file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-              onChange={(e) => { setFile(e.target.files?.[0] ?? null); reset(); }} /></label>
+              onChange={(e) => readFile(e.target.files?.[0] ?? null)} /></label>
           <fieldset className="text-sm">
             <legend className="field-label">Mode</legend>
             <label className="mr-4 inline-flex items-center gap-1"><input type="radio" name="mode" checked={mode === 'ALL_OR_NOTHING'}
@@ -149,8 +179,30 @@ function ImportWizard({ entity, onDone }: { entity: ImportEntity; onDone: () => 
           </fieldset>
           {entity.can_update && <label className="inline-flex items-center gap-1 text-sm"><input type="checkbox" checked={update}
             onChange={(e) => { setUpdate(e.target.checked); reset(); }} />Update existing records</label>}
-          <Button busy={busy} disabled={!file} onClick={validate}>Validate file</Button>
+          <Button busy={busy} disabled={!grid || missing.length > 0} onClick={validate}>Validate file</Button>
         </div>
+        {grid && !job && (
+          <div className="rounded-md border border-slate-200 p-3" data-testid="mapping">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-slate-700">Column mapping</h3>
+              <div className="flex items-center gap-2 text-sm">
+                <Select aria-label="Saved mapping" className="w-48" value="" placeholder="Apply saved mapping…"
+                  options={(templates.data ?? []).map((t) => ({ value: t.id, label: t.name }))}
+                  onChange={(e) => { const t = templates.data?.find((x) => x.id === e.target.value); if (t) { setMapping({ ...mapping, ...t.mapping }); setTplName(t.name); } }} />
+                <Input aria-label="Mapping name" className="w-40" placeholder="Save as…" value={tplName} onChange={(e) => setTplName(e.target.value)} />
+                <Button variant="secondary" busy={busy} disabled={!tplName.trim()} onClick={() => run(async () => {
+                  await rpc('import_template_save', { p_company_id: companyId, p_entity: entity.code, p_name: tplName.trim(), p_mapping: mapping });
+                  templates.reload(); }, 'Mapping saved — the next file with these headers is mapped automatically')}>Save mapping</Button>
+              </div>
+            </div>
+            <Table><thead><tr><th>Column in your file</th><th>Imports into</th></tr></thead>
+              <tbody>{gridHeaders(grid).map((h) => (
+                <tr key={h}><td>{h || <i className="text-slate-400">(empty header)</i>}</td>
+                  <td><Select aria-label={`Map ${h}`} value={mapping[h] ?? ''} placeholder="— ignore —"
+                    options={entity.columns.map((c) => ({ value: c.key, label: `${c.label}${c.required ? ' *' : ''} (${c.key})` }))}
+                    onChange={(e) => setMapping({ ...mapping, [h]: e.target.value })} /></td></tr>))}</tbody></Table>
+            {missing.length > 0 && <p role="alert" className="mt-2 text-sm text-red-600">Required column(s) not mapped: {missing.map((c) => c.label).join(', ')}</p>}
+          </div>)}
         {progress && <p className="text-sm text-slate-600" role="status">{progress}</p>}
         {job && (
           <>
@@ -169,10 +221,11 @@ function ImportWizard({ entity, onDone }: { entity: ImportEntity; onDone: () => 
                   <Button variant="secondary" busy={busy} onClick={errorReport}>Download error report</Button>
                 </div>
                 <div className="max-h-72 overflow-y-auto">
-                  <Table><thead><tr><th className="num">Row</th><th>Column</th><th>Value</th><th>Reason</th></tr></thead>
+                  <Table><thead><tr><th className="num">Row</th><th>Column</th><th>Value</th><th>Reason</th><th>Did you mean</th></tr></thead>
                     <tbody>{errors.slice(0, 500).map((e, i) => (
                       <tr key={i}><td className="num">{e.row_no === 0 ? 'header' : e.row_no}</td><td>{e.column_key ?? '—'}</td>
-                        <td className="max-w-[12rem] truncate">{e.value ?? ''}</td><td>{e.message}</td></tr>))}</tbody></Table>
+                        <td className="max-w-[12rem] truncate">{e.value ?? ''}</td><td>{e.message}</td>
+                        <td className="font-mono text-emerald-700">{e.suggestion ?? ''}</td></tr>))}</tbody></Table>
                 </div>
               </div>)}
             {!result && job.valid_rows > 0 && (

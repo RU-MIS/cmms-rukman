@@ -70,27 +70,36 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-/** Reads the first sheet ("Data" if present) of an XLSX file or a CSV file. */
-export async function readSpreadsheet(file: File, columns: ImportColumn[]): Promise<{ headers: string[]; keys: string[]; rows: { row_no: number; data: Record<string, string> }[] }> {
+/** Header → column key by key or label ("code *" → code); unknown headers map to themselves (the server reports them). */
+export function autoMapping(headers: string[], columns: ImportColumn[]): Record<string, string> {
+  const byLabel = new Map(columns.flatMap((c) => [[c.key.toLowerCase(), c.key], [c.label.toLowerCase(), c.key]]));
+  return Object.fromEntries(headers.map((h) => { const n = h.replace(/\s*\*\s*$/, '').trim().toLowerCase(); return [h, byLabel.get(n) ?? ''] as [string, string]; }));
+}
+
+/** First sheet ("Data" if present) of an XLSX file, or a CSV file, as a grid of cells. */
+export async function readGrid(file: File): Promise<unknown[][]> {
   let grid: unknown[][];
   if (/\.csv$/i.test(file.name) || file.type === 'text/csv') {
-    grid = parseCsv((await file.text()).replace(/^﻿/, ''));
+    grid = parseCsv((await file.text()).replace(/^\uFEFF/, ''));
   } else {
     const sheets = await readXlsxFile(file);
     const s = sheets.find((x) => x.sheet === 'Data') ?? sheets[0];
     grid = (s?.data ?? []) as unknown[][];
   }
   if (grid.length === 0) throw new Error('The file is empty');
-  const headers = grid[0].map((h) => cellText(h));
-  const byLabel = new Map(columns.flatMap((c) => [[c.key.toLowerCase(), c.key], [c.label.toLowerCase(), c.key]]));
-  // "code *" → code; labels are accepted too; unknown headers are kept (the server reports them)
-  const keys = headers.map((h) => { const n = h.replace(/\s*\*\s*$/, '').trim().toLowerCase(); return byLabel.get(n) ?? n; });
+  return grid;
+}
+export const gridHeaders = (grid: unknown[][]) => grid[0].map((h) => cellText(h));
+
+/** Rows of a grid with the chosen mapping (header → column key; empty = ignore the column). */
+export function mapGrid(grid: unknown[][], mapping: Record<string, string>): { keys: string[]; rows: { row_no: number; data: Record<string, string> }[] } {
+  const keys = gridHeaders(grid).map((h) => mapping[h] ?? '');
   const rows = grid.slice(1).map((r, i) => {
     const data: Record<string, string> = {};
     keys.forEach((k, j) => { if (k) { const t = cellText(r[j]); if (t !== '') data[k] = t; } });
-    return { row_no: i + 2, data };   // spreadsheet row number (header = row 1)
+    return { row_no: i + 2, data };
   }).filter((r) => Object.keys(r.data).length > 0);
-  return { headers, keys: keys.filter(Boolean), rows };
+  return { keys: keys.filter(Boolean), rows };
 }
 
 /** Rows (objects) → XLSX or CSV download, columns in template order. */

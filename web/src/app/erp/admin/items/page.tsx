@@ -8,7 +8,7 @@ import { useData } from '@/lib/useData';
 import { useParties, useUnitsAll } from '@/lib/masters';
 import { date, dateTime, money, num } from '@/lib/format';
 import { Badge, Button, Card, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Table, Tabs, TextArea, Toggle, useAction, useToast } from '@/components/ui';
-import { CustomFieldsEditor, useCustomFields } from '@/components/admin/CustomFields';
+import { CustomFieldsEditor, privateValues, useCustomFields } from '@/components/admin/CustomFields';
 import { downloadRows, exportEntity } from '@/lib/spreadsheet';
 import { useHotkeys } from '@/lib/hotkeys';
 import { compressImage } from '@/lib/image';
@@ -40,6 +40,9 @@ function ItemsPage() {
   const [kindF, setKindF] = useState('');
   const [catF, setCatF] = useState('');
   const [statusF, setStatusF] = useState('ACTIVE');
+  const [cf, setCf] = useState({ key: '', value: '' });
+  const [cfApplied, setCfApplied] = useState({ key: '', value: '' });
+  const searchable = useCustomFields(companyId, ['ITEM']);
   const [sort, setSort] = useState<Sort>({ col: 'name', asc: true });
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -54,9 +57,13 @@ function ItemsPage() {
     if (kindF) qy = qy.eq('item_kind', kindF);
     if (catF) qy = qy.eq('category_id', catF);
     if (statusF) qy = qy.eq('is_active', statusF === 'ACTIVE');
+    if (cfApplied.key && cfApplied.value.trim()) {
+      const ids = await rpc<string[]>('custom_search', { p_company_id: companyId, p_entity: 'ITEM', p_field_key: cfApplied.key, p_value: cfApplied.value.trim() });
+      qy = qy.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    }
     const res = await qy.order(sort.col, { ascending: sort.asc }).order('id').range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     return { rows: must<ItemRow[]>(res), total: res.count ?? 0 };
-  }, [companyId, q, kindF, catF, statusF, sort.col, sort.asc, page]);
+  }, [companyId, q, kindF, catF, statusF, cfApplied.key, cfApplied.value, sort.col, sort.asc, page]);
   const cats = useData(async () => must<{ id: string; name: string }[]>(await sb().from('item_categories').select('id, name').eq('company_id', companyId).order('name')), [companyId]);
 
   useEffect(() => {
@@ -94,6 +101,11 @@ function ItemsPage() {
           options={(cats.data ?? []).map((c) => ({ value: c.id, label: c.name }))} />
         <Select aria-label="Status filter" className="w-32" value={statusF} onChange={(e) => setFilter(() => setStatusF(e.target.value))} placeholder="All"
           options={[{ value: 'ACTIVE', label: 'Active' }, { value: 'INACTIVE', label: 'Inactive' }]} />
+        {(searchable.data ?? []).some((d) => d.is_searchable && !d.view_permission) && <form className="flex items-end gap-1" onSubmit={(e) => { e.preventDefault(); setCfApplied(cf); setPage(0); }}>
+          <Select aria-label="Custom field filter" className="w-40" value={cf.key} placeholder="Custom field…" onChange={(e) => setCf({ ...cf, key: e.target.value })}
+            options={(searchable.data ?? []).filter((d) => d.is_searchable && !d.view_permission).map((d) => ({ value: d.field_key, label: d.label }))} />
+          <Input aria-label="Custom field value" className="w-36" value={cf.value} onChange={(e) => setCf({ ...cf, value: e.target.value })} />
+          <Button type="submit" variant="secondary">Filter</Button></form>}
         {selected.size > 0 && <div className="flex items-center gap-2 rounded-md bg-brand-light px-2 py-1 text-sm" data-testid="bulk-bar">
           {selected.size} selected
           {can('items.edit') && <><Button variant="secondary" busy={busy} onClick={() => bulk(true)}>Enable</Button>
@@ -159,6 +171,13 @@ function ItemEditor({ item, onClose, onSaved, onDeleted }: { item: Partial<ItemR
   const brands = useData(async () => must<{ id: string; name: string }[]>(await sb().from('brands').select('id, name').eq('company_id', companyId).order('name')), [companyId]);
   const packings = useData(async () => edit.id ? must<Packing[]>(await sb().from('item_packings').select('id, item_id, unit_id, factor_to_base, is_default').eq('item_id', edit.id)) : [], [edit.id]);
   const defs = useCustomFields(companyId, ['ITEM']);
+  // restricted custom values (view permission) are served apart
+  useEffect(() => {
+    if (!item.id || !(defs.data ?? []).some((d) => d.view_permission)) return;
+    let alive = true;
+    privateValues(companyId, 'ITEM', item.id).then((pv) => { if (alive) setEdit((e) => ({ ...e, custom: { ...(e.custom ?? {}), ...pv } })); }, () => undefined);
+    return () => { alive = false; };
+  }, [companyId, item.id, defs.data]);
   // new item: the user's field rights; existing item: as returned by the masked view
   const canEditRate = edit.id ? !!edit.can_edit_rate : can('items.edit_rate');
   const seeSale = edit.id ? !!edit.can_view_sale_rate : can('items.view_sale_rate');
@@ -257,7 +276,8 @@ function ItemEditor({ item, onClose, onSaved, onDeleted }: { item: Partial<ItemR
             <Field label="Reorder quantity"><Input aria-label="Reorder quantity" type="number" value={edit.reorder_qty ?? ''} onChange={(e) => set('reorder_qty', nOrNull(e.target.value))} /></Field>
             <Field label="Notes" className="md:col-span-3"><TextArea rows={2} value={edit.notes ?? ''} onChange={(e) => set('notes', e.target.value)} /></Field>
           </div>
-          <CustomFieldsEditor defs={defs.data ?? []} value={edit.custom ?? {}} onChange={(v) => set('custom', v)} />
+          <CustomFieldsEditor defs={defs.data ?? []} value={edit.custom ?? {}} onChange={(v) => set('custom', v)} existing={!!edit.id}
+            files={edit.id ? { companyId, entityType: 'item', entityId: edit.id } : undefined} />
           <div className="grid gap-x-6 md:grid-cols-2">
             <Toggle label="Active" checked={edit.is_active ?? true} onChange={(v) => set('is_active', v)} />
             <Toggle label="Show in customer portal catalog" checked={edit.portal_visible ?? true} onChange={(v) => set('portal_visible', v)} />
