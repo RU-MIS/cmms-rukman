@@ -4,6 +4,10 @@ Branch `claude/charming-gauss-o9fvzf`. **Not deployed.** Production (`5cff5d6`) 
 (`292bccec`) are not merged. Scope, decisions D1–D7 and the acceptance-criterion map: [`PLATFORM_R3_SCOPE.md`](./PLATFORM_R3_SCOPE.md).
 Previous release: [`PLATFORM_R2.md`](./PLATFORM_R2.md). R4 (full regression, migration rehearsal, release candidate) has **not** been started.
 
+> **R4 corrections** ([`PLATFORM_R4_RELEASE_AUDIT.md`](./PLATFORM_R4_RELEASE_AUDIT.md)): the queued-import commit was cancelled by the 8 s API gateway timeout
+> and a failing job blocked the queue (fixed by migration `20261010000012` and the worker); two backfills rewrote `updated_at` / `updated_by`
+> of existing parties / roles (fixed). The branch now has 47 migrations.
+
 Every setting below is configured in the UI and stored as data. Nothing is hard-coded per customer, user or role.
 
 ## What R3 adds

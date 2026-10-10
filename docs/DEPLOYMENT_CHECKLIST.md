@@ -49,7 +49,7 @@ Nothing has been deployed. All steps below are manual.
    ```bash
    npm ci
    npx supabase link --project-ref <ref>          # asks for the DB password
-   npx supabase db push                           # applies all 46 migrations
+   npx supabase db push                           # applies all 47 migrations (upgrade of an existing instance: docs/PLATFORM_R4_RELEASE_AUDIT.md §6)
    DATABASE_URL='<session pooler URI>' npm run db:seed
    npx supabase functions deploy admin-users      # User Management Center (create login / reset / disable)
    ```
@@ -155,7 +155,7 @@ The same mailbox is configured twice: Supabase Auth SMTP (B.8) for sign-in codes
 |---|---|
 | Web app broken after a release | Cloudflare Pages → Deployments → previous deployment → **Rollback to this deployment** (instant, no data change). |
 | Emails wrong / flooding | Settings → Email automation **OFF** (immediate, queued mails become SKIPPED), and/or GitHub → Actions → email-worker → **Disable workflow**. Re-enable after fixing; use *Email log → Retry* where needed. |
-| A new migration misbehaves | Before every `db push`: run **db-backup** manually and download the artifact. Migrations are transactional (a failing one changes nothing). Undo = a new corrective migration; last resort = restore the pre-release backup into a **new** project (section I) and point Pages env + GitHub secrets to it. Never edit or delete applied migration files. |
+| A new migration misbehaves | Before every `db push`: run **db-backup** manually and download the artifact. Each migration file is transactional (a failing file changes nothing), but files applied before it in the same push stay applied. Undo = a new corrective migration; last resort = restore the pre-release backup into a **new** project (section I) and point Pages env + GitHub secrets to it. Never edit or delete applied migration files. |
 | Wrong business setting | Settings → set back (audited). |
 | Compromised key | Supabase → API → **roll** the service_role / JWT secret → update GitHub secrets (and Pages anon key if rolled) → redeploy. Change SMTP password → update Supabase SMTP + GitHub secret. |
 
@@ -176,9 +176,9 @@ The same mailbox is configured twice: Supabase Auth SMTP (B.8) for sign-in codes
 GO only if **every** box is ticked:
 
 - [ ] PR merged to the default branch; deployed commit = tested commit.
-- [ ] Release suite green on that commit (`docs/DEPLOYMENT.md` §11): SQL 19/19, API e2e 7/7, browser e2e 22/22, lint, typecheck, build, worker unit, worker container smoke, backup drill.
+- [ ] Release suite green on that commit (`docs/PLATFORM_R4_RELEASE_AUDIT.md` §3): SQL 35/35, API e2e 19/19, browser e2e 44/44, lint, typecheck, build, worker unit 7/7, worker container smoke, backup drill.
 - [ ] `docs/RELEASE_AUDIT.md` reviewed and the LOW risks accepted by the owner.
-- [ ] Supabase: 46 migrations applied, seed applied, buckets `documents`, `item-images` and `company-assets` exist (Storage), Edge Function `admin-users` deployed (Edge Functions list), `instance:verify` OK.
+- [ ] Supabase: 47 migrations applied, seed applied, buckets `documents`, `item-images` and `company-assets` exist (Storage), Edge Function `admin-users` deployed (Edge Functions list), `instance:verify` OK (includes "no TRUNCATE for API roles"); `service_role` has `statement_timeout=120s` (`select rolconfig from pg_roles where rolname = 'service_role'`).
 - [ ] Auth: sign-ups ON, **Confirm email ON**, OTP 6 digits, both templates show the code, custom SMTP set, Site URL + Redirect URLs = production domain.
 - [ ] DNS: SPF, DKIM, DMARC published and verified in the SMTP provider; test mail not in spam.
 - [ ] Cloudflare Pages: only `NEXT_PUBLIC_*` + `NODE_VERSION`; custom domain with TLS; security headers present.
