@@ -3,7 +3,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { brand, errorText, sb } from '@/lib/supabase';
 import { useSession } from '@/lib/session';
-import { Button, ErrorBox, Field, Input, Tabs } from '@/components/ui';
+import { Button, ErrorBox, Field, Input, PasswordInput, Tabs } from '@/components/ui';
 
 function LoginForm() {
   const router = useRouter();
@@ -61,7 +61,7 @@ function LoginForm() {
           if (mode === 'password') loginPassword(); else if (codeSent) verifyCode(); else sendCode(); }}>
           <Field label="Email"><Input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
           {mode === 'password' && (
-            <Field label="Password"><Input type="password" autoComplete="current-password" required value={password}
+            <Field label="Password"><PasswordInput aria-label="Password" autoComplete="current-password" required value={password}
               onChange={(e) => setPassword(e.target.value)} /></Field>
           )}
           {mode === 'code' && codeSent && (

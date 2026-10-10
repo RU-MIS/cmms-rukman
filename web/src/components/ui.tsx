@@ -36,6 +36,25 @@ export function Input({ ref, ...p }: InputHTMLAttributes<HTMLInputElement> & { r
   return <input ref={ref} {...p} className={`input ${p.className ?? ''}`} />;
 }
 
+/**
+ * Password input with a show / hide toggle. `aria-label` is required: inside a
+ * <Field> the toggle would otherwise become part of the field's name.
+ */
+export function PasswordInput({ 'aria-label': label, ...p }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & { 'aria-label': string }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span className="relative block">
+      <Input {...p} aria-label={label} type={visible ? 'text' : 'password'} className={`pr-16 ${p.className ?? ''}`}
+        autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+      <button type="button" onClick={() => setVisible(!visible)} aria-pressed={visible}
+        aria-label={visible ? 'Hide typed characters' : 'Show typed characters'}
+        className="absolute inset-y-0 right-0 px-3 text-xs font-medium text-slate-500 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+        {visible ? 'Hide' : 'Show'}
+      </button>
+    </span>
+  );
+}
+
 export function TextArea(p: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...p} className={`input ${p.className ?? ''}`} />;
 }

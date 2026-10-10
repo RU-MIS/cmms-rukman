@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { adminUsers } from '@/lib/admin';
 import { useSession, type PasswordPolicy } from '@/lib/session';
-import { Button, Card, Field, Input, useAction } from './ui';
+import { Button, Card, Field, PasswordInput, useAction } from './ui';
 import { UserMenu } from './AppShell';
 
 /**
@@ -61,8 +61,8 @@ export function PasswordGate({ children }: { children: ReactNode }) {
             await refresh();
           }, 'Password changed');
         }}>
-          <Field label="New password"><Input type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
-          <Field label="Repeat new password"><Input type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} /></Field>
+          <Field label="New password"><PasswordInput aria-label="New password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
+          <Field label="Repeat new password"><PasswordInput aria-label="Repeat new password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} /></Field>
           <Button type="submit" busy={busy}>Save password and continue</Button>
         </form>
       </Card>

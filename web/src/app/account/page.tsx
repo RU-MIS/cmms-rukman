@@ -4,7 +4,7 @@ import { passwordProblem } from '@/components/PasswordGate';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useSession } from '@/lib/session';
-import { Button, Card, Field, Input, PageHeader, Spinner, useAction } from '@/components/ui';
+import { Button, Card, Field, PageHeader, PasswordInput, Spinner, useAction } from '@/components/ui';
 import { UserMenu } from '@/components/AppShell';
 
 export default function AccountPage() {
@@ -29,8 +29,8 @@ export default function AccountPage() {
             setPw(''); setPw2('');
           }, 'Password changed');
         }}>
-          <Field label="New password"><Input type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
-          <Field label="Repeat new password"><Input type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} /></Field>
+          <Field label="New password"><PasswordInput aria-label="New password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
+          <Field label="Repeat new password"><PasswordInput aria-label="Repeat new password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} /></Field>
           <Button type="submit" busy={busy}>Save password</Button>
         </form>
       </Card>

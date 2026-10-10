@@ -24,6 +24,22 @@ test('anonymous user is sent to login; wrong password is refused', async ({ page
   await expect(page).toHaveURL(/\/erp\/inventory\/$/);              // back to the requested page
 });
 
+test('password field: show / hide toggle, hidden by default, still submits', async ({ page }) => {
+  await page.goto('/login/');
+  const pw = page.getByLabel('Password', { exact: true });
+  await pw.fill(fx.owner.password);
+  await expect(pw).toHaveAttribute('type', 'password');
+  await page.getByRole('button', { name: 'Show typed characters' }).click();
+  await expect(pw).toHaveAttribute('type', 'text');
+  await expect(page.getByRole('button', { name: 'Hide typed characters' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Hide typed characters' }).click();
+  await expect(pw).toHaveAttribute('type', 'password');
+  await expect(pw).toHaveValue(fx.owner.password);
+  await page.getByLabel('Email').fill(fx.owner.email);
+  await pw.press('Enter');                                          // Enter in the field signs in (the toggle is not a submit button)
+  await expect(page).toHaveURL(/\/erp\/$/);
+});
+
 test('login ignores an external "next" (no open redirect)', async ({ page }) => {
   await page.goto('/login/?next=//evil.example/steal');
   await page.getByLabel('Email').fill(fx.owner.email);
