@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RUDMS</title>
+<meta name="description" content="Rukman Udyog Docs Management System">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a3652">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RUDMS">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a3652; overflow: hidden; }
+  #frame { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: #0a3652; }
+  #loading {
+    position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #0a3652; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    transition: opacity .25s ease;
+  }
+  #loading img { width: 72px; height: 72px; margin-bottom: 16px; border-radius: 16px; }
+  #loading p { font-size: 13px; opacity: .7; margin: 0 0 16px; }
+  .spinner { width: 28px; height: 28px; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+  #configError { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #0a3652; color: #fff; padding: 24px; text-align: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  #configError.show { display: flex; }
+  #configError p { max-width: 360px; line-height: 1.5; font-size: 14px; }
+</style>
+</head>
+<body>
+  <div id="loading">
+    <img src="icons/icon-192.png" alt="RUDMS">
+    <p>Loading RUDMS…</p>
+    <div class="spinner"></div>
+  </div>
+  <div id="configError">
+    <p><strong>Setup not finished.</strong><br>Open this file's &lt;script&gt; block and replace RUDMS_URL with your deployed RUDMS web app URL (the one ending in <code>/exec</code>) before using this shell.</p>
+  </div>
+  <iframe id="frame" title="RUDMS" allow="clipboard-write"></iframe>
+
+  <script>
+    // ------------------------------------------------------------------
+    // Paste your RUDMS web app URL here - Apps Script editor -> Deploy ->
+    // Manage deployments -> the URL ending in /exec. This file is never
+    // shipped with a guessed URL; fill it in once before deploying this
+    // shell anywhere.
+    // ------------------------------------------------------------------
+    var RUDMS_URL = 'PASTE_YOUR_RUDMS_EXEC_URL_HERE';
+
+    var frame = document.getElementById('frame');
+    var loading = document.getElementById('loading');
+
+    if (!RUDMS_URL || RUDMS_URL.indexOf('PASTE_YOUR_RUDMS_EXEC_URL_HERE') !== -1) {
+      loading.classList.add('hidden');
+      document.getElementById('configError').classList.add('show');
+    } else {
+      frame.src = RUDMS_URL;
+      frame.addEventListener('load', function () {
+        loading.classList.add('hidden');
+      });
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('service-worker.js').catch(function () {});
+      });
+    }
+  </script>
+</body>
+</html>
