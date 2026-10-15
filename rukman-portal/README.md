@@ -34,6 +34,10 @@ Do **not** share this spreadsheet with users. Only the owner needs access.
 
 Users sign in with email or LOGIN ID. First time: "First time or forgot password?" > code by email > choose password.
 
+Save password: the **Save my password in this browser** box (ticked by default) makes the browser offer to save it.
+After that, if the session has expired, the portal signs in again by itself using the saved password
+(never after an explicit Sign out). "Keep me signed in" is separate: it keeps the session for 30 days.
+
 ## Limits to know
 - OTP emails use `MailApp`: about 100/day on a normal Gmail account, 1,500/day on Workspace.
 - The portal login only controls the list of links. Opening a Sheet or Form is still decided by

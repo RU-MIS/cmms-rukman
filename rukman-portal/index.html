@@ -217,6 +217,7 @@
 </head>
 <body>
   <noscript><p style="padding:24px">Please enable JavaScript to use the portal.</p></noscript>
+  <iframe name="pwframe" title="" tabindex="-1" aria-hidden="true" style="display:none"></iframe>
 
   <!-- ============ SPLASH ============ -->
   <div class="splash" id="splash">
@@ -234,7 +235,9 @@
       <section class="view" id="vLogin">
         <h1>Welcome back</h1>
         <p class="lead">Sign in to see your sheets, forms and apps.</p>
-        <form id="fLogin" autocomplete="on" novalidate>
+        <!-- action/target: after a successful sign-in the form is submitted into the hidden iframe (nothing is sent anywhere),
+             which makes Firefox and Safari offer to save the password -->
+        <form id="fLogin" autocomplete="on" method="post" action="about:blank" target="pwframe" novalidate>
           <label for="lid">Login ID or email</label>
           <input id="lid" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="e.g. vivek or name@company.com">
           <label for="lpw">Password</label>
@@ -243,6 +246,7 @@
             <button class="eye" type="button" data-eye="lpw" aria-label="Show password">👁</button>
           </div>
           <label class="check"><input type="checkbox" id="remember" checked> Keep me signed in on this device</label>
+          <label class="check" style="margin-top:10px"><input type="checkbox" id="savepw" checked> Save my password in this browser</label>
           <div class="msg" id="mLogin" role="alert" hidden></div>
           <button class="btn" type="submit" id="bLogin">Sign in</button>
         </form>
@@ -418,9 +422,46 @@
       busy($('bLogin'), false);
       if (!res.ok) return setMsg('mLogin', res.error || 'Could not sign in.');
       store.set(res.token, remember);
+      if ($('savepw').checked) offerToSavePassword(id, password, (res.user && res.user.name) || id);
+      AUTO_BLOCK = false;
       $('lpw').value = '';
       enterApp(res);
     });
+
+    /* ---------------- save password + automatic sign-in ---------------- */
+    let AUTO_BLOCK = false;     // true after sign-out or a failed automatic sign-in, so we never loop or lock the account
+
+    // Chrome / Edge / Android: Credential Management API shows "Save password?".
+    // Firefox / Safari: a normal form submission (into the hidden iframe) makes them offer to save it.
+    function offerToSavePassword(id, password, name) {
+      try {
+        if (window.PasswordCredential && navigator.credentials) {
+          navigator.credentials.store(new PasswordCredential({ id: id, password: password, name: name })).catch(function () {});
+        } else {
+          $('fLogin').submit();
+        }
+      } catch (e) {}
+    }
+
+    // If the session is gone but the browser holds a saved password, sign in without asking.
+    async function tryAutoLogin() {
+      if (AUTO_BLOCK || !window.PasswordCredential || !navigator.credentials) return false;
+      try {
+        const cred = await navigator.credentials.get({ password: true, mediation: 'silent' });
+        if (!cred || !cred.password) return false;
+        const res = await api('login', { id: cred.id, password: cred.password, remember: true });
+        if (res.ok) { store.set(res.token, true); enterApp(res); return true; }
+        if (res.code === 'NETWORK') return false;
+        blockAutoLogin();                         // saved password is outdated: stop trying silently
+        $('lid').value = cred.id;
+      } catch (e) {}
+      return false;
+    }
+
+    function blockAutoLogin() {
+      AUTO_BLOCK = true;
+      try { if (navigator.credentials && navigator.credentials.preventSilentAccess) navigator.credentials.preventSilentAccess(); } catch (e) {}
+    }
 
     document.querySelectorAll('[data-eye]').forEach(b => b.addEventListener('click', () => {
       const input = $(b.dataset.eye), show = input.type === 'password';
@@ -584,6 +625,7 @@
     async function signOut() {
       const token = store.get();
       store.clear();
+      blockAutoLogin();                           // signed out on purpose: do not sign back in automatically
       ITEMS = []; CURRENT = null;
       showAuth('You have been signed out.', 'info');
       if (token) api('logout', { token });
@@ -705,14 +747,15 @@
       if (!API_URL || API_URL.indexOf('PASTE_') === 0) {
         return splash('This portal is not configured yet. Open index.html and set API_URL to your Apps Script Web app URL.', { noSpinner: true });
       }
-      const token = store.get();
-      if (!token) return showAuth();
-
       splash('Loading…');
+      const token = store.get();
+      if (!token) { if (await tryAutoLogin()) return; return showAuth(); }
+
       const res = await api('session', { token });
       if (res.ok) return enterApp(res);
       if (res.code === 'NETWORK') return splash(res.error, { noSpinner: true, retry: true });
       store.clear();
+      if (await tryAutoLogin()) return;
       showAuth('Your session has expired. Please sign in again.', 'info');
     }
     $('splashRetry').addEventListener('click', init);
