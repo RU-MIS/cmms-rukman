@@ -112,14 +112,36 @@ Google Sites page via `<iframe>`.
       (e.g. only embedded on an internal Google Site).
     Passwords are salted and SHA-256 hashed either way, never stored in
     plain text.
+  - **Forgot password**: works for every account, admin included - no
+    admin needed to reset it. From the login screen's **Forgot
+    password?** link, enter your username or email; RUDMS emails a
+    one-time link (`…/exec?reset=TOKEN`, expires in 1 hour) to that
+    account's email. Opening it signs you straight in and immediately
+    prompts you to set a new password - no admin involvement.
+    - Which email it goes to: a self-signup account's username already
+      *is* an email, so that's used automatically. An admin-created
+      account only has an email on file if one was entered in the
+      optional **Email** field when it was created (Manage Access →
+      Login Accounts) - without one, "Forgot password" has nowhere to
+      send the link and tells you to ask an admin instead. Give every
+      admin-created account (especially admin ones) an email when you
+      create it, so this always has somewhere to go.
+    - How it works under the hood: `doGet()` passes the `reset` URL
+      parameter into the page via an Apps Script template (not read from
+      the browser URL client-side, which isn't reliable inside Apps
+      Script's own sandboxed iframe). The emailed link's token is
+      one-time and short-lived, and the session it creates is narrowly
+      flagged so it - and only it - can set a new password without
+      knowing the old one; an ordinary session can never do that.
   - **Bootstrapping the very first account**: nobody can reach "Login
     Accounts" before at least one account exists, so the first one is
     created directly in the Apps Script editor. Select `setupFirstAdmin`
     in the toolbar's function dropdown and click **Run** once - it
     creates username `admin` / password `ChangeMe123` as an admin. Sign
     in with that, then immediately create your real admin account(s) (for
-    the CEO/MD etc.) from the Login Accounts tab and remove the bootstrap
-    `admin` account.
+    the CEO/MD etc.) from the Login Accounts tab - **with their email
+    filled in**, so "Forgot password" works for them later - and remove
+    the bootstrap `admin` account.
   - **Roles**: `admin` can create/list/remove login accounts; `member`
     cannot see that tab at all. Every account (of either role) can browse,
     upload, and use Manage Access's By Folder/By File/Doer List tabs the

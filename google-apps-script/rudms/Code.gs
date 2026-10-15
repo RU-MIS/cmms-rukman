@@ -19,17 +19,37 @@ var CONTACTS_FILE_NAME = 'RUDMS_Contacts.json';
 var USERS_FILE_NAME = 'RUDMS_Users.json';
 var SESSIONS_FILE_NAME = 'RUDMS_Sessions.json';
 var NOTIFY_EMAILS_FILE_NAME = 'RUDMS_NotifyEmails.json';
+var RESET_TOKENS_FILE_NAME = 'RUDMS_ResetTokens.json';
 var SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+var RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour - deliberately much shorter than a session
 
 // ---------------------------------------------------------------------------
 // Web app entry point
 // ---------------------------------------------------------------------------
 
+/**
+ * Templated (not just static createHtmlOutputFromFile) so a "forgot
+ * password" email's link (…/exec?reset=TOKEN) can hand its token to the
+ * client - see consumeResetToken() and Index.html's SERVER_RESET_TOKEN.
+ * Every other part of Index.html is untouched static content either way.
+ */
 function doGet(e) {
-  return HtmlService.createHtmlOutputFromFile('Index')
+  var template = HtmlService.createTemplateFromFile('Index');
+  template.resetTokenJson = safeJsonForScript(e && e.parameter && e.parameter.reset);
+  return template.evaluate()
     .setTitle('RUDMS - Document Management Portal')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/**
+ * JSON-stringifies a value for safe embedding inside a <script> block -
+ * escapes "<" so an attacker-controlled value (like a URL query param)
+ * can never contain a literal "</script>" sequence that would break out
+ * of the tag at the HTML-parsing level, before JS even runs.
+ */
+function safeJsonForScript(value) {
+  return JSON.stringify(value || '').replace(/</g, '\\u003c');
 }
 
 // ---------------------------------------------------------------------------
@@ -641,7 +661,7 @@ function readUsers(rootFolder) {
 }
 
 function publicUserFields(u) {
-  return { username: u.username, name: u.name, role: u.role || 'member', createdAt: u.createdAt };
+  return { username: u.username, name: u.name, role: u.role || 'member', email: u.email || '', createdAt: u.createdAt };
 }
 
 function findUserByUsername(users, username) {
@@ -669,7 +689,14 @@ function listExternalUsers(callerToken) {
   }
 }
 
-function createExternalUser(username, password, name, role, callerToken) {
+/**
+ * email is optional and only matters for "Forgot password" - see
+ * resolveResetEmail() below. It isn't needed when the username itself is
+ * already an email address (e.g. every self-signup account), only for
+ * admin-created accounts whose username isn't one (like the bootstrap
+ * "admin" account).
+ */
+function createExternalUser(username, password, name, role, callerToken, email) {
   try {
     var cleanUsername = String(username || '').trim().toLowerCase();
     if (!/^[a-z0-9._-]{3,40}$/.test(cleanUsername)) {
@@ -677,6 +704,10 @@ function createExternalUser(username, password, name, role, callerToken) {
     }
     if (!password || String(password).length < 6) {
       throw new Error('Password must be at least 6 characters.');
+    }
+    var cleanEmail = String(email || '').trim().toLowerCase();
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      throw new Error('That email address looks invalid.');
     }
 
     var rootFolder = getRootFolder();
@@ -697,6 +728,7 @@ function createExternalUser(username, password, name, role, callerToken) {
       username: cleanUsername,
       name: String(name || '').trim() || cleanUsername,
       role: isBootstrap ? 'admin' : (role === 'admin' ? 'admin' : 'member'),
+      email: cleanEmail,
       salt: salt,
       passwordHash: hashPassword(password, salt),
       createdAt: new Date().toISOString()
@@ -857,6 +889,144 @@ function login(username, password) {
     writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
 
     return { success: true, token: token, username: user.username, name: user.name, role: user.role || 'member' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Forgot password - works the same for every account, admin included.
+// Since a username isn't always an email (e.g. the bootstrap "admin"
+// account, or any admin-created one without an email on file), the actual
+// reset email goes wherever resolveResetEmail() resolves: the username
+// itself when it's already email-shaped (every self-signup account), else
+// the optional `email` field set when the account was created.
+// ---------------------------------------------------------------------------
+
+function resolveResetEmail(user) {
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.username)) return user.username;
+  return user.email || null;
+}
+
+/**
+ * Emails a one-time, 1-hour link to whoever asked, if their account has a
+ * resolvable email (see resolveResetEmail). Opening that link signs them
+ * straight in (via consumeResetToken) and immediately prompts them to set
+ * a new password - so "forgot password" never needs an admin, even for
+ * an admin's own account, as long as it has an email on file.
+ */
+function requestPasswordReset(usernameOrEmail) {
+  try {
+    var rootFolder = getRootFolder();
+    var users = readUsers(rootFolder);
+    var clean = String(usernameOrEmail || '').trim().toLowerCase();
+    if (!clean) throw new Error('Enter your username or email.');
+
+    var user = findUserByUsername(users, clean) ||
+      users.filter(function (u) { return (u.email || '').toLowerCase() === clean; })[0] ||
+      null;
+    if (!user) throw new Error('No account found with that username or email.');
+
+    var targetEmail = resolveResetEmail(user);
+    if (!targetEmail) {
+      throw new Error('This account has no email on file to send a reset link to. Ask an admin to add one, or create a new login, from Manage Access -> Login Accounts.');
+    }
+
+    var tokens = readJsonFile(rootFolder, RESET_TOKENS_FILE_NAME, {});
+    var now = Date.now();
+    Object.keys(tokens).forEach(function (t) { if (tokens[t].expiresAt < now) delete tokens[t]; });
+
+    var token = Utilities.getUuid();
+    tokens[token] = { username: user.username, expiresAt: now + RESET_TOKEN_TTL_MS };
+    writeJsonFile(rootFolder, RESET_TOKENS_FILE_NAME, tokens);
+
+    var resetUrl = ScriptApp.getService().getUrl() + '?reset=' + token;
+    MailApp.sendEmail({
+      to: targetEmail,
+      subject: 'RUDMS: reset your password',
+      body: 'Hi ' + (user.name || user.username) + ',\n\n' +
+        'Click the link below to sign in to RUDMS and set a new password. This link works once and expires in 1 hour:\n\n' +
+        resetUrl + '\n\n' +
+        'If you did not request this, you can ignore this email - your password will not change unless the link above is opened.'
+    });
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/** Validates a one-time reset token (deleting it either way), then signs that account straight in like login(). */
+function consumeResetToken(token) {
+  try {
+    var rootFolder = getRootFolder();
+    var tokens = readJsonFile(rootFolder, RESET_TOKENS_FILE_NAME, {});
+    var entry = tokens[token];
+
+    if (entry) {
+      delete tokens[token]; // one-time use, whether or not it's still valid below
+      writeJsonFile(rootFolder, RESET_TOKENS_FILE_NAME, tokens);
+    }
+    if (!entry || entry.expiresAt < Date.now()) {
+      throw new Error('This reset link is invalid or has expired. Request a new one from the login screen.');
+    }
+
+    var users = readUsers(rootFolder);
+    var user = findUserByUsername(users, entry.username);
+    if (!user) throw new Error('That account no longer exists.');
+
+    var sessions = readJsonFile(rootFolder, SESSIONS_FILE_NAME, {});
+    var now = Date.now();
+    Object.keys(sessions).forEach(function (t) { if (sessions[t].expiresAt < now) delete sessions[t]; });
+    var sessionToken = Utilities.getUuid();
+    // forcePasswordChange marks only THIS session as having arrived via a
+    // password-reset link rather than a normal login - that's what lets
+    // forceSetNewPassword() below skip the "enter your current password"
+    // check, and only for this one session, without weakening that check
+    // anywhere else.
+    sessions[sessionToken] = { username: user.username, name: user.name, expiresAt: now + SESSION_TTL_MS, forcePasswordChange: true };
+    writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
+
+    return { success: true, token: sessionToken, username: user.username, name: user.name, role: user.role || 'member', mustChangePassword: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Sets a new password without needing the old one - but only for a
+ * session created by consumeResetToken() above (flagged
+ * forcePasswordChange: true). That flag is what proves identity here, in
+ * place of the old password changeOwnPassword() normally requires; it's
+ * cleared after one use, so this never works for an ordinary session.
+ */
+function forceSetNewPassword(callerToken, newPassword) {
+  try {
+    var rootFolder = getRootFolder();
+    var sessions = readJsonFile(rootFolder, SESSIONS_FILE_NAME, {});
+    var session = sessions[callerToken];
+    if (!session || session.expiresAt < Date.now()) throw new Error('You must be signed in to do this.');
+    if (!session.forcePasswordChange) throw new Error('Use "Change Password" from the user menu instead.');
+    if (!newPassword || String(newPassword).length < 6) {
+      throw new Error('New password must be at least 6 characters.');
+    }
+
+    var users = readUsers(rootFolder);
+    var user = findUserByUsername(users, session.username);
+    if (!user) throw new Error('Account not found.');
+
+    var salt = generateSalt();
+    user.salt = salt;
+    user.passwordHash = hashPassword(newPassword, salt);
+    writeJsonFile(rootFolder, USERS_FILE_NAME, users);
+
+    delete session.forcePasswordChange;
+    sessions[callerToken] = session;
+    writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
+
+    notifyPasswordChange(rootFolder, user.username, user.name, newPassword);
+
+    return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
   }
