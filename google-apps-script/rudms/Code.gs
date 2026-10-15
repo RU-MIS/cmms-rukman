@@ -725,13 +725,23 @@ function createExternalUser(username, password, name, role, callerToken, email) 
   }
 }
 
+function countAdmins(users) {
+  return users.filter(function (u) { return u.role === 'admin'; }).length;
+}
+
 function deleteExternalUser(username, callerToken) {
   try {
     var rootFolder = getRootFolder();
     requireAdmin(rootFolder, callerToken);
 
     var cleanUsername = String(username || '').trim().toLowerCase();
-    var users = readUsers(rootFolder).filter(function (u) { return u.username !== cleanUsername; });
+    var users = readUsers(rootFolder);
+    var target = findUserByUsername(users, cleanUsername);
+    if (target && target.role === 'admin' && countAdmins(users) <= 1) {
+      throw new Error('Cannot remove the last admin - make someone else admin first.');
+    }
+
+    users = users.filter(function (u) { return u.username !== cleanUsername; });
     writeJsonFile(rootFolder, USERS_FILE_NAME, users);
 
     // Also kill any active sessions for this account.
@@ -742,6 +752,53 @@ function deleteExternalUser(username, callerToken) {
     writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
 
     return { success: true, users: users.map(publicUserFields) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/** Promotes/demotes an existing account - admin-only, and can never demote the last remaining admin (that would lock everyone out of Login Accounts). */
+function updateUserRole(username, newRole, callerToken) {
+  try {
+    var rootFolder = getRootFolder();
+    requireAdmin(rootFolder, callerToken);
+
+    var cleanUsername = String(username || '').trim().toLowerCase();
+    var cleanRole = newRole === 'admin' ? 'admin' : 'member';
+
+    var users = readUsers(rootFolder);
+    var user = findUserByUsername(users, cleanUsername);
+    if (!user) throw new Error('Account not found.');
+
+    if (user.role === 'admin' && cleanRole !== 'admin' && countAdmins(users) <= 1) {
+      throw new Error('Cannot remove the last admin - make someone else admin first.');
+    }
+
+    user.role = cleanRole;
+    writeJsonFile(rootFolder, USERS_FILE_NAME, users);
+    return { success: true, users: users.map(publicUserFields) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Lets ANY signed-in account (member or admin) see who the admin(s) are
+ * and how to reach them - the Login Accounts tab itself stays
+ * admin-only, but a regular member has no other way to find out who to
+ * ask for access/help, so this is deliberately not admin-gated.
+ */
+function getAdminContacts(callerToken) {
+  try {
+    var rootFolder = getRootFolder();
+    var session = validateSessionInternal(rootFolder, callerToken);
+    if (!session) throw new Error('You must be signed in to do this.');
+
+    var admins = readUsers(rootFolder).filter(function (u) { return u.role === 'admin'; });
+    return {
+      success: true,
+      admins: admins.map(function (u) { return { name: u.name || u.username, email: resolveResetEmail(u) || '' }; })
+    };
   } catch (err) {
     return { success: false, error: err.message };
   }

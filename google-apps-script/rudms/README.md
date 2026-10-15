@@ -147,6 +147,22 @@ Google Sites page via `<iframe>`.
     cannot see that tab at all. Every account (of either role) can browse,
     upload, and use Manage Access's By Folder/By File/Doer List tabs the
     same way.
+    - **Who's admin, and how a member finds out**: the Login Accounts
+      list shows an **ADMIN** badge next to each admin account's name -
+      but that whole tab is admin-only, so a regular member has no way
+      to see it from inside the app. For them, the user menu (top-right
+      avatar) shows an **"Admin / contact for access"** line with every
+      admin's name (and email, if one is on file) - visible to every
+      signed-in account, not just admins, specifically so a member knows
+      who to ask.
+    - **Promoting/demoting an existing account**: from Manage Access →
+      Login Accounts, each row has a **Make Admin** / **Make Member**
+      button - no need to delete and recreate the account (which would
+      also mean picking a new password). The last remaining admin can't
+      be demoted or removed this way (or via **Remove**) - RUDMS blocks
+      it, since that would lock everyone out of Login Accounts with no
+      way back in short of re-running `setupFirstAdmin` from the Apps
+      Script editor.
   - **Sessions / staying signed in**: signing in issues a random token
     (30-day expiry) sent back as `externalToken` on calls that need to
     know who's asking. The login screen's **"Stay signed in on this

@@ -205,6 +205,10 @@
               <p class="text-xs text-slate-400">Signed in as</p>
               <p id="userMenuEmail" class="text-sm font-medium text-slate-800 truncate"></p>
             </div>
+            <div id="adminContactBlock" class="hidden px-3.5 py-2 border-b border-slate-100">
+              <p class="text-xs text-slate-400 mb-0.5">Admin / contact for access</p>
+              <div id="adminContactList" class="text-xs text-slate-600 space-y-0.5"></div>
+            </div>
             <a id="switchAccountLink" href="#" target="_blank" rel="noopener" class="flex items-center gap-2 px-3.5 py-2 text-slate-700 hover:bg-slate-50">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
               Switch Account
@@ -1048,6 +1052,23 @@
     });
 
     bindChangePasswordModal();
+    loadAdminContacts();
+  }
+
+  /**
+   * Shows who the admin(s) are to EVERY signed-in account, not just
+   * admins - the Login Accounts tab (where this data actually lives)
+   * stays admin-only, but a regular member otherwise has no way inside
+   * the app to find out who to ask for access/help.
+   */
+  function loadAdminContacts() {
+    callServer('getAdminContacts', state.authToken).then(function (res) {
+      if (!res.success || !res.admins || !res.admins.length) return;
+      document.getElementById('adminContactList').innerHTML = res.admins.map(function (a) {
+        return '<p class="truncate">' + escapeHtml(a.name) + (a.email ? ' <span class="text-slate-400">· ' + escapeHtml(a.email) + '</span>' : '') + '</p>';
+      }).join('');
+      document.getElementById('adminContactBlock').classList.remove('hidden');
+    }).catch(function () {});
   }
 
   // ---------------------------------------------------------------------
@@ -1654,19 +1675,37 @@
       return;
     }
     container.innerHTML = users.map(function (u) {
+      var isAdmin = u.role === 'admin';
       return '<div class="flex items-center gap-3 px-4 py-2.5">' +
         '<span class="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-semibold shrink-0">' +
           escapeHtml((u.name || u.username).charAt(0).toUpperCase()) +
         '</span>' +
         '<div class="min-w-0 flex-1">' +
           '<p class="text-sm font-medium text-slate-800 truncate">' + escapeHtml(u.name || u.username) +
-            (u.role === 'admin' ? ' <span class="text-[10px] font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded align-middle">ADMIN</span>' : '') +
+            (isAdmin ? ' <span class="text-[10px] font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded align-middle">ADMIN</span>' : '') +
           '</p>' +
           '<p class="text-xs text-slate-400 truncate">@' + escapeHtml(u.username) + '</p>' +
         '</div>' +
+        '<button data-toggle-role="' + escapeHtml(u.username) + '" data-current-role="' + (isAdmin ? 'admin' : 'member') + '" class="shrink-0 text-xs font-medium text-brand-600 hover:underline">' +
+          (isAdmin ? 'Make Member' : 'Make Admin') +
+        '</button>' +
         '<button data-login-remove="' + escapeHtml(u.username) + '" class="shrink-0 text-xs font-medium text-red-500 hover:underline">Remove</button>' +
       '</div>';
     }).join('');
+
+    container.querySelectorAll('[data-toggle-role]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var username = btn.getAttribute('data-toggle-role');
+        var newRole = btn.getAttribute('data-current-role') === 'admin' ? 'member' : 'admin';
+        var verb = newRole === 'admin' ? 'make "' + username + '" an admin' : 'remove admin rights from "' + username + '"';
+        if (!confirm('Really ' + verb + '?')) return;
+        callServer('updateUserRole', username, newRole, state.authToken).then(function (res) {
+          if (!res.success) return showToast(res.error || 'Could not update role', 'error');
+          renderLoginAccountList(res.users || []);
+          showToast('Role updated', 'success');
+        }).catch(function (err) { showToast(String(err), 'error'); });
+      });
+    });
 
     container.querySelectorAll('[data-login-remove]').forEach(function (btn) {
       btn.addEventListener('click', function () {
