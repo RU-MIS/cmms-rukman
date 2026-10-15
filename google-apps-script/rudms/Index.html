@@ -5,8 +5,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RUDMS</title>
-  <!-- Set by doGet()'s template from ?reset=TOKEN in the URL, e.g. a "forgot password" email link - see consumeResetToken() in Code.gs. -->
-  <script>var SERVER_RESET_TOKEN = <?!= resetTokenJson ?>;</script>
   <!--
     "Add to Home Screen" support: these three tags are what let iPhone
     Safari open this page fullscreen (no address bar) when launched from
@@ -126,11 +124,27 @@
       </div>
 
       <div id="forgotPasswordPanel" class="hidden space-y-3">
-        <p class="text-xs text-slate-500">Enter your username or email - we'll send a one-time sign-in link to reset your password. Works for any account, including admin.</p>
+        <p id="forgotPasswordStep1Hint" class="text-xs text-slate-500">Enter your username or email - we'll send a 6-digit code to reset your password. Works for any account, including admin.</p>
         <input id="forgotPasswordInput" type="text" placeholder="Username or email" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+
+        <div id="forgotPasswordStep2" class="hidden space-y-3">
+          <div>
+            <label class="text-xs font-medium text-slate-500 mb-1 block">6-digit code</label>
+            <input id="forgotPasswordOtp" type="text" inputmode="numeric" maxlength="6" placeholder="123456" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 tracking-widest">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-500 mb-1 block">New Password (min 6 characters)</label>
+            <input id="forgotPasswordNewPwd" type="password" autocomplete="new-password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-500 mb-1 block">Confirm New Password</label>
+            <input id="forgotPasswordConfirmPwd" type="password" autocomplete="new-password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+          </div>
+        </div>
+
         <p id="forgotPasswordError" class="hidden text-xs text-red-600"></p>
         <p id="forgotPasswordSuccess" class="hidden text-xs text-green-600"></p>
-        <button id="forgotPasswordSubmitBtn" class="w-full px-4 py-2.5 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Send Reset Link</button>
+        <button id="forgotPasswordSubmitBtn" class="w-full px-4 py-2.5 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Send Code</button>
         <button id="forgotPasswordBackBtn" type="button" class="w-full text-center text-xs text-slate-400 hover:underline">Back to Sign In</button>
       </div>
 
@@ -371,12 +385,11 @@
   <div id="changePasswordModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-4">
     <div class="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-        <h2 id="changePasswordTitle" class="font-semibold text-slate-900">Change Password</h2>
-        <button id="changePasswordCloseBtn" data-close="changePasswordModal" class="text-slate-400 hover:text-slate-600">✕</button>
+        <h2 class="font-semibold text-slate-900">Change Password</h2>
+        <button data-close="changePasswordModal" class="text-slate-400 hover:text-slate-600">✕</button>
       </div>
       <div class="p-5 space-y-3">
-        <p id="changePasswordForcedHint" class="hidden text-xs text-slate-500">You signed in via a password reset link - set a new password to continue.</p>
-        <div id="changePwdCurrentField">
+        <div>
           <label class="text-xs font-medium text-slate-500 mb-1 block">Current Password</label>
           <input id="changePwdCurrent" type="password" autocomplete="current-password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
         </div>
@@ -391,7 +404,7 @@
         <p class="text-[11px] text-slate-400 leading-snug">Everyone on the notification list (set by an admin under Manage Access -> Login Accounts) automatically gets an email with your new password once you save.</p>
       </div>
       <div class="flex justify-end gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50">
-        <button id="changePasswordCancelBtn" data-close="changePasswordModal" class="px-4 py-2 text-sm rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button data-close="changePasswordModal" class="px-4 py-2 text-sm rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
         <button id="submitChangePasswordBtn" class="px-4 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Save New Password</button>
       </div>
     </div>
@@ -651,8 +664,6 @@
     if (el) el.textContent = text;
   }
 
-  var pendingForcePasswordChange = false; // set when this session came from a reset-link sign-in
-
   function finishBoot() {
     renderSidebar();
     populateCategorySelect();
@@ -665,11 +676,6 @@
     // Doesn't block first paint - if it adds anything new the sidebar
     // will pick it up next time categories are refreshed.
     callServer('ensureDefaultCategories').catch(function () {});
-
-    if (pendingForcePasswordChange) {
-      pendingForcePasswordChange = false;
-      openChangePasswordModal(true);
-    }
   }
 
   function loadFiles() {
@@ -718,36 +724,8 @@
     document.getElementById('loginScreen').classList.add('hidden');
   }
 
-  /**
-   * A "forgot password" email link looks like ...exec?reset=TOKEN.
-   * SERVER_RESET_TOKEN is that token, handed over by doGet()'s template
-   * (see Code.gs) rather than read from window.location - more reliable
-   * than relying on the browser URL inside Apps Script's own iframe.
-   */
-  function bootFromResetToken() {
-    setBootMessage('Signing you in…');
-    return callServerNoRetry('consumeResetToken', SERVER_RESET_TOKEN).then(function (res) {
-      if (!res.success) throw new Error(res.error || 'Reset link invalid or expired.');
-      state.authToken = res.token;
-      state.authMode = 'loggedin';
-      state.userRole = res.role || 'member';
-      state.currentUser = res.name || res.username;
-      setStoredAuthToken(res.token);
-      pendingForcePasswordChange = !!res.mustChangePassword;
-      return loadCategoriesAndFiles();
-    });
-  }
-
   function init() {
     setBootMessage('Connecting…');
-
-    if (SERVER_RESET_TOKEN) {
-      bootFromResetToken().catch(showBootError);
-      bindEvents();
-      bindLoginScreen();
-      return;
-    }
-
     state.authToken = getStoredAuthToken();
 
     callServer('getBootstrapInfo', state.authToken)
@@ -803,16 +781,26 @@
     document.getElementById('forgotPasswordLink').classList.toggle('hidden', isSignup);
   }
 
+  var forgotPasswordStep = 1; // 1 = enter username/email, 2 = enter code + new password
+
   function showForgotPasswordPanel() {
+    forgotPasswordStep = 1;
     document.getElementById('loginModeTabs').classList.add('hidden');
     document.getElementById('loginMainForm').classList.add('hidden');
     document.getElementById('loginFooterHint').classList.add('hidden');
     document.getElementById('forgotPasswordPanel').classList.remove('hidden');
     document.getElementById('loginTitle').textContent = 'Reset your password';
     document.getElementById('forgotPasswordInput').value = '';
+    document.getElementById('forgotPasswordInput').readOnly = false;
+    document.getElementById('forgotPasswordStep1Hint').classList.remove('hidden');
+    document.getElementById('forgotPasswordStep2').classList.add('hidden');
+    document.getElementById('forgotPasswordOtp').value = '';
+    document.getElementById('forgotPasswordNewPwd').value = '';
+    document.getElementById('forgotPasswordConfirmPwd').value = '';
     document.getElementById('forgotPasswordError').classList.add('hidden');
     document.getElementById('forgotPasswordSuccess').classList.add('hidden');
     document.getElementById('forgotPasswordSubmitBtn').classList.remove('hidden');
+    document.getElementById('forgotPasswordSubmitBtn').textContent = 'Send Code';
   }
 
   function hideForgotPasswordPanel() {
@@ -821,6 +809,81 @@
     document.getElementById('loginMainForm').classList.remove('hidden');
     document.getElementById('loginFooterHint').classList.remove('hidden');
     setLoginMode('signin');
+  }
+
+  function handleForgotPasswordStep1() {
+    var value = document.getElementById('forgotPasswordInput').value.trim();
+    var errorEl = document.getElementById('forgotPasswordError');
+    errorEl.classList.add('hidden');
+
+    if (!value) { errorEl.textContent = 'Enter your username or email.'; errorEl.classList.remove('hidden'); return; }
+
+    var btn = document.getElementById('forgotPasswordSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    callServerNoRetry('requestPasswordReset', value).then(function (res) {
+      btn.disabled = false;
+      if (!res.success) {
+        btn.textContent = 'Send Code';
+        errorEl.textContent = res.error || 'Could not send code.';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      forgotPasswordStep = 2;
+      document.getElementById('forgotPasswordInput').readOnly = true;
+      document.getElementById('forgotPasswordStep1Hint').classList.add('hidden');
+      document.getElementById('forgotPasswordStep2').classList.remove('hidden');
+      document.getElementById('forgotPasswordSuccess').textContent = 'Code sent - check your email. It expires in 10 minutes.';
+      document.getElementById('forgotPasswordSuccess').classList.remove('hidden');
+      btn.textContent = 'Reset Password';
+    }).catch(function (err) {
+      btn.disabled = false;
+      btn.textContent = 'Send Code';
+      errorEl.textContent = String(err);
+      errorEl.classList.remove('hidden');
+    });
+  }
+
+  function handleForgotPasswordStep2() {
+    var value = document.getElementById('forgotPasswordInput').value.trim();
+    var otp = document.getElementById('forgotPasswordOtp').value.trim();
+    var newPwd = document.getElementById('forgotPasswordNewPwd').value;
+    var confirmPwd = document.getElementById('forgotPasswordConfirmPwd').value;
+    var errorEl = document.getElementById('forgotPasswordError');
+    errorEl.classList.add('hidden');
+
+    if (!otp) { errorEl.textContent = 'Enter the 6-digit code.'; errorEl.classList.remove('hidden'); return; }
+    if (newPwd.length < 6) { errorEl.textContent = 'New password must be at least 6 characters.'; errorEl.classList.remove('hidden'); return; }
+    if (newPwd !== confirmPwd) { errorEl.textContent = 'New password and confirmation do not match.'; errorEl.classList.remove('hidden'); return; }
+
+    var btn = document.getElementById('forgotPasswordSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Resetting…';
+
+    callServerNoRetry('resetPasswordWithOtp', value, otp, newPwd).then(function (res) {
+      btn.disabled = false;
+      btn.textContent = 'Reset Password';
+      if (!res.success) {
+        errorEl.textContent = res.error || 'Could not reset password.';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      state.authToken = res.token;
+      state.authMode = 'loggedin';
+      state.userRole = res.role || 'member';
+      state.currentUser = res.name || res.username;
+      setStoredAuthToken(res.token);
+      hideLoginScreen();
+      document.getElementById('bootLoader').classList.remove('hidden');
+      setBootMessage('Signing you in…');
+      loadCategoriesAndFiles().catch(showBootError);
+    }).catch(function (err) {
+      btn.disabled = false;
+      btn.textContent = 'Reset Password';
+      errorEl.textContent = String(err);
+      errorEl.classList.remove('hidden');
+    });
   }
 
   function bindLoginScreen() {
@@ -834,35 +897,8 @@
     document.getElementById('forgotPasswordLink').addEventListener('click', showForgotPasswordPanel);
     document.getElementById('forgotPasswordBackBtn').addEventListener('click', hideForgotPasswordPanel);
     document.getElementById('forgotPasswordSubmitBtn').addEventListener('click', function () {
-      var value = document.getElementById('forgotPasswordInput').value.trim();
-      var errorEl = document.getElementById('forgotPasswordError');
-      var successEl = document.getElementById('forgotPasswordSuccess');
-      errorEl.classList.add('hidden');
-      successEl.classList.add('hidden');
-
-      if (!value) { errorEl.textContent = 'Enter your username or email.'; errorEl.classList.remove('hidden'); return; }
-
-      var btn = document.getElementById('forgotPasswordSubmitBtn');
-      btn.disabled = true;
-      btn.textContent = 'Sending…';
-
-      callServerNoRetry('requestPasswordReset', value).then(function (res) {
-        btn.disabled = false;
-        btn.textContent = 'Send Reset Link';
-        if (!res.success) {
-          errorEl.textContent = res.error || 'Could not send reset link.';
-          errorEl.classList.remove('hidden');
-          return;
-        }
-        successEl.textContent = 'Check your email for a one-time sign-in link - it works once and expires in 1 hour.';
-        successEl.classList.remove('hidden');
-        btn.classList.add('hidden');
-      }).catch(function (err) {
-        btn.disabled = false;
-        btn.textContent = 'Send Reset Link';
-        errorEl.textContent = String(err);
-        errorEl.classList.remove('hidden');
-      });
+      if (forgotPasswordStep === 2) return handleForgotPasswordStep2();
+      return handleForgotPasswordStep1();
     });
   }
 
@@ -1648,28 +1684,12 @@
     });
   }
 
-  var changePasswordForced = false; // true only right after a reset-link sign-in - see consumeResetToken()
-
-  function openChangePasswordModal(forced) {
-    changePasswordForced = !!forced;
-    document.getElementById('changePwdCurrent').value = '';
-    document.getElementById('changePwdNew').value = '';
-    document.getElementById('changePwdConfirm').value = '';
-
-    document.getElementById('changePasswordTitle').textContent = changePasswordForced ? 'Set a New Password' : 'Change Password';
-    document.getElementById('changePasswordForcedHint').classList.toggle('hidden', !changePasswordForced);
-    document.getElementById('changePwdCurrentField').classList.toggle('hidden', changePasswordForced);
-    // Forced mode can't be dismissed without setting a password - the
-    // account only reached this state by not knowing its old one.
-    document.getElementById('changePasswordCloseBtn').classList.toggle('hidden', changePasswordForced);
-    document.getElementById('changePasswordCancelBtn').classList.toggle('hidden', changePasswordForced);
-
-    openModal('changePasswordModal');
-  }
-
   function bindChangePasswordModal() {
     document.getElementById('changePasswordBtn').addEventListener('click', function () {
-      openChangePasswordModal(false);
+      document.getElementById('changePwdCurrent').value = '';
+      document.getElementById('changePwdNew').value = '';
+      document.getElementById('changePwdConfirm').value = '';
+      openModal('changePasswordModal');
     });
 
     document.getElementById('submitChangePasswordBtn').addEventListener('click', function () {
@@ -1677,20 +1697,15 @@
       var next = document.getElementById('changePwdNew').value;
       var confirm = document.getElementById('changePwdConfirm').value;
 
-      if (!changePasswordForced && !current) return showToast('Enter your current password', 'error');
+      if (!current) return showToast('Enter your current password', 'error');
       if (next.length < 6) return showToast('New password must be at least 6 characters', 'error');
       if (next !== confirm) return showToast('New password and confirmation do not match', 'error');
 
       var btn = document.getElementById('submitChangePasswordBtn');
       btn.disabled = true;
-      var call = changePasswordForced
-        ? callServerNoRetry('forceSetNewPassword', state.authToken, next)
-        : callServerNoRetry('changeOwnPassword', state.authToken, current, next);
-
-      call.then(function (res) {
+      callServerNoRetry('changeOwnPassword', state.authToken, current, next).then(function (res) {
         btn.disabled = false;
         if (!res.success) return showToast(res.error || 'Could not change password', 'error');
-        changePasswordForced = false;
         closeModal('changePasswordModal');
         showToast('Password changed', 'success');
       }).catch(function (err) {

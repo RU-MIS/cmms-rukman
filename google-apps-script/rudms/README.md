@@ -114,25 +114,25 @@ Google Sites page via `<iframe>`.
     plain text.
   - **Forgot password**: works for every account, admin included - no
     admin needed to reset it. From the login screen's **Forgot
-    password?** link, enter your username or email; RUDMS emails a
-    one-time link (`…/exec?reset=TOKEN`, expires in 1 hour) to that
-    account's email. Opening it signs you straight in and immediately
-    prompts you to set a new password - no admin involvement.
+    password?** link: enter your username or email, RUDMS emails a
+    6-digit code (expires in 10 minutes, max 5 wrong guesses before it's
+    invalidated); enter that code plus a new password on the same
+    screen, which resets the password and signs you straight in - no
+    admin involvement, no clickable link to worry about.
     - Which email it goes to: a self-signup account's username already
       *is* an email, so that's used automatically. An admin-created
       account only has an email on file if one was entered in the
       optional **Email** field when it was created (Manage Access →
       Login Accounts) - without one, "Forgot password" has nowhere to
-      send the link and tells you to ask an admin instead. Give every
+      send the code and tells you to ask an admin instead. Give every
       admin-created account (especially admin ones) an email when you
       create it, so this always has somewhere to go.
-    - How it works under the hood: `doGet()` passes the `reset` URL
-      parameter into the page via an Apps Script template (not read from
-      the browser URL client-side, which isn't reliable inside Apps
-      Script's own sandboxed iframe). The emailed link's token is
-      one-time and short-lived, and the session it creates is narrowly
-      flagged so it - and only it - can set a new password without
-      knowing the old one; an ordinary session can never do that.
+    - The code itself is the proof of identity in place of the old
+      password `changeOwnPassword()` normally requires - `resetPasswordWithOtp()`
+      checks it server-side and only then updates the password, so this
+      never weakens the ordinary Change Password flow (which still
+      requires the current password) for anyone who didn't go through
+      this flow.
   - **Bootstrapping the very first account**: nobody can reach "Login
     Accounts" before at least one account exists, so the first one is
     created directly in the Apps Script editor. Select `setupFirstAdmin`

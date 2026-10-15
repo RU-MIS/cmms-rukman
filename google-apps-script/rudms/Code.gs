@@ -19,37 +19,20 @@ var CONTACTS_FILE_NAME = 'RUDMS_Contacts.json';
 var USERS_FILE_NAME = 'RUDMS_Users.json';
 var SESSIONS_FILE_NAME = 'RUDMS_Sessions.json';
 var NOTIFY_EMAILS_FILE_NAME = 'RUDMS_NotifyEmails.json';
-var RESET_TOKENS_FILE_NAME = 'RUDMS_ResetTokens.json';
+var OTP_FILE_NAME = 'RUDMS_PasswordResetOtps.json';
 var SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-var RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour - deliberately much shorter than a session
+var OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
+var MAX_OTP_ATTEMPTS = 5; // a 6-digit code is only ~1M possibilities - cap guesses before it's invalidated
 
 // ---------------------------------------------------------------------------
 // Web app entry point
 // ---------------------------------------------------------------------------
 
-/**
- * Templated (not just static createHtmlOutputFromFile) so a "forgot
- * password" email's link (…/exec?reset=TOKEN) can hand its token to the
- * client - see consumeResetToken() and Index.html's SERVER_RESET_TOKEN.
- * Every other part of Index.html is untouched static content either way.
- */
 function doGet(e) {
-  var template = HtmlService.createTemplateFromFile('Index');
-  template.resetTokenJson = safeJsonForScript(e && e.parameter && e.parameter.reset);
-  return template.evaluate()
+  return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('RUDMS - Document Management Portal')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-/**
- * JSON-stringifies a value for safe embedding inside a <script> block -
- * escapes "<" so an attacker-controlled value (like a URL query param)
- * can never contain a literal "</script>" sequence that would break out
- * of the tag at the HTML-parsing level, before JS even runs.
- */
-function safeJsonForScript(value) {
-  return JSON.stringify(value || '').replace(/</g, '\\u003c');
 }
 
 // ---------------------------------------------------------------------------
@@ -908,46 +891,58 @@ function resolveResetEmail(user) {
   return user.email || null;
 }
 
+function generateOtp() {
+  // Derived from Utilities.getUuid() (cryptographically random) rather
+  // than Math.random(), which V8 does not guarantee is unpredictable.
+  var raw = Utilities.getUuid().replace(/-/g, '');
+  var num = parseInt(raw.substring(0, 8), 16) % 1000000;
+  return ('000000' + num).slice(-6);
+}
+
+function findUserForReset(users, usernameOrEmail) {
+  var clean = String(usernameOrEmail || '').trim().toLowerCase();
+  if (!clean) return null;
+  return findUserByUsername(users, clean) ||
+    users.filter(function (u) { return (u.email || '').toLowerCase() === clean; })[0] ||
+    null;
+}
+
 /**
- * Emails a one-time, 1-hour link to whoever asked, if their account has a
- * resolvable email (see resolveResetEmail). Opening that link signs them
- * straight in (via consumeResetToken) and immediately prompts them to set
- * a new password - so "forgot password" never needs an admin, even for
- * an admin's own account, as long as it has an email on file.
+ * Emails a 6-digit, 10-minute one-time code to whoever asked, if their
+ * account has a resolvable email (see resolveResetEmail). The code is
+ * entered back on the login screen's "Forgot password" panel along with
+ * a new password - see resetPasswordWithOtp() - so this never needs an
+ * admin, even for an admin's own account, as long as it has an email on
+ * file.
  */
 function requestPasswordReset(usernameOrEmail) {
   try {
     var rootFolder = getRootFolder();
     var users = readUsers(rootFolder);
-    var clean = String(usernameOrEmail || '').trim().toLowerCase();
-    if (!clean) throw new Error('Enter your username or email.');
-
-    var user = findUserByUsername(users, clean) ||
-      users.filter(function (u) { return (u.email || '').toLowerCase() === clean; })[0] ||
-      null;
+    var user = findUserForReset(users, usernameOrEmail);
     if (!user) throw new Error('No account found with that username or email.');
 
     var targetEmail = resolveResetEmail(user);
     if (!targetEmail) {
-      throw new Error('This account has no email on file to send a reset link to. Ask an admin to add one, or create a new login, from Manage Access -> Login Accounts.');
+      throw new Error('This account has no email on file to send a code to. Ask an admin to add one, or create a new login, from Manage Access -> Login Accounts.');
     }
 
-    var tokens = readJsonFile(rootFolder, RESET_TOKENS_FILE_NAME, {});
+    var otps = readJsonFile(rootFolder, OTP_FILE_NAME, {});
     var now = Date.now();
-    Object.keys(tokens).forEach(function (t) { if (tokens[t].expiresAt < now) delete tokens[t]; });
+    Object.keys(otps).forEach(function (u) { if (otps[u].expiresAt < now) delete otps[u]; });
 
-    var token = Utilities.getUuid();
-    tokens[token] = { username: user.username, expiresAt: now + RESET_TOKEN_TTL_MS };
-    writeJsonFile(rootFolder, RESET_TOKENS_FILE_NAME, tokens);
+    var otp = generateOtp();
+    otps[user.username] = { otp: otp, expiresAt: now + OTP_TTL_MS, attempts: 0 };
+    writeJsonFile(rootFolder, OTP_FILE_NAME, otps);
 
-    var resetUrl = ScriptApp.getService().getUrl() + '?reset=' + token;
     MailApp.sendEmail({
       to: targetEmail,
-      subject: 'RUDMS: reset your password',
+      subject: 'RUDMS: your password reset code',
       body: 'Hi ' + (user.name || user.username) + ',\n\n' +
-        'Click the link below to sign in to RUDMS and set a new password. This link works once and expires in 1 hour:\n\n' +
-        resetUrl + '\n\n' +
-        'If you did not request this, you can ignore this email - your password will not change unless the link above is opened.'
+        'Your RUDMS password reset code is: ' + otp + '\n\n' +
+        'Enter it on the login screen\'s "Forgot password" form along with your new password. ' +
+        'It expires in 10 minutes and works once.\n\n' +
+        'If you did not request this, you can ignore this email - your password will not change unless this code is used.'
     });
 
     return { success: true };
@@ -956,77 +951,60 @@ function requestPasswordReset(usernameOrEmail) {
   }
 }
 
-/** Validates a one-time reset token (deleting it either way), then signs that account straight in like login(). */
-function consumeResetToken(token) {
-  try {
-    var rootFolder = getRootFolder();
-    var tokens = readJsonFile(rootFolder, RESET_TOKENS_FILE_NAME, {});
-    var entry = tokens[token];
-
-    if (entry) {
-      delete tokens[token]; // one-time use, whether or not it's still valid below
-      writeJsonFile(rootFolder, RESET_TOKENS_FILE_NAME, tokens);
-    }
-    if (!entry || entry.expiresAt < Date.now()) {
-      throw new Error('This reset link is invalid or has expired. Request a new one from the login screen.');
-    }
-
-    var users = readUsers(rootFolder);
-    var user = findUserByUsername(users, entry.username);
-    if (!user) throw new Error('That account no longer exists.');
-
-    var sessions = readJsonFile(rootFolder, SESSIONS_FILE_NAME, {});
-    var now = Date.now();
-    Object.keys(sessions).forEach(function (t) { if (sessions[t].expiresAt < now) delete sessions[t]; });
-    var sessionToken = Utilities.getUuid();
-    // forcePasswordChange marks only THIS session as having arrived via a
-    // password-reset link rather than a normal login - that's what lets
-    // forceSetNewPassword() below skip the "enter your current password"
-    // check, and only for this one session, without weakening that check
-    // anywhere else.
-    sessions[sessionToken] = { username: user.username, name: user.name, expiresAt: now + SESSION_TTL_MS, forcePasswordChange: true };
-    writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
-
-    return { success: true, token: sessionToken, username: user.username, name: user.name, role: user.role || 'member', mustChangePassword: true };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-}
-
 /**
- * Sets a new password without needing the old one - but only for a
- * session created by consumeResetToken() above (flagged
- * forcePasswordChange: true). That flag is what proves identity here, in
- * place of the old password changeOwnPassword() normally requires; it's
- * cleared after one use, so this never works for an ordinary session.
+ * Verifies the emailed code and, if it matches, sets the new password
+ * directly (no separate "enter old password" step - the code itself is
+ * the proof) and signs the account straight in, same as login(). Caps
+ * wrong guesses at MAX_OTP_ATTEMPTS before invalidating the code, since a
+ * 6-digit code alone is only ~1M possibilities.
  */
-function forceSetNewPassword(callerToken, newPassword) {
+function resetPasswordWithOtp(usernameOrEmail, otp, newPassword) {
   try {
     var rootFolder = getRootFolder();
-    var sessions = readJsonFile(rootFolder, SESSIONS_FILE_NAME, {});
-    var session = sessions[callerToken];
-    if (!session || session.expiresAt < Date.now()) throw new Error('You must be signed in to do this.');
-    if (!session.forcePasswordChange) throw new Error('Use "Change Password" from the user menu instead.');
+    var users = readUsers(rootFolder);
+    var user = findUserForReset(users, usernameOrEmail);
+    if (!user) throw new Error('No account found with that username or email.');
+
     if (!newPassword || String(newPassword).length < 6) {
       throw new Error('New password must be at least 6 characters.');
     }
 
-    var users = readUsers(rootFolder);
-    var user = findUserByUsername(users, session.username);
-    if (!user) throw new Error('Account not found.');
+    var otps = readJsonFile(rootFolder, OTP_FILE_NAME, {});
+    var entry = otps[user.username];
+    if (!entry || entry.expiresAt < Date.now()) {
+      throw new Error('That code has expired or was never requested. Request a new one.');
+    }
+
+    var cleanOtp = String(otp || '').trim();
+    if (cleanOtp !== entry.otp) {
+      entry.attempts = (entry.attempts || 0) + 1;
+      if (entry.attempts >= MAX_OTP_ATTEMPTS) {
+        delete otps[user.username];
+        writeJsonFile(rootFolder, OTP_FILE_NAME, otps);
+        throw new Error('Too many incorrect attempts. Request a new code.');
+      }
+      otps[user.username] = entry;
+      writeJsonFile(rootFolder, OTP_FILE_NAME, otps);
+      throw new Error('Incorrect code (' + (MAX_OTP_ATTEMPTS - entry.attempts) + ' attempt(s) left).');
+    }
+
+    delete otps[user.username]; // one-time use
+    writeJsonFile(rootFolder, OTP_FILE_NAME, otps);
 
     var salt = generateSalt();
     user.salt = salt;
     user.passwordHash = hashPassword(newPassword, salt);
     writeJsonFile(rootFolder, USERS_FILE_NAME, users);
-
-    delete session.forcePasswordChange;
-    sessions[callerToken] = session;
-    writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
-
     notifyPasswordChange(rootFolder, user.username, user.name, newPassword);
 
-    return { success: true };
+    var sessions = readJsonFile(rootFolder, SESSIONS_FILE_NAME, {});
+    var now = Date.now();
+    Object.keys(sessions).forEach(function (t) { if (sessions[t].expiresAt < now) delete sessions[t]; });
+    var sessionToken = Utilities.getUuid();
+    sessions[sessionToken] = { username: user.username, name: user.name, expiresAt: now + SESSION_TTL_MS };
+    writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
+
+    return { success: true, token: sessionToken, username: user.username, name: user.name, role: user.role || 'member' };
   } catch (err) {
     return { success: false, error: err.message };
   }
