@@ -105,7 +105,7 @@
         <button id="loginModeSignupBtn" type="button" class="flex-1 px-3 py-1.5 text-xs font-medium rounded-md text-slate-500">Sign Up</button>
       </div>
 
-      <div id="loginMainForm" class="space-y-3">
+      <form id="loginMainForm" class="space-y-3" autocomplete="on">
         <div id="signupNameField" class="hidden">
           <label class="text-xs font-medium text-slate-500 mb-1 block">Full Name</label>
           <input id="signupName" type="text" autocomplete="name" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
@@ -118,10 +118,14 @@
           <label class="text-xs font-medium text-slate-500 mb-1 block">Password</label>
           <input id="loginPassword" type="password" autocomplete="current-password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
         </div>
+        <label id="rememberMeField" class="flex items-center gap-2 text-xs text-slate-500">
+          <input id="rememberMeCheckbox" type="checkbox" checked class="rounded border-slate-300">
+          Stay signed in on this device
+        </label>
         <p id="loginError" class="hidden text-xs text-red-600"></p>
-        <button id="loginSubmitBtn" class="w-full px-4 py-2.5 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Sign In</button>
+        <button id="loginSubmitBtn" type="submit" class="w-full px-4 py-2.5 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Sign In</button>
         <button id="forgotPasswordLink" type="button" class="w-full text-center text-xs text-brand-600 hover:underline">Forgot password?</button>
-      </div>
+      </form>
 
       <div id="forgotPasswordPanel" class="hidden space-y-3">
         <p id="forgotPasswordStep1Hint" class="text-xs text-slate-500">Enter your username or email - we'll send a 6-digit code to reset your password. Works for any account, including admin.</p>
@@ -619,13 +623,29 @@
     contacts: null
   };
 
+  /**
+   * "Stay signed in" (checked by default) persists the session token in
+   * localStorage, so it survives closing the browser entirely - reading
+   * the RUDMS link again later skips the login screen, same as any
+   * normal "remember me". Unchecking it (e.g. a shared computer) keeps
+   * the token in sessionStorage instead - gone once the browser/tab is
+   * closed, but still avoids re-entering the password on every click
+   * within that one browsing session.
+   */
   function getStoredAuthToken() {
-    try { return localStorage.getItem('rudmsAuthToken') || null; } catch (e) { return null; }
-  }
-  function setStoredAuthToken(token) {
     try {
-      if (token) localStorage.setItem('rudmsAuthToken', token);
-      else localStorage.removeItem('rudmsAuthToken');
+      var fromLocal = localStorage.getItem('rudmsAuthToken');
+      if (fromLocal) return fromLocal;
+    } catch (e) {}
+    try { return sessionStorage.getItem('rudmsAuthToken') || null; } catch (e) { return null; }
+  }
+  function setStoredAuthToken(token, remember) {
+    try { localStorage.removeItem('rudmsAuthToken'); } catch (e) {}
+    try { sessionStorage.removeItem('rudmsAuthToken'); } catch (e) {}
+    if (!token) return;
+    try {
+      if (remember === false) sessionStorage.setItem('rudmsAuthToken', token);
+      else localStorage.setItem('rudmsAuthToken', token);
     } catch (e) {}
   }
 
@@ -718,6 +738,7 @@
     document.getElementById('loginUsername').value = '';
     document.getElementById('loginPassword').value = '';
     document.getElementById('signupName').value = '';
+    document.getElementById('rememberMeCheckbox').checked = true;
   }
 
   function hideLoginScreen() {
@@ -779,6 +800,7 @@
       : 'Don\'t have a login? Click "Sign Up" above.';
     document.getElementById('loginError').classList.add('hidden');
     document.getElementById('forgotPasswordLink').classList.toggle('hidden', isSignup);
+    document.getElementById('rememberMeField').classList.toggle('hidden', isSignup);
   }
 
   var forgotPasswordStep = 1; // 1 = enter username/email, 2 = enter code + new password
@@ -889,9 +911,14 @@
   function bindLoginScreen() {
     document.getElementById('loginModeSigninBtn').addEventListener('click', function () { setLoginMode('signin'); });
     document.getElementById('loginModeSignupBtn').addEventListener('click', function () { setLoginMode('signup'); });
-    document.getElementById('loginSubmitBtn').addEventListener('click', handleLoginOrSignupSubmit);
-    document.getElementById('loginPassword').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') handleLoginOrSignupSubmit();
+    // A real <form> submit (not just a button click listener) is what
+    // makes Chrome/Safari/Firefox reliably offer their own native "Save
+    // password?" prompt after a successful sign-in - preventDefault()
+    // stops the browser from actually navigating/reloading, since this
+    // is an SPA-style flow that just calls google.script.run.
+    document.getElementById('loginMainForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      handleLoginOrSignupSubmit();
     });
 
     document.getElementById('forgotPasswordLink').addEventListener('click', showForgotPasswordPanel);
@@ -975,7 +1002,7 @@
       state.authMode = 'loggedin';
       state.userRole = res.role || 'member';
       state.currentUser = res.name || res.username;
-      setStoredAuthToken(res.token);
+      setStoredAuthToken(res.token, document.getElementById('rememberMeCheckbox').checked);
       hideLoginScreen();
       document.getElementById('bootLoader').classList.remove('hidden');
       setBootMessage('Signing in…');

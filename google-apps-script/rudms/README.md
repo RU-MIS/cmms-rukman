@@ -147,9 +147,19 @@ Google Sites page via `<iframe>`.
     cannot see that tab at all. Every account (of either role) can browse,
     upload, and use Manage Access's By Folder/By File/Doer List tabs the
     same way.
-  - **Sessions**: signing in issues a random token (30-day expiry) stored
-    in the browser's `localStorage` and sent back as `externalToken` on
-    calls that need to know who's asking. **Honest limitation**: this
+  - **Sessions / staying signed in**: signing in issues a random token
+    (30-day expiry) sent back as `externalToken` on calls that need to
+    know who's asking. The login screen's **"Stay signed in on this
+    device"** checkbox (checked by default) controls where that token is
+    kept in the browser: checked stores it in `localStorage`, so closing
+    the browser entirely and reopening the RUDMS link later skips the
+    login screen for up to 30 days; unchecked (e.g. a shared computer)
+    keeps it in `sessionStorage` instead - still no re-login needed
+    while that browser tab/window stays open, but gone the moment it's
+    closed. The login form is also a real `<form>` (not just a button
+    click handler), which is what lets Chrome/Safari/Firefox reliably
+    offer their own native "Save password?" prompt on top of this.
+    **Honest limitation**: this
     gates the RUDMS *client UI* and who can manage accounts - it is not a
     server-side authorization check on every single function, since most
     functions here are otherwise directly callable once someone has any
