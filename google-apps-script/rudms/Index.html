@@ -203,7 +203,10 @@
           <div id="userMenuDropdown" class="hidden absolute right-0 top-11 z-30 bg-white border border-slate-200 rounded-xl shadow-lg w-64 py-2 text-sm">
             <div class="px-3.5 py-2 border-b border-slate-100">
               <p class="text-xs text-slate-400">Signed in as</p>
-              <p id="userMenuEmail" class="text-sm font-medium text-slate-800 truncate"></p>
+              <p class="text-sm font-medium text-slate-800 truncate">
+                <span id="userMenuEmail"></span>
+                <span id="userMenuRoleBadge" class="text-[10px] font-semibold px-1.5 py-0.5 rounded align-middle"></span>
+              </p>
             </div>
             <div id="adminContactBlock" class="hidden px-3.5 py-2 border-b border-slate-100">
               <p class="text-xs text-slate-400 mb-0.5">Admin / contact for access</p>
@@ -1032,6 +1035,12 @@
     document.getElementById('userBadge').textContent = name;
     document.getElementById('userMenuEmail').textContent = name;
     document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase() || '?';
+
+    var isAdmin = state.userRole === 'admin';
+    var roleBadge = document.getElementById('userMenuRoleBadge');
+    roleBadge.textContent = isAdmin ? 'ADMIN' : 'MEMBER';
+    roleBadge.className = 'text-[10px] font-semibold px-1.5 py-0.5 rounded align-middle ' +
+      (isAdmin ? 'text-brand-600 bg-brand-50' : 'text-slate-500 bg-slate-100');
     document.getElementById('switchAccountLink').classList.add('hidden');
     document.getElementById('signOutHint').textContent = 'Signs you out of RUDMS on this device.';
 
