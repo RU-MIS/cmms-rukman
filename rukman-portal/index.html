@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Rukman Portal</title>
+  <meta name="description" content="Your sheets, forms and apps, all in one place.">
+  <meta name="theme-color" content="#1e3a8a">
+  <meta name="color-scheme" content="dark">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Rukman">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a1330;
+      --surface: #12214a;
+      --surface-2: #172a5c;
+      --border: rgba(148,163,255,.14);
+      --text: #e8ecfa; --muted: #93a0c8;
+      --bar: rgba(10,19,48,.78);
+      --sheet: #34d399; --form: #a78bfa; --app: #fb923c; --other: #38bdf8;
+      --danger: #fb7185; --ok: #34d399;
+      --ease: cubic-bezier(.22,1,.36,1);
+      --hdr: 260px;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html { scroll-behavior: auto; }
+    body { margin: 0; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--text);
+           background: var(--bg); min-height: 100vh; -webkit-tap-highlight-color: transparent; }
+    button { font-family: inherit; }
+
+    /* ================= SPLASH ================= */
+    .splash { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center;
+              gap: 14px; background: var(--bg); text-align: center; padding: 24px; }
+    .spin { width: 28px; height: 28px; border-radius: 50%; border: 3px solid rgba(255,255,255,.15);
+            border-top-color: #a78bfa; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .splash p { margin: 0; color: var(--muted); font-size: 14px; max-width: 320px; }
+
+    /* ================= AUTH ================= */
+    .auth { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px;
+            padding-top: calc(24px + env(safe-area-inset-top)); padding-bottom: calc(24px + env(safe-area-inset-bottom));
+            background:
+              radial-gradient(520px 340px at 85% -5%, rgba(34,211,238,.28), transparent 70%),
+              radial-gradient(480px 320px at 5% 105%, rgba(251,191,36,.16), transparent 70%),
+              linear-gradient(160deg, #0a1330 0%, #14235a 55%, #2a1a5e 100%); }
+    .auth-card { width: 100%; max-width: 420px; background: rgba(18,33,74,.92); border: 1px solid var(--border);
+                 border-radius: 24px; padding: 34px 28px 26px; box-shadow: 0 24px 60px rgba(3,8,25,.6);
+                 animation: rise .6s var(--ease) both; }
+    .logo { width: 58px; height: 58px; border-radius: 17px; display: grid; place-items: center; color: #fff;
+            font-size: 28px; font-weight: 800; background: linear-gradient(135deg, #1e3a8a, #4338ca 50%, #86198f);
+            box-shadow: 0 10px 24px rgba(67,56,202,.45); }
+    .auth h1 { margin: 18px 0 4px; font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+    .auth .lead { margin: 0 0 8px; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+    .view { animation: fade .35s ease both; }
+
+    label { display: block; margin: 16px 0 6px; font-size: 12.5px; font-weight: 600; color: var(--muted);
+            letter-spacing: .03em; }
+    .field { position: relative; }
+    input[type=text], input[type=password], input[type=email], input[type=tel] {
+      width: 100%; padding: 13px 14px; font: inherit; font-size: 16px; color: var(--text); background: rgba(10,19,48,.6);
+      border: 1px solid var(--border); border-radius: 12px; outline: none;
+      transition: border-color .25s var(--ease), box-shadow .25s var(--ease); }
+    input::placeholder { color: #6574a3; }
+    input:focus { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(167,139,250,.25); }
+    .field input { padding-right: 52px; }
+    .eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px;
+           border: 0; background: transparent; color: var(--muted); font-size: 18px; cursor: pointer; border-radius: 10px; }
+    .eye:hover { color: var(--text); background: rgba(255,255,255,.06); }
+    .otp { text-align: center; font-size: 26px !important; letter-spacing: 12px; font-weight: 700; padding-left: 26px !important; }
+
+    .check { display: flex; align-items: center; gap: 10px; margin: 16px 0 0; font-size: 14px; color: var(--text);
+             font-weight: 500; letter-spacing: 0; cursor: pointer; }
+    .check input { width: 18px; height: 18px; accent-color: #7c3aed; }
+
+    .btn { position: relative; width: 100%; margin-top: 22px; padding: 14px; border: 0; border-radius: 13px; cursor: pointer;
+           font-size: 15.5px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #4f46e5, #7c3aed);
+           box-shadow: 0 10px 24px rgba(79,70,229,.4);
+           transition: transform .3s var(--ease), box-shadow .3s var(--ease), opacity .2s; }
+    .btn:hover { transform: translate3d(0,-2px,0); box-shadow: 0 14px 30px rgba(79,70,229,.5); }
+    .btn:active { transform: none; }
+    .btn[disabled] { opacity: .65; cursor: progress; transform: none; }
+    .btn.busy { color: transparent; }
+    .btn.busy::after { content: ""; position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px;
+                       border-radius: 50%; border: 3px solid rgba(255,255,255,.35); border-top-color: #fff; animation: spin .7s linear infinite; }
+    .link { background: none; border: 0; padding: 6px 2px; color: #a5b4fc; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .link:hover { color: #fff; text-decoration: underline; }
+    .link[disabled] { color: var(--muted); cursor: default; text-decoration: none; }
+    .links { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+    .msg { margin-top: 16px; padding: 11px 14px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; animation: fade .3s ease both; }
+    .msg.err  { color: #ffd5db; background: rgba(251,113,133,.14); border: 1px solid rgba(251,113,133,.35); }
+    .msg.ok   { color: #c8f7e4; background: rgba(52,211,153,.13);  border: 1px solid rgba(52,211,153,.35); }
+    .msg.info { color: #dbe3ff; background: rgba(129,140,248,.14); border: 1px solid rgba(129,140,248,.35); }
+
+    .install-box { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); text-align: center; }
+    .install { padding: 10px 16px; border-radius: 999px; border: 1px solid var(--border); background: rgba(255,255,255,.05);
+               color: var(--text); font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background-color .25s var(--ease); }
+    .install:hover { background: rgba(255,255,255,.1); }
+    .ios-hint { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+    .secure { margin: 18px 0 0; text-align: center; font-size: 12px; color: var(--muted); }
+
+    /* ================= PORTAL: FROZEN HEADER ================= */
+    .top {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50; color: #fff;
+      padding: calc(40px + env(safe-area-inset-top)) 20px 14px;
+      background:
+        radial-gradient(420px 260px at 92% -10%, rgba(34,211,238,.35), transparent 70%),
+        radial-gradient(380px 240px at 4% 110%, rgba(251,191,36,.22), transparent 70%),
+        linear-gradient(135deg, #1e3a8a 0%, #4338ca 48%, #86198f 100%);
+      box-shadow: 0 10px 30px rgba(3,8,25,.55);
+      transform: translate3d(0,0,0);
+      transition: transform .55s var(--ease);
+      will-change: transform;
+    }
+    .top.compact { transform: translate3d(0, calc(-1 * var(--shift, 0px)), 0); }
+
+    .inner { position: relative; max-width: 1000px; margin: 0 auto; }
+    .hero-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+                transition: opacity .35s var(--ease); }
+    .top.compact .hero-row { opacity: 0; }
+    .brand { font-size: 13px; letter-spacing: .18em; text-transform: uppercase; font-weight: 600; opacity: .85; }
+    .top h1 { margin: 6px 0 4px; font-size: clamp(24px, 5vw, 38px); font-weight: 800; letter-spacing: -.02em; }
+    .top p { margin: 0; opacity: .85; font-size: 15px; }
+    .user { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 8px;
+            background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25); border-radius: 999px; }
+    .avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+              background: #fff; color: #3730a3; font-weight: 800; flex: none; }
+    .user-text { line-height: 1.2; padding-right: 4px; }
+    .user-name  { font-size: 14px; font-weight: 700; }
+    .user-email { font-size: 11px; opacity: .8; }
+    .signout { border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.12); color: #fff; padding: 7px 12px;
+               border-radius: 999px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+               transition: background-color .25s var(--ease); }
+    .signout:hover { background: rgba(255,255,255,.24); }
+    .top .install { padding: 7px 12px; font-size: 12.5px; border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.12); color: #fff; }
+
+    .toolbar { margin-top: 18px; background: var(--bar); border: 1px solid rgba(255,255,255,.16);
+               box-shadow: 0 8px 24px rgba(3,8,25,.4); border-radius: 18px; padding: 12px;
+               display: flex; gap: 12px; flex-wrap: wrap; align-items: center; color: var(--text); }
+    .search { flex: 1 1 240px; position: relative; }
+    .search span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); opacity: .6; }
+    .search input { padding: 12px 14px 12px 42px; font-size: 15px; background: transparent; }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chips:empty { display: none; }
+    .chip { border: 1px solid var(--border); background: transparent; color: var(--text);
+            padding: 9px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: transform .25s var(--ease), background-color .25s var(--ease), border-color .25s var(--ease); }
+    .chip:hover { transform: translate3d(0,-1px,0); background: rgba(255,255,255,.07); }
+    .chip.active { background: linear-gradient(135deg,#4f46e5,#7c3aed); color: #fff; border-color: transparent; }
+
+    .mini { display: none; align-items: center; gap: 8px; margin-left: auto; padding-left: 4px;
+            opacity: 0; transition: opacity .4s var(--ease); font-size: 13px; font-weight: 600; }
+    .mini .avatar { width: 30px; height: 30px; font-size: 13px; background: linear-gradient(135deg,#4f46e5,#7c3aed); color: #fff; }
+    .mini .signout { padding: 6px 10px; }
+    .top.compact .mini { opacity: 1; }
+    @media (min-width: 720px) { .mini { display: flex; } }
+
+    /* ================= PORTAL: CONTENT ================= */
+    main { max-width: 1000px; margin: 0 auto 40px; padding: calc(var(--hdr) + 8px) 16px 0; }
+    .crumbs { display: flex; align-items: center; gap: 12px; margin: 18px 4px 0; flex-wrap: wrap; }
+    .back { border: 1px solid var(--border); background: transparent; color: var(--text);
+            padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: transform .25s var(--ease), background-color .25s var(--ease); }
+    .back:hover { transform: translate3d(-2px,0,0); background: rgba(255,255,255,.07); }
+    .crumb-title { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+    .count { margin: 18px 4px 12px; font-size: 13px; color: var(--muted); font-weight: 600;
+             letter-spacing: .05em; text-transform: uppercase; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+
+    .card { --c: var(--other); position: relative; display: block; padding: 20px; border-radius: 20px;
+            text-decoration: none; color: inherit; overflow: hidden; background: var(--surface); cursor: pointer;
+            border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(3,8,25,.35);
+            transform: translate3d(0,0,0);
+            transition: transform .45s var(--ease), box-shadow .45s var(--ease), border-color .45s var(--ease), background-color .45s var(--ease);
+            animation: rise .6s var(--ease) both; will-change: transform; outline: none; }
+    .card.quick { animation: fade .25s ease both; }
+    .card.sheet { --c: var(--sheet); } .card.form { --c: var(--form); } .card.app { --c: var(--app); }
+    .card.c0 { --c: #38bdf8; } .card.c1 { --c: #34d399; } .card.c2 { --c: #a78bfa; }
+    .card.c3 { --c: #fb923c; } .card.c4 { --c: #f472b6; } .card.c5 { --c: #facc15; }
+    .card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--c); }
+    .card::after { content: ""; position: absolute; width: 160px; height: 160px; right: -60px; top: -60px;
+                   background: var(--c); opacity: .14; border-radius: 50%;
+                   transition: transform .6s var(--ease), opacity .6s var(--ease); }
+    .card:hover, .card:focus-visible { transform: translate3d(0,-6px,0); background: var(--surface-2);
+                   box-shadow: 0 18px 36px rgba(3,8,25,.6);
+                   border-color: color-mix(in srgb, var(--c) 50%, transparent); }
+    .card:hover::after { transform: scale(1.6); opacity: .22; }
+    .icon { width: 52px; height: 52px; border-radius: 15px; display: grid; place-items: center; font-size: 26px;
+            background: color-mix(in srgb, var(--c) 18%, transparent); }
+    .name { margin-top: 16px; font-size: 17px; font-weight: 700; line-height: 1.3; }
+    .sub { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+    .row { margin-top: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .badge { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+             color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent);
+             padding: 4px 10px; border-radius: 999px; }
+    .go { font-size: 18px; color: var(--muted); transition: transform .45s var(--ease), color .45s var(--ease); }
+    .card:hover .go { transform: translate3d(4px,0,0); color: var(--c); }
+    @keyframes rise { from { opacity: 0; transform: translate3d(0,18px,0); } to { opacity: 1; transform: translate3d(0,0,0); } }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+    .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .empty .big { font-size: 54px; }
+    footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 0 30px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <noscript><p style="padding:24px">Please enable JavaScript to use the portal.</p></noscript>
+
+  <!-- ============ SPLASH ============ -->
+  <div class="splash" id="splash">
+    <div class="spin" id="splashSpin"></div>
+    <p id="splashMsg">Loading…</p>
+    <button class="link" id="splashRetry" hidden>Try again</button>
+  </div>
+
+  <!-- ============ AUTH ============ -->
+  <div class="auth" id="auth" hidden>
+    <div class="auth-card">
+      <div class="logo">R</div>
+
+      <!-- Sign in -->
+      <section class="view" id="vLogin">
+        <h1>Welcome back</h1>
+        <p class="lead">Sign in to see your sheets, forms and apps.</p>
+        <form id="fLogin" autocomplete="on" novalidate>
+          <label for="lid">Login ID or email</label>
+          <input id="lid" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="e.g. vivek or name@company.com">
+          <label for="lpw">Password</label>
+          <div class="field">
+            <input id="lpw" name="password" type="password" autocomplete="current-password" placeholder="Your password">
+            <button class="eye" type="button" data-eye="lpw" aria-label="Show password">👁</button>
+          </div>
+          <label class="check"><input type="checkbox" id="remember" checked> Keep me signed in on this device</label>
+          <div class="msg" id="mLogin" role="alert" hidden></div>
+          <button class="btn" type="submit" id="bLogin">Sign in</button>
+        </form>
+        <div class="links">
+          <button class="link" type="button" id="toForgot">First time or forgot password?</button>
+        </div>
+        <div class="install-box" id="installBox" hidden>
+          <button class="install" type="button" id="installLogin" hidden>⬇ Install the app</button>
+          <p class="ios-hint" id="iosHint" hidden>To install on iPhone or iPad: tap <b>Share</b>, then <b>Add to Home Screen</b>.</p>
+        </div>
+      </section>
+
+      <!-- Forgot: step 1 -->
+      <section class="view" id="vForgot" hidden>
+        <h1>Set or reset password</h1>
+        <p class="lead">Enter your login ID or email. We will email you a 6-digit code.</p>
+        <form id="fForgot" novalidate>
+          <label for="fid">Login ID or email</label>
+          <input id="fid" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+          <div class="msg" id="mForgot" role="alert" hidden></div>
+          <button class="btn" type="submit" id="bForgot">Send code</button>
+        </form>
+        <div class="links"><button class="link" type="button" data-back="login">← Back to sign in</button></div>
+      </section>
+
+      <!-- Forgot: step 2 -->
+      <section class="view" id="vReset" hidden>
+        <h1>Enter the code</h1>
+        <p class="lead" id="resetLead">If that ID is registered, a 6-digit code has been sent to its email address. It expires in 10 minutes.</p>
+        <form id="fReset" novalidate>
+          <label for="otp">6-digit code</label>
+          <input id="otp" name="otp" class="otp" type="tel" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+          <label for="npw">New password</label>
+          <div class="field">
+            <input id="npw" name="new-password" type="password" autocomplete="new-password" placeholder="At least 8 characters, letters and numbers">
+            <button class="eye" type="button" data-eye="npw" aria-label="Show password">👁</button>
+          </div>
+          <label for="cpw">Confirm new password</label>
+          <div class="field">
+            <input id="cpw" name="confirm-password" type="password" autocomplete="new-password">
+            <button class="eye" type="button" data-eye="cpw" aria-label="Show password">👁</button>
+          </div>
+          <div class="msg" id="mReset" role="alert" hidden></div>
+          <button class="btn" type="submit" id="bReset">Save new password</button>
+        </form>
+        <div class="links">
+          <button class="link" type="button" id="resend">Resend code</button>
+          <button class="link" type="button" data-back="forgot">Use a different ID</button>
+        </div>
+      </section>
+
+      <p class="secure">🔒 Your connection is encrypted</p>
+    </div>
+  </div>
+
+  <!-- ============ PORTAL ============ -->
+  <div id="app" hidden>
+    <header class="top" id="top">
+      <div class="inner">
+        <div class="hero-row">
+          <div>
+            <div class="brand">Rukman Portal</div>
+            <h1 id="greet">Welcome 👋</h1>
+            <p id="tagline">Your sheets, forms and apps, all in one place.</p>
+          </div>
+          <div class="user">
+            <div class="avatar" id="avatar">?</div>
+            <div class="user-text">
+              <div class="user-name" id="uname"></div>
+              <div class="user-email" id="uemail"></div>
+            </div>
+            <button class="install" type="button" id="installApp" hidden>⬇ Install</button>
+            <button class="signout" type="button" id="signout">Sign out</button>
+          </div>
+        </div>
+
+        <div class="toolbar" id="toolbar">
+          <div class="search"><span>🔍</span><input id="q" type="text" placeholder="Search…" autocomplete="off"></div>
+          <div class="chips" id="chips"></div>
+          <div class="mini">
+            <div class="avatar" id="mavatar">?</div><span id="mname"></span>
+            <button class="signout" type="button" id="signout2">Sign out</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="crumbs" id="crumbs" hidden>
+        <button class="back" id="back">← All departments</button>
+        <span class="crumb-title" id="crumbTitle"></span>
+      </div>
+      <div class="count" id="count"></div>
+      <div class="grid" id="grid"></div>
+      <div class="empty" id="empty" hidden></div>
+    </main>
+    <footer>🔒 You can only see what has been shared with you.</footer>
+  </div>
+
+  <script>
+    /* =====================================================================
+       SETTINGS: paste your Apps Script Web app URL (ends with /exec)
+       ===================================================================== */
+    const API_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s).replace(/[&<>"']/g,
+      c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    /* ---------------- token storage (works even if storage is blocked) ---------------- */
+    const store = {
+      get() { try { return localStorage.getItem('rp_token') || sessionStorage.getItem('rp_token'); } catch (e) { return null; } },
+      set(t, remember) { this.clear(); try { (remember ? localStorage : sessionStorage).setItem('rp_token', t); } catch (e) {} },
+      clear() { try { localStorage.removeItem('rp_token'); sessionStorage.removeItem('rp_token'); } catch (e) {} }
+    };
+
+    /* ---------------- API ---------------- */
+    async function api(action, data) {
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // plain text avoids a CORS pre-flight with Apps Script
+          body: JSON.stringify(Object.assign({ action }, data || {}))
+        });
+        return await res.json();
+      } catch (e) {
+        return { ok: false, code: 'NETWORK', error: 'Cannot reach the server. Please check your internet connection and try again.' };
+      }
+    }
+
+    /* ---------------- screens ---------------- */
+    function hideAll() { $('splash').hidden = true; $('auth').hidden = true; $('app').hidden = true; }
+
+    function splash(text, opts) {
+      opts = opts || {};
+      hideAll(); $('splash').hidden = false;
+      $('splashMsg').textContent = text;
+      $('splashSpin').hidden = !!opts.noSpinner;
+      $('splashRetry').hidden = !opts.retry;
+    }
+
+    function showView(name) {
+      ['login', 'forgot', 'reset'].forEach(v => { $('v' + v[0].toUpperCase() + v.slice(1)).hidden = (v !== name); });
+      ['mLogin', 'mForgot', 'mReset'].forEach(id => setMsg(id, ''));
+    }
+
+    function showAuth(msg, type) {
+      hideAll(); $('auth').hidden = false;
+      showView('login');
+      if (msg) setMsg('mLogin', msg, type || 'info');
+      setTimeout(() => { const el = $('lid').value ? $('lpw') : $('lid'); el.focus(); }, 60);
+    }
+
+    function setMsg(id, text, type) {
+      const el = $(id);
+      if (!text) { el.hidden = true; el.textContent = ''; return; }
+      el.className = 'msg ' + (type || 'err');
+      el.textContent = text;
+      el.hidden = false;
+    }
+
+    function busy(btn, on) { btn.disabled = on; btn.classList.toggle('busy', on); }
+
+    /* ---------------- sign in ---------------- */
+    $('fLogin').addEventListener('submit', async e => {
+      e.preventDefault();
+      const id = $('lid').value.trim(), password = $('lpw').value, remember = $('remember').checked;
+      setMsg('mLogin', '');
+      if (!id || !password) return setMsg('mLogin', 'Please enter your login ID and password.');
+      busy($('bLogin'), true);
+      const res = await api('login', { id, password, remember });
+      busy($('bLogin'), false);
+      if (!res.ok) return setMsg('mLogin', res.error || 'Could not sign in.');
+      store.set(res.token, remember);
+      $('lpw').value = '';
+      enterApp(res);
+    });
+
+    document.querySelectorAll('[data-eye]').forEach(b => b.addEventListener('click', () => {
+      const input = $(b.dataset.eye), show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      b.textContent = show ? '🙈' : '👁';
+      b.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    }));
+
+    /* ---------------- forgot / first-time password ---------------- */
+    let RESET_ID = '', cdTimer = null;
+
+    $('toForgot').addEventListener('click', () => { showView('forgot'); $('fid').value = $('lid').value; $('fid').focus(); });
+    document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.back === 'login') showAuth(); else showView(b.dataset.back);
+    }));
+
+    $('fForgot').addEventListener('submit', async e => {
+      e.preventDefault();
+      const id = $('fid').value.trim();
+      setMsg('mForgot', '');
+      if (!id) return setMsg('mForgot', 'Please enter your login ID or email.');
+      busy($('bForgot'), true);
+      const res = await api('forgot', { id });
+      busy($('bForgot'), false);
+      if (!res.ok) return setMsg('mForgot', res.error || 'Could not send the code.');
+      RESET_ID = id;
+      $('otp').value = ''; $('npw').value = ''; $('cpw').value = '';
+      showView('reset');
+      startCooldown();
+      $('otp').focus();
+    });
+
+    function startCooldown() {
+      let s = 60; const b = $('resend');
+      clearInterval(cdTimer);
+      const tick = () => {
+        b.disabled = s > 0;
+        b.textContent = s > 0 ? 'Resend code in ' + s + 's' : 'Resend code';
+        if (s <= 0) clearInterval(cdTimer);
+        s--;
+      };
+      tick(); cdTimer = setInterval(tick, 1000);
+    }
+
+    $('resend').addEventListener('click', async () => {
+      setMsg('mReset', '');
+      const res = await api('forgot', { id: RESET_ID });
+      if (!res.ok) return setMsg('mReset', res.error || 'Could not send the code.');
+      setMsg('mReset', 'A new code has been sent if that ID is registered.', 'info');
+      startCooldown();
+    });
+
+    $('otp').addEventListener('input', () => { $('otp').value = $('otp').value.replace(/\D/g, '').slice(0, 6); });
+
+    $('fReset').addEventListener('submit', async e => {
+      e.preventDefault();
+      const otp = $('otp').value.trim(), pw = $('npw').value, cp = $('cpw').value;
+      setMsg('mReset', '');
+      if (!/^\d{6}$/.test(otp)) return setMsg('mReset', 'Please enter the 6-digit code from your email.');
+      if (pw.length < 8) return setMsg('mReset', 'Password must be at least 8 characters long.');
+      if (!/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return setMsg('mReset', 'Password must contain at least one letter and one number.');
+      if (pw !== cp) return setMsg('mReset', 'The two passwords do not match.');
+      busy($('bReset'), true);
+      const res = await api('reset', { id: RESET_ID, otp, password: pw });
+      busy($('bReset'), false);
+      if (!res.ok) return setMsg('mReset', res.error || 'Could not reset the password.');
+      store.clear();
+      $('lid').value = RESET_ID; $('lpw').value = '';
+      $('npw').value = ''; $('cpw').value = ''; $('otp').value = '';
+      showAuth('Your password has been saved. Please sign in.', 'ok');
+    });
+
+    /* ---------------- install as an app (PWA) ---------------- */
+    let deferredPrompt = null;
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone;
+
+    function updateInstallUI() {
+      const can = !!deferredPrompt && !standalone;
+      $('installLogin').hidden = !can; $('installApp').hidden = !can;
+      $('iosHint').hidden = !isIOS;
+      $('installBox').hidden = !(can || isIOS);
+    }
+    window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; updateInstallUI(); });
+    window.addEventListener('appinstalled', () => { deferredPrompt = null; updateInstallUI(); });
+    [$('installLogin'), $('installApp')].forEach(b => b.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      try { await deferredPrompt.userChoice; } catch (e) {}
+      deferredPrompt = null; updateInstallUI();
+    }));
+    updateInstallUI();
+
+    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    }
+
+    /* =====================================================================
+       PORTAL
+       ===================================================================== */
+    const ICON  = { sheet: '📊', form: '📝', app: '🚀' };
+    const LABEL = { all: 'All', sheet: 'Sheets', form: 'Forms', app: 'Apps' };
+    const PLURAL = { sheet: 'sheet', form: 'form', app: 'app' };
+
+    let ITEMS = [], FILTER = 'all', CURRENT = null, SINGLE = false, DEPT_NAMES = [], STAGGER = true;
+
+    function greeting(first) {
+      const h = new Date().getHours();
+      const g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+      return g + ', ' + first + ' 👋';
+    }
+
+    /* ---- frozen header: measure once, then only toggle a class on scroll ---- */
+    const topEl = $('top'), toolbarEl = $('toolbar');
+
+    function measure() {
+      if ($('app').hidden) return;
+      const shift = toolbarEl.getBoundingClientRect().top - topEl.getBoundingClientRect().top - 14;
+      topEl.style.setProperty('--shift', Math.max(0, shift) + 'px');
+      document.documentElement.style.setProperty('--hdr', topEl.offsetHeight + 'px');
+    }
+    window.addEventListener('load', measure);
+    window.addEventListener('resize', measure);
+    if (window.ResizeObserver) new ResizeObserver(measure).observe(toolbarEl);
+
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY || document.documentElement.scrollTop;
+        if (y > 60) topEl.classList.add('compact');
+        else if (y < 20) topEl.classList.remove('compact');
+        ticking = false;
+      });
+    }, { passive: true });
+
+    function enterApp(res) {
+      const mail = (res.user && res.user.email) || '';
+      const fallback = mail ? mail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'there';
+      const full  = (res.user && res.user.name) || fallback;
+      const first = full.split(' ')[0];
+
+      $('greet').textContent   = greeting(first);
+      $('uname').textContent   = full;
+      $('uemail').textContent  = mail;
+      $('avatar').textContent  = (full[0] || '?').toUpperCase();
+      $('mavatar').textContent = (full[0] || '?').toUpperCase();
+      $('mname').textContent   = first;
+
+      ITEMS = res.items || [];
+      CURRENT = null; SINGLE = false; FILTER = 'all'; $('q').value = '';
+      const depts = [...new Set(ITEMS.map(i => i.dept))];
+      if (depts.length === 1) { CURRENT = depts[0]; SINGLE = true; }
+
+      hideAll(); $('app').hidden = false;
+      topEl.classList.remove('compact'); window.scrollTo(0, 0);
+      refreshView(true);
+    }
+
+    async function signOut() {
+      const token = store.get();
+      store.clear();
+      ITEMS = []; CURRENT = null;
+      showAuth('You have been signed out.', 'info');
+      if (token) api('logout', { token });
+    }
+    $('signout').addEventListener('click', signOut);
+    $('signout2').addEventListener('click', signOut);
+
+    $('back').addEventListener('click', () => { CURRENT = null; FILTER = 'all'; $('q').value = ''; refreshView(true); jumpTop(); });
+    $('q').addEventListener('input', () => { STAGGER = false; render(); });
+
+    function jumpTop() { window.scrollTo(0, 0); topEl.classList.remove('compact'); }
+
+    function openDept(name) {
+      CURRENT = name; FILTER = 'all'; $('q').value = '';
+      refreshView(true); jumpTop();
+    }
+
+    function refreshView(stagger) {
+      STAGGER = stagger;
+      const inDept = CURRENT !== null;
+      $('crumbs').hidden = !(inDept && !SINGLE);
+      $('crumbTitle').textContent = inDept ? CURRENT : '';
+      $('q').placeholder = inDept ? 'Search in ' + CURRENT + '…' : 'Search departments…';
+      $('tagline').textContent = inDept
+        ? (SINGLE ? 'Your sheets, forms and apps, all in one place.' : 'Everything in ' + CURRENT + '.')
+        : 'Choose a department to get started.';
+      buildChips();
+      render();
+      measure();
+    }
+
+    function buildChips() {
+      const box = $('chips');
+      if (CURRENT === null) { box.innerHTML = ''; return; }
+      const mine = ITEMS.filter(i => i.dept === CURRENT);
+      const types = ['all'].concat([...new Set(mine.map(i => i.type))]);
+      box.innerHTML = types.map(t =>
+        '<button class="chip ' + (t === FILTER ? 'active' : '') + '" data-t="' + esc(t) + '">' + esc(LABEL[t] || t) + '</button>'
+      ).join('');
+      box.querySelectorAll('.chip').forEach(b => b.onclick = () => {
+        FILTER = b.dataset.t; buildChips(); STAGGER = false; render();
+      });
+    }
+
+    function showEmpty(icon, text) {
+      $('grid').innerHTML = '';
+      $('count').textContent = '';
+      const e = $('empty');
+      e.hidden = false;
+      e.innerHTML = '<div class="big">' + icon + '</div><p>' + esc(text) + '</p>';
+    }
+
+    function animAttrs(n) {
+      return STAGGER ? 'style="animation-delay:' + (Math.min(n, 12) * 45) + 'ms"' : '';
+    }
+
+    function render() {
+      const q = $('q').value.toLowerCase().trim();
+      if (!ITEMS.length) return showEmpty('🔒', 'You have not been given access to anything yet.');
+      $('empty').hidden = true;
+      if (CURRENT === null) renderDepartments(q); else renderItems(q);
+      STAGGER = false;
+    }
+
+    function renderDepartments(q) {
+      const map = new Map();
+      ITEMS.forEach(i => { if (!map.has(i.dept)) map.set(i.dept, []); map.get(i.dept).push(i); });
+
+      let entries = [...map.entries()];
+      if (q) entries = entries.filter(([name, list]) =>
+        name.toLowerCase().includes(q) || list.some(i => i.title.toLowerCase().includes(q)));
+
+      if (!entries.length) return showEmpty('🔎', 'No departments found. Try a different search term.');
+
+      DEPT_NAMES = entries.map(e => e[0]);
+      $('count').textContent = entries.length + ' department' + (entries.length > 1 ? 's' : '');
+      $('grid').innerHTML = entries.map(([name, list], n) => {
+        const parts = ['sheet', 'form', 'app']
+          .map(t => [t, list.filter(i => i.type === t).length]).filter(p => p[1])
+          .map(([t, c]) => c + ' ' + PLURAL[t] + (c > 1 ? 's' : ''));
+        const other = list.filter(i => !PLURAL[i.type]).length;
+        if (other) parts.push(other + ' other');
+        return '<div class="card c' + (n % 6) + ' ' + (STAGGER ? '' : 'quick') + '" role="button" tabindex="0" data-i="' + n + '" ' + animAttrs(n) + '>' +
+          '<div class="icon">🏢</div>' +
+          '<div class="name">' + esc(name) + '</div>' +
+          '<div class="sub">' + esc(parts.join(' · ')) + '</div>' +
+          '<div class="row"><span class="badge">' + list.length + ' item' + (list.length > 1 ? 's' : '') + '</span><span class="go">→</span></div>' +
+          '</div>';
+      }).join('');
+
+      $('grid').querySelectorAll('.card').forEach(c => {
+        const go = () => openDept(DEPT_NAMES[+c.dataset.i]);
+        c.onclick = go;
+        c.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+      });
+    }
+
+    function renderItems(q) {
+      const list = ITEMS.filter(i =>
+        i.dept === CURRENT &&
+        (FILTER === 'all' || i.type === FILTER) &&
+        i.title.toLowerCase().includes(q));
+
+      if (!list.length) return showEmpty('🔎', 'No results found. Try a different search term.');
+
+      $('count').textContent = list.length + ' item' + (list.length > 1 ? 's' : '');
+      $('grid').innerHTML = list.map((i, n) =>
+        '<a class="card ' + esc(i.type) + ' ' + (STAGGER ? '' : 'quick') + '" href="' + esc(i.url) + '" target="_blank" rel="noopener noreferrer" ' + animAttrs(n) + '>' +
+          '<div class="icon">' + (ICON[i.type] || '🔗') + '</div>' +
+          '<div class="name">' + esc(i.title) + '</div>' +
+          '<div class="row"><span class="badge">' + esc(i.type) + '</span><span class="go">→</span></div>' +
+        '</a>').join('');
+    }
+
+    /* =====================================================================
+       START
+       ===================================================================== */
+    async function init() {
+      if (!API_URL || API_URL.indexOf('PASTE_') === 0) {
+        return splash('This portal is not configured yet. Open index.html and set API_URL to your Apps Script Web app URL.', { noSpinner: true });
+      }
+      const token = store.get();
+      if (!token) return showAuth();
+
+      splash('Loading…');
+      const res = await api('session', { token });
+      if (res.ok) return enterApp(res);
+      if (res.code === 'NETWORK') return splash(res.error, { noSpinner: true, retry: true });
+      store.clear();
+      showAuth('Your session has expired. Please sign in again.', 'info');
+    }
+    $('splashRetry').addEventListener('click', init);
+    init();
+  </script>
+</body>
+</html>
