@@ -177,6 +177,17 @@ function findSessionRows_(sheet, dateStr, machineNo, partName) {
       map[row[4]] = i + firstDataRow; // 1-based sheet row
     }
   }
+  // DIAGNOSTIC - remove once the "always creates a duplicate session"
+  // bug is found. Logs exactly which field didn't match against the
+  // most recent existing row, so the real mismatch shows up in
+  // Executions -> this run -> Logs instead of being guessed at.
+  if (Object.keys(map).length === 0 && data.length > 0) {
+    var last = data[data.length - 1];
+    console.error('findSessionRows_: no match found.\n' +
+      'Looking for: date=[' + normalizeDate_(dateStr) + '] machine=[' + String(machineNo).trim() + '] part=[' + String(partName).trim() + ']\n' +
+      'Last existing row: date=[' + normalizeDate_(last[1]) + '] machine=[' + String(last[2]).trim() + '] part=[' + String(last[3]).trim() + ']\n' +
+      'Raw dateStr=[' + dateStr + '] raw last date cell=[' + last[1] + '] (type: ' + (Object.prototype.toString.call(last[1])) + ')');
+  }
   return map;
 }
 
