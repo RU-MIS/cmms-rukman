@@ -12,8 +12,9 @@ const SESSIONS_SHEET = 'Sessions';        // created automatically
 const PORTAL_TITLE   = 'Rukman Portal';
 const DEFAULT_DEPARTMENT = 'General';
 
-const SESSION_DAYS_REMEMBER = 30;         // "Keep me signed in" ticked
-const SESSION_HOURS_SHORT   = 12;         // not ticked
+const SESSION_DAYS_REMEMBER = 30;         // "Remember me" ticked; renewed every time the app is opened
+const SESSION_MAX_DAYS      = 90;         // absolute limit: after this the user must sign in again
+const SESSION_HOURS_SHORT   = 12;         // not ticked (never renewed)
 const OTP_MINUTES           = 10;         // how long an OTP stays valid
 const OTP_MAX_SENDS_PER_HOUR = 3;         // OTP emails per user per hour
 const OTP_MAX_TRIES         = 5;          // wrong OTP guesses before it is cancelled
@@ -55,7 +56,7 @@ function setup() {
   if (!users) users = ss.insertSheet(USERS_SHEET);
   users.getRange('A1:F1').setValues([['EMAIL', 'NAME', 'LOGIN ID', 'SALT (auto)', 'HASH (auto)', 'STATUS']]);
   users.getRange('C:E').setNumberFormat('@');      // keep as plain text
-  sessionsSheet_();
+  sessionsSheet_().getRange('E1').setValue('REMEMBER');
   pepper_();
   const quota = MailApp.getRemainingDailyQuota();  // also triggers the "send email" permission prompt
   Logger.log('Setup complete. Emails you can still send today: ' + quota);
@@ -95,6 +96,7 @@ function session_(req) {
   const email = validate_(req.token);
   const user  = email ? findUser_(email) : null;
   if (!user || user.disabled) return fail_('Your session has expired. Please sign in again.', 'SESSION_EXPIRED');
+  renewSession_(req.token);
   return Object.assign({ ok: true }, payload_(user));
 }
 
@@ -216,7 +218,7 @@ function sessionsSheet_() {
   let sh = ss.getSheetByName(SESSIONS_SHEET);
   if (!sh) {
     sh = ss.insertSheet(SESSIONS_SHEET);
-    sh.getRange('A1:D1').setValues([['TOKEN HASH', 'EMAIL', 'EXPIRES (ms)', 'CREATED']]);
+    sh.getRange('A1:E1').setValues([['TOKEN HASH', 'EMAIL', 'EXPIRES (ms)', 'CREATED', 'REMEMBER']]);
     sh.getRange('C:C').setNumberFormat('0');
   }
   return sh;
@@ -230,9 +232,37 @@ function createSession_(email, remember) {
     const sh = sessionsSheet_();
     const rows = sh.getDataRange().getValues();
     for (let i = rows.length - 1; i >= 1; i--) if (Number(rows[i][2]) < Date.now()) sh.deleteRow(i + 1);   // tidy up
-    sh.appendRow([sha256_(token), email, expiry, new Date()]);
+    sh.appendRow([sha256_(token), email, expiry, new Date(), remember ? 'yes' : 'no']);
   });
   return { token: token, expiry: expiry };
+}
+
+/** "Remember me" sessions slide forward each time the app is opened (at most one write a day), up to SESSION_MAX_DAYS. */
+function renewSession_(token) {
+  const h = sha256_(String(token || '')), DAY = 864e5, now = Date.now();
+  const next = function (row) {
+    if (String(row[4]) !== 'yes') return 0;                                   // short sessions are never renewed
+    const cap = new Date(row[3]).getTime() + SESSION_MAX_DAYS * DAY;
+    const target = Math.min(now + SESSION_DAYS_REMEMBER * DAY, cap);
+    return target - Number(row[2]) > DAY ? target : 0;                        // only when it gains a full day
+  };
+
+  const rows = sessionsSheet_().getDataRange().getValues();                   // cheap check first, no lock
+  let need = false;
+  for (let i = 1; i < rows.length; i++) if (rows[i][0] === h) { need = next(rows[i]) > 0; break; }
+  if (!need) return;
+
+  withLock_(function () {
+    const sh = sessionsSheet_();
+    const fresh = sh.getDataRange().getValues();                              // re-read inside the lock
+    for (let i = 1; i < fresh.length; i++) {
+      if (fresh[i][0] === h) {
+        const t = next(fresh[i]);
+        if (t) { sh.getRange(i + 1, 3).setValue(t); CacheService.getScriptCache().remove('s:' + h); }
+        return;
+      }
+    }
+  });
 }
 
 function validate_(token) {

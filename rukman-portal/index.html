@@ -93,6 +93,7 @@
     .link { background: none; border: 0; padding: 6px 2px; color: #a5b4fc; font-size: 14px; font-weight: 600; cursor: pointer; }
     .link:hover { color: #fff; text-decoration: underline; }
     .link[disabled] { color: var(--muted); cursor: default; text-decoration: none; }
+    .hint { margin: 6px 0 0 28px; font-size: 12px; line-height: 1.45; color: var(--muted); }
     .links { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 
     .msg { margin-top: 16px; padding: 11px 14px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; animation: fade .3s ease both; }
@@ -245,8 +246,8 @@
             <input id="lpw" name="password" type="password" autocomplete="current-password" placeholder="Your password">
             <button class="eye" type="button" data-eye="lpw" aria-label="Show password">👁</button>
           </div>
-          <label class="check"><input type="checkbox" id="remember" checked> Keep me signed in on this device</label>
-          <label class="check" style="margin-top:10px"><input type="checkbox" id="savepw" checked> Save my password in this browser</label>
+          <label class="check"><input type="checkbox" id="remember" checked> Remember me</label>
+          <p class="hint">Stay signed in on this device. Use this only on your own phone or computer.</p>
           <div class="msg" id="mLogin" role="alert" hidden></div>
           <button class="btn" type="submit" id="bLogin">Sign in</button>
         </form>
@@ -398,6 +399,7 @@
       hideAll(); $('auth').hidden = false;
       showView('login');
       if (msg) setMsg('mLogin', msg, type || 'info');
+      if (!$('lid').value) { try { const v = localStorage.getItem('rp_lid'); if (v) $('lid').value = v; } catch (e) {} }
       setTimeout(() => { const el = $('lid').value ? $('lpw') : $('lid'); el.focus(); }, 60);
     }
 
@@ -422,7 +424,8 @@
       busy($('bLogin'), false);
       if (!res.ok) return setMsg('mLogin', res.error || 'Could not sign in.');
       store.set(res.token, remember);
-      if ($('savepw').checked) offerToSavePassword(id, password, (res.user && res.user.name) || id);
+      try { if (remember) localStorage.setItem('rp_lid', id); else localStorage.removeItem('rp_lid'); } catch (e) {}
+      if (remember) offerToSavePassword(id, password, (res.user && res.user.name) || id);
       AUTO_BLOCK = false;
       $('lpw').value = '';
       enterApp(res);

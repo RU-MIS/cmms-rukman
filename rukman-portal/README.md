@@ -34,9 +34,10 @@ Do **not** share this spreadsheet with users. Only the owner needs access.
 
 Users sign in with email or LOGIN ID. First time: "First time or forgot password?" > code by email > choose password.
 
-Save password: the **Save my password in this browser** box (ticked by default) makes the browser offer to save it.
-After that, if the session has expired, the portal signs in again by itself using the saved password
-(never after an explicit Sign out). "Keep me signed in" is separate: it keeps the session for 30 days.
+Remember me (one checkbox, ticked by default): keeps the user signed in for 30 days, renewed every time the app is
+opened (hard limit 90 days). The login ID is remembered, so after expiry only the password is needed. The password itself
+is never stored by the portal; the browser may also offer to save it, and then signs in again automatically.
+Not ticked: a 12-hour session that is never renewed.
 
 ## Limits to know
 - OTP emails use `MailApp`: about 100/day on a normal Gmail account, 1,500/day on Workspace.
