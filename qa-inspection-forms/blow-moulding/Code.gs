@@ -162,6 +162,17 @@ function normalizeDate_(value) {
   return String(value).trim();
 }
 
+/**
+ * Normalizes M/C No. and Part Name for matching only (never for display -
+ * the sheet/PDF still show exactly what was typed). Strips spaces,
+ * hyphens and underscores and uppercases, so "IM 01", "IM-01" and "im01"
+ * are all treated as the same machine instead of silently starting a
+ * duplicate session just because someone typed it slightly differently.
+ */
+function normalizeKey_(value) {
+  return String(value).trim().toUpperCase().replace(/[\s\-_]+/g, '');
+}
+
 /** Rows already created for this Date + M/C No + Part Name, keyed by Check Point label. */
 function findSessionRows_(sheet, dateStr, machineNo, partName) {
   var lastRow = sheet.getLastRow();
@@ -172,21 +183,10 @@ function findSessionRows_(sheet, dateStr, machineNo, partName) {
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
     if (normalizeDate_(row[1]) === normalizeDate_(dateStr) &&
-        String(row[2]).trim() === String(machineNo).trim() &&
-        String(row[3]).trim() === String(partName).trim()) {
+        normalizeKey_(row[2]) === normalizeKey_(machineNo) &&
+        normalizeKey_(row[3]) === normalizeKey_(partName)) {
       map[row[4]] = i + firstDataRow; // 1-based sheet row
     }
-  }
-  // DIAGNOSTIC - remove once the "always creates a duplicate session"
-  // bug is found. Logs exactly which field didn't match against the
-  // most recent existing row, so the real mismatch shows up in
-  // Executions -> this run -> Logs instead of being guessed at.
-  if (Object.keys(map).length === 0 && data.length > 0) {
-    var last = data[data.length - 1];
-    console.error('findSessionRows_: no match found.\n' +
-      'Looking for: date=[' + normalizeDate_(dateStr) + '] machine=[' + String(machineNo).trim() + '] part=[' + String(partName).trim() + ']\n' +
-      'Last existing row: date=[' + normalizeDate_(last[1]) + '] machine=[' + String(last[2]).trim() + '] part=[' + String(last[3]).trim() + ']\n' +
-      'Raw dateStr=[' + dateStr + '] raw last date cell=[' + last[1] + '] (type: ' + (Object.prototype.toString.call(last[1])) + ')');
   }
   return map;
 }
