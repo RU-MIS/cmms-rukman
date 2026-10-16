@@ -308,18 +308,18 @@
         </div>
 
         <div>
-          <label class="text-xs font-medium text-slate-500 mb-1 block">Viewer Access (comma-separated emails)</label>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Restrict viewing to (optional - RUDMS usernames/emails, blank = everyone)</label>
           <div class="flex gap-1.5">
-            <input id="viewerEmails" type="text" placeholder="e.g. viewer@company.com, client@company.com" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+            <input id="viewerEmails" type="text" placeholder="e.g. aayush, jatin@rukmanudyog.com" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
             <button type="button" data-picker-target="viewerEmails" class="contact-picker-btn shrink-0 px-2.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50" title="Pick from contacts">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </button>
           </div>
         </div>
         <div>
-          <label class="text-xs font-medium text-slate-500 mb-1 block">Editor Access (comma-separated emails)</label>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Also let these RUDMS accounts edit/rename/delete this file (optional)</label>
           <div class="flex gap-1.5">
-            <input id="editorEmails" type="text" placeholder="e.g. editor@company.com" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+            <input id="editorEmails" type="text" placeholder="e.g. aayush, jatin@rukmanudyog.com" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
             <button type="button" data-picker-target="editorEmails" class="contact-picker-btn shrink-0 px-2.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50" title="Pick from contacts">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </button>
@@ -366,8 +366,9 @@
         <button data-close="shareModal" class="text-slate-400 hover:text-slate-600">✕</button>
       </div>
       <div class="p-5 space-y-4">
+        <p class="text-xs text-slate-400 -mt-1">Admin-only overrides for this one file, on top of each person's normal role. Use RUDMS usernames or the email on their login account - leave any field blank to leave that override off.</p>
         <div>
-          <label class="text-xs font-medium text-slate-500 mb-1 block">Viewers (comma-separated emails)</label>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Restrict viewing to (blank = everyone can view)</label>
           <div class="flex gap-1.5">
             <input id="shareViewers" type="text" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
             <button type="button" data-picker-target="shareViewers" class="contact-picker-btn shrink-0 px-2.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50" title="Pick from contacts">
@@ -376,10 +377,19 @@
           </div>
         </div>
         <div>
-          <label class="text-xs font-medium text-slate-500 mb-1 block">Editors (comma-separated emails)</label>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Can edit / rename / delete this file</label>
           <div class="flex gap-1.5">
             <input id="shareEditors" type="text" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
             <button type="button" data-picker-target="shareEditors" class="contact-picker-btn shrink-0 px-2.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50" title="Pick from contacts">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-slate-500 mb-1 block">Can download this file</label>
+          <div class="flex gap-1.5">
+            <input id="shareDownloaders" type="text" class="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500">
+            <button type="button" data-picker-target="shareDownloaders" class="contact-picker-btn shrink-0 px-2.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50" title="Pick from contacts">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </button>
           </div>
@@ -433,6 +443,7 @@
         <button id="foldersTabBtn" data-access-tab="folders" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-brand-600 text-brand-600">By Folder</button>
         <button id="filesTabBtn" data-access-tab="files" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">By File</button>
         <button data-access-tab="doers" class="access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">Doer List</button>
+        <button id="requestsTabBtn" data-access-tab="requests" class="hidden access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">Delete Requests<span id="requestsTabBadge" class="hidden ml-1 text-[10px] font-semibold bg-red-100 text-red-600 rounded-full px-1.5 py-0.5"></span></button>
         <button id="loginsTabBtn" data-access-tab="logins" class="hidden access-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">Login Accounts</button>
       </div>
 
@@ -469,8 +480,8 @@
             <input id="loginNewEmail" type="email" placeholder="Email (optional - needed for Forgot Password)" class="col-span-2 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">
             <input id="loginNewPassword" type="password" placeholder="Password (min 6 chars)" class="col-span-2 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">
             <select id="loginNewRole" class="col-span-2 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">
-              <option value="viewer">Viewer (can only view files - no upload, download or edit)</option>
-              <option value="uploader" selected>Uploader (can view + upload - no download or edit)</option>
+              <option value="viewer" selected>Viewer (view + upload; rename own uploads; needs approval to delete them)</option>
+              <option value="editor">Editor (view + upload; can delete/rename own or admin-granted files; approves viewers' delete requests)</option>
               <option value="admin">Admin (full control, incl. login accounts)</option>
             </select>
             <button id="loginAccountAddBtn" class="col-span-2 px-3.5 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Create Login</button>
@@ -486,6 +497,11 @@
               <button id="notifyEmailsSaveBtn" class="shrink-0 px-3.5 py-2 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Save</button>
             </div>
           </div>
+        </div>
+
+        <div id="accessRequestsPane" class="hidden">
+          <p class="text-xs text-slate-400 mb-3">Viewers can't delete their own uploads directly - they ask here instead. Approve to delete the file right away, or reject to leave it as is. Visible to editors and admins.</p>
+          <div id="deleteRequestList" class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden"></div>
         </div>
       </div>
     </div>
@@ -623,13 +639,15 @@
     searchQuery: '',
     viewMode: 'grid',
     currentUser: '',
+    currentUsername: '',
     authMode: '', // 'loggedin' | 'none'
     authToken: null,
-    userRole: '', // 'admin' | 'uploader' | 'viewer'
+    userRole: '', // 'admin' | 'editor' | 'viewer'
     categoryAccess: [],
     filesLoadError: null,
     contacts: null,
-    lastLoginAccounts: []
+    lastLoginAccounts: [],
+    deleteRequests: []
   };
 
   /**
@@ -708,7 +726,7 @@
   }
 
   function loadFiles() {
-    return callServer('getAllFiles').then(function (fileRes) {
+    return callServer('getAllFiles', state.authToken).then(function (fileRes) {
       if (!fileRes.success) throw new Error(fileRes.error || 'Failed to load files');
       state.files = fileRes.files || [];
       return true;
@@ -762,6 +780,7 @@
       .then(function (boot) {
         if (!boot.success) throw new Error(boot.error || 'Failed to connect');
         state.currentUser = boot.currentUser || '';
+        state.currentUsername = boot.currentUsername || '';
         state.authMode = boot.authMode;
         state.userRole = boot.role || '';
 
@@ -902,8 +921,9 @@
       }
       state.authToken = res.token;
       state.authMode = 'loggedin';
-      state.userRole = res.role || 'uploader';
+      state.userRole = res.role || 'viewer';
       state.currentUser = res.name || res.username;
+      state.currentUsername = res.username || '';
       setStoredAuthToken(res.token);
       hideLoginScreen();
       document.getElementById('bootLoader').classList.remove('hidden');
@@ -968,8 +988,9 @@
       }
       state.authToken = res.token;
       state.authMode = 'loggedin';
-      state.userRole = res.role || 'uploader';
+      state.userRole = res.role || 'viewer';
       state.currentUser = res.name || res.username;
+      state.currentUsername = res.username || '';
       setStoredAuthToken(res.token);
       hideLoginScreen();
       document.getElementById('bootLoader').classList.remove('hidden');
@@ -1009,8 +1030,9 @@
       }
       state.authToken = res.token;
       state.authMode = 'loggedin';
-      state.userRole = res.role || 'uploader';
+      state.userRole = res.role || 'viewer';
       state.currentUser = res.name || res.username;
+      state.currentUsername = res.username || '';
       setStoredAuthToken(res.token, document.getElementById('rememberMeCheckbox').checked);
       hideLoginScreen();
       document.getElementById('bootLoader').classList.remove('hidden');
@@ -1038,10 +1060,10 @@
     document.getElementById('userMenuEmail').textContent = name;
     document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase() || '?';
 
-    var ROLE_LABELS = { admin: 'ADMIN', uploader: 'UPLOADER', viewer: 'VIEWER' };
+    var ROLE_LABELS = { admin: 'ADMIN', editor: 'EDITOR', viewer: 'VIEWER' };
     var ROLE_BADGE_CLASS = {
       admin: 'text-brand-600 bg-brand-50',
-      uploader: 'text-amber-600 bg-amber-50',
+      editor: 'text-amber-600 bg-amber-50',
       viewer: 'text-slate-500 bg-slate-100'
     };
     var role = state.userRole || 'viewer';
@@ -1049,12 +1071,8 @@
     roleBadge.textContent = ROLE_LABELS[role] || role.toUpperCase();
     roleBadge.className = 'text-[10px] font-semibold px-1.5 py-0.5 rounded align-middle ' + (ROLE_BADGE_CLASS[role] || ROLE_BADGE_CLASS.viewer);
 
-    // Viewer accounts can only preview - no Upload button, no Add Category
-    // (creating a folder is bundled into "upload access" - see
-    // requireUploadAccess() server-side).
-    var canUpload = role === 'admin' || role === 'uploader';
-    document.getElementById('uploadBtn').classList.toggle('hidden', !canUpload);
-    document.getElementById('addCategoryBtn').classList.toggle('hidden', !canUpload);
+    // Every role can upload and create folders now - viewer included (see
+    // normalizeRole's comment server-side). Upload/Add Category stay visible for everyone.
     document.getElementById('switchAccountLink').classList.add('hidden');
     document.getElementById('signOutHint').textContent = 'Signs you out of RUDMS on this device.';
 
@@ -1076,6 +1094,7 @@
 
     bindChangePasswordModal();
     loadAdminContacts();
+    if (role === 'admin' || role === 'editor') refreshDeleteRequestBadge();
   }
 
   /**
@@ -1127,10 +1146,9 @@
           '<span class="flex items-center gap-2 truncate">' + folderIcon() + '<span class="truncate">' + escapeHtml(node.name) + '</span></span>' +
           '<span class="count text-xs bg-black/10 rounded-full px-2 py-0.5">' + count + '</span>' +
         '</button>' +
-        (state.userRole === 'admin' || state.userRole === 'uploader' ?
         '<button data-add-subfolder="' + escapeHtml(node.path) + '" title="Add a subfolder here" class="shrink-0 p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>' +
-        '</button>' : '') +
+        '</button>' +
         (state.userRole === 'admin' ?
         '<button data-manage-category="' + escapeHtml(node.path) + '" title="Manage who can access this folder" class="shrink-0 p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>' +
@@ -1276,17 +1294,31 @@
     attachFileActionHandlers();
   }
 
+  /**
+   * Every item here comes straight off capability flags getAllFiles()/
+   * uploadFile() already computed server-side for the current caller
+   * (f.canDownload/f.canRename/f.canEdit/f.canRequestDelete - see
+   * fileCapabilities() in Code.gs) - the client never re-derives who can
+   * do what, it just renders what the server already decided. "Share /
+   * Access" (the per-file admin override) is the one item gated directly
+   * on role here, since it isn't a per-file capability in itself.
+   */
   function fileMenu(f) {
     var isAdmin = state.userRole === 'admin';
-    if (!isAdmin) return ''; // viewer/uploader get only the Preview button - no download, share or delete menu at all
+    var items = '';
+    if (f.canDownload) items += '<button data-action="download" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-slate-50">Download</button>';
+    if (f.canRename) items += '<button data-action="rename" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-slate-50">Rename</button>';
+    if (isAdmin) items += '<button data-action="share" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-slate-50">Share / Access</button>';
+    if (f.canEdit) items += '<button data-action="delete" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600">Delete</button>';
+    else if (f.canRequestDelete) items += '<button data-action="request-delete" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-amber-50 text-amber-700">Request Delete Approval</button>';
+
+    if (!items) return ''; // nothing this account can do beyond Preview - no menu button at all
     return '<div class="relative shrink-0">' +
       '<button data-action="menu" data-id="' + f.fileId + '" class="p-1 rounded hover:bg-slate-100 text-slate-400">' +
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>' +
       '</button>' +
-      '<div data-menu-for="' + f.fileId + '" class="hidden absolute right-0 top-8 z-20 bg-white border border-slate-200 rounded-lg shadow-lg w-40 py-1 text-sm">' +
-        '<button data-action="download" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-slate-50">Download</button>' +
-        '<button data-action="share" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-slate-50">Share / Access</button>' +
-        '<button data-action="delete" data-id="' + f.fileId + '" class="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600">Delete</button>' +
+      '<div data-menu-for="' + f.fileId + '" class="hidden absolute right-0 top-8 z-20 bg-white border border-slate-200 rounded-lg shadow-lg w-48 py-1 text-sm">' +
+        items +
       '</div>' +
     '</div>';
   }
@@ -1310,12 +1342,43 @@
         if (f) downloadFileById(f.fileId, f.fileName);
       });
     });
+    document.querySelectorAll('[data-action="rename"]').forEach(function (btn) {
+      btn.addEventListener('click', function () { handleRename(btn.getAttribute('data-id')); });
+    });
     document.querySelectorAll('[data-action="share"]').forEach(function (btn) {
       btn.addEventListener('click', function () { openShareModal(btn.getAttribute('data-id')); });
     });
     document.querySelectorAll('[data-action="delete"]').forEach(function (btn) {
       btn.addEventListener('click', function () { handleDelete(btn.getAttribute('data-id')); });
     });
+    document.querySelectorAll('[data-action="request-delete"]').forEach(function (btn) {
+      btn.addEventListener('click', function () { handleRequestDelete(btn.getAttribute('data-id')); });
+    });
+  }
+
+  function handleRename(fileId) {
+    var f = findFile(fileId);
+    if (!f) return;
+    var newName = prompt('Rename "' + f.fileName + '" to:', f.fileName);
+    if (!newName || newName === f.fileName) return;
+    callServer('renameFile', fileId, newName, state.authToken).then(function (res) {
+      if (!res.success) return showToast(res.error || 'Rename failed', 'error');
+      f.fileName = res.file.fileName;
+      f.fileType = res.file.fileType;
+      renderSidebar();
+      renderCurrentView();
+      showToast('Renamed', 'success');
+    }).catch(function (err) { showToast(String(err), 'error'); });
+  }
+
+  function handleRequestDelete(fileId) {
+    var f = findFile(fileId);
+    if (!f) return;
+    if (!confirm('Ask an editor/admin to approve deleting "' + f.fileName + '"?')) return;
+    callServer('requestFileDeletion', fileId, state.authToken).then(function (res) {
+      if (!res.success) return showToast(res.error || 'Could not send request', 'error');
+      showToast('Delete request sent', 'success');
+    }).catch(function (err) { showToast(String(err), 'error'); });
   }
 
   document.addEventListener('click', function () {
@@ -1469,10 +1532,11 @@
 
   function showUploadDuplicateWarning(fileName, category, existingFileId) {
     var box = document.getElementById('uploadDuplicateWarning');
-    var isAdmin = state.userRole === 'admin';
+    var existing = findFile(existingFileId);
+    var canReplace = !!(existing && existing.canEdit);
     document.getElementById('uploadDuplicateMessage').textContent = '"' + fileName + '" already exists in ' + category + '.' +
-      (isAdmin ? '' : ' Ask an admin to replace it.');
-    document.getElementById('uploadDuplicateDeleteBtn').classList.toggle('hidden', !isAdmin);
+      (canReplace ? '' : ' Ask whoever can edit it (its uploader, an admin, or someone granted access) to replace it.');
+    document.getElementById('uploadDuplicateDeleteBtn').classList.toggle('hidden', !canReplace);
     box.setAttribute('data-existing-file-id', existingFileId);
     box.classList.remove('hidden');
   }
@@ -1561,7 +1625,6 @@
       resetUploadModal();
       closeModal('uploadModal');
       showToast('File uploaded successfully', 'success');
-      (res.warnings || []).forEach(function (w) { showToast(w, 'error'); });
     }).catch(function (err) {
       document.getElementById('uploadProgress').classList.add('hidden');
       document.getElementById('submitUploadBtn').disabled = false;
@@ -1636,6 +1699,7 @@
     document.getElementById('shareFileName').textContent = f.fileName;
     document.getElementById('shareViewers').value = f.viewers || '';
     document.getElementById('shareEditors').value = f.editors || '';
+    document.getElementById('shareDownloaders').value = f.downloaders || '';
     openModal('shareModal');
   }
 
@@ -1644,13 +1708,13 @@
       if (!activeShareFileId) return;
       var viewers = splitEmails(document.getElementById('shareViewers').value);
       var editors = splitEmails(document.getElementById('shareEditors').value);
-      callServer('updateFilePermissions', activeShareFileId, viewers, editors, state.authToken).then(function (res) {
+      var downloaders = splitEmails(document.getElementById('shareDownloaders').value);
+      callServer('updateFilePermissions', activeShareFileId, viewers, editors, downloaders, state.authToken).then(function (res) {
         if (!res.success) return showToast(res.error || 'Failed to update access', 'error');
         var f = findFile(activeShareFileId);
-        if (f) { f.viewers = viewers.join(', '); f.editors = editors.join(', '); }
+        if (f) { f.viewers = viewers.join(', '); f.editors = editors.join(', '); f.downloaders = downloaders.join(', '); }
         closeModal('shareModal');
         showToast('Access updated', 'success');
-        (res.warnings || []).forEach(function (w) { showToast(w, 'error'); });
       }).catch(function (err) { showToast(String(err), 'error'); });
     });
   }
@@ -1680,7 +1744,9 @@
     document.getElementById('accessFoldersPane').classList.toggle('hidden', tab !== 'folders');
     document.getElementById('accessFilesPane').classList.toggle('hidden', tab !== 'files');
     document.getElementById('accessDoersPane').classList.toggle('hidden', tab !== 'doers');
+    document.getElementById('accessRequestsPane').classList.toggle('hidden', tab !== 'requests');
     document.getElementById('accessLoginsPane').classList.toggle('hidden', tab !== 'logins');
+    if (tab === 'requests') loadDeleteRequests();
     if (tab === 'doers') {
       document.getElementById('doerList').innerHTML = '<div class="spinner mx-auto my-6"></div>';
       loadContactsIfNeeded().then(function () { renderDoerListPane(''); });
@@ -1698,21 +1764,93 @@
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Delete Requests pane - a viewer's "please delete my upload" queue,
+  // reviewed by any editor/admin (see requestFileDeletion/
+  // resolveDeleteRequest in Code.gs).
+  // ---------------------------------------------------------------------
+  function loadDeleteRequests() {
+    document.getElementById('deleteRequestList').innerHTML = '<div class="spinner mx-auto my-6"></div>';
+    callServer('listDeleteRequests', state.authToken).then(function (res) {
+      if (!res.success) {
+        document.getElementById('deleteRequestList').innerHTML = previewError(res.error);
+        return;
+      }
+      state.deleteRequests = res.requests || [];
+      renderDeleteRequestList();
+      updateRequestsBadge(state.deleteRequests.length);
+    }).catch(function (err) {
+      document.getElementById('deleteRequestList').innerHTML = previewError(String(err));
+    });
+  }
+
+  function updateRequestsBadge(count) {
+    var badge = document.getElementById('requestsTabBadge');
+    badge.textContent = count;
+    badge.classList.toggle('hidden', !count);
+  }
+
+  /** Lightweight version of loadDeleteRequests for the user menu - just refreshes the badge count, doesn't touch the (closed) modal's list. */
+  function refreshDeleteRequestBadge() {
+    callServer('listDeleteRequests', state.authToken).then(function (res) {
+      if (res.success) updateRequestsBadge((res.requests || []).length);
+    }).catch(function () {});
+  }
+
+  function renderDeleteRequestList() {
+    var container = document.getElementById('deleteRequestList');
+    if (!state.deleteRequests.length) {
+      container.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">No pending delete requests.</p>';
+      return;
+    }
+    container.innerHTML = state.deleteRequests.map(function (r) {
+      return '<div class="flex items-center gap-3 px-4 py-2.5">' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-medium text-slate-800 truncate">' + escapeHtml(r.fileName) + '</p>' +
+          '<p class="text-xs text-slate-400 truncate">Requested by ' + escapeHtml(r.requestedByName) + ' · ' + formatDate(r.requestedAt) + '</p>' +
+        '</div>' +
+        '<button data-approve-request="' + escapeHtml(r.fileId) + '" class="shrink-0 text-xs font-medium text-brand-600 hover:underline">Approve</button>' +
+        '<button data-reject-request="' + escapeHtml(r.fileId) + '" class="shrink-0 text-xs font-medium text-red-500 hover:underline">Reject</button>' +
+      '</div>';
+    }).join('');
+
+    container.querySelectorAll('[data-approve-request]').forEach(function (btn) {
+      btn.addEventListener('click', function () { resolveDeleteRequest(btn.getAttribute('data-approve-request'), true); });
+    });
+    container.querySelectorAll('[data-reject-request]').forEach(function (btn) {
+      btn.addEventListener('click', function () { resolveDeleteRequest(btn.getAttribute('data-reject-request'), false); });
+    });
+  }
+
+  function resolveDeleteRequest(fileId, approve) {
+    if (!confirm(approve ? 'Approve - this deletes the file right away.' : 'Reject this request?')) return;
+    callServer('resolveDeleteRequest', fileId, approve, state.authToken).then(function (res) {
+      if (!res.success) return showToast(res.error || 'Could not resolve request', 'error');
+      state.deleteRequests = state.deleteRequests.filter(function (r) { return r.fileId !== fileId; });
+      if (approve) state.files = state.files.filter(function (f) { return String(f.fileId) !== String(fileId); });
+      renderDeleteRequestList();
+      updateRequestsBadge(state.deleteRequests.length);
+      renderSidebar();
+      renderCurrentView();
+      showToast(approve ? 'File deleted' : 'Request rejected', 'success');
+    }).catch(function (err) { showToast(String(err), 'error'); });
+  }
+
   function renderLoginAccountList(users) {
     var container = document.getElementById('loginAccountList');
     if (!users.length) {
       container.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">No login accounts yet.</p>';
       return;
     }
-    var ROLE_LABELS = { admin: 'ADMIN', uploader: 'UPLOADER', viewer: 'VIEWER' };
+    var ROLE_LABELS = { admin: 'ADMIN', editor: 'EDITOR', viewer: 'VIEWER' };
     var ROLE_BADGE_CLASS = {
       admin: 'text-brand-600 bg-brand-50',
-      uploader: 'text-amber-600 bg-amber-50',
+      editor: 'text-amber-600 bg-amber-50',
       viewer: 'text-slate-500 bg-slate-100'
     };
 
     container.innerHTML = users.map(function (u) {
-      var role = u.role || 'uploader';
+      var role = u.role || 'viewer';
       return '<div class="flex items-center gap-3 px-4 py-2.5">' +
         '<span class="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-semibold shrink-0">' +
           escapeHtml((u.name || u.username).charAt(0).toUpperCase()) +
@@ -1725,7 +1863,7 @@
         '</div>' +
         '<select data-role-select="' + escapeHtml(u.username) + '" class="shrink-0 text-xs border border-slate-200 rounded-lg px-1.5 py-1 outline-none focus:border-brand-500 bg-white">' +
           '<option value="viewer"' + (role === 'viewer' ? ' selected' : '') + '>Viewer</option>' +
-          '<option value="uploader"' + (role === 'uploader' ? ' selected' : '') + '>Uploader</option>' +
+          '<option value="editor"' + (role === 'editor' ? ' selected' : '') + '>Editor</option>' +
           '<option value="admin"' + (role === 'admin' ? ' selected' : '') + '>Admin</option>' +
         '</select>' +
         '<button data-login-remove="' + escapeHtml(u.username) + '" class="shrink-0 text-xs font-medium text-red-500 hover:underline">Remove</button>' +
@@ -1777,7 +1915,7 @@
         document.getElementById('loginNewUsername').value = '';
         document.getElementById('loginNewEmail').value = '';
         document.getElementById('loginNewPassword').value = '';
-        document.getElementById('loginNewRole').value = 'uploader';
+        document.getElementById('loginNewRole').value = 'viewer';
         renderLoginAccountList(res.users || []);
         showToast('Login account created', 'success');
       }).catch(function (err) { showToast(String(err), 'error'); });
@@ -1885,23 +2023,29 @@
   function openAccessCenter(tab, focusCategory) {
     openModal('accessModal');
     var isAdmin = state.userRole === 'admin';
+    var isEditorOrAdmin = isAdmin || state.userRole === 'editor';
     document.getElementById('loginsTabBtn').classList.toggle('hidden', !isAdmin);
     document.getElementById('foldersTabBtn').classList.toggle('hidden', !isAdmin);
     document.getElementById('filesTabBtn').classList.toggle('hidden', !isAdmin);
-    setAccessTab(isAdmin ? (tab || 'folders') : 'doers');
-    document.getElementById('accessFolderList').innerHTML = '<div class="spinner mx-auto"></div>';
+    document.getElementById('requestsTabBtn').classList.toggle('hidden', !isEditorOrAdmin);
+    setAccessTab(isAdmin ? (tab || 'folders') : (isEditorOrAdmin ? 'requests' : 'doers'));
 
-    callServer('getCategoryAccessOverview').then(function (res) {
-      if (!res.success) {
-        document.getElementById('accessFolderList').innerHTML = previewError(res.error);
-        return;
-      }
-      state.categoryAccess = res.categories;
-      renderFolderAccessList(focusCategory);
-      renderFileAccessList('');
-    }).catch(function (err) {
-      document.getElementById('accessFolderList').innerHTML = previewError(String(err));
-    });
+    if (isAdmin) {
+      document.getElementById('accessFolderList').innerHTML = '<div class="spinner mx-auto"></div>';
+      callServer('getCategoryAccessOverview', state.authToken).then(function (res) {
+        if (!res.success) {
+          document.getElementById('accessFolderList').innerHTML = previewError(res.error);
+          return;
+        }
+        state.categoryAccess = res.categories;
+        renderFolderAccessList(focusCategory);
+        renderFileAccessList('');
+      }).catch(function (err) {
+        document.getElementById('accessFolderList').innerHTML = previewError(String(err));
+      });
+    }
+
+    if (isEditorOrAdmin) loadDeleteRequests();
   }
 
   function renderFolderAccessList(focusCategory) {
@@ -1920,17 +2064,22 @@
           '</span>' +
         '</button>' +
         '<div data-folder-editor="' + escapeHtml(cat.name) + '" class="hidden px-4 pb-4 pt-1 space-y-3 bg-slate-50 border-t border-slate-100">' +
+          '<p class="text-xs text-slate-400">Default override for every file in this folder (RUDMS usernames/emails). Leave a field blank to leave that override off.</p>' +
           '<div>' +
-            '<label class="text-xs font-medium text-slate-500 mb-1 block">Viewers (comma-separated emails)</label>' +
+            '<label class="text-xs font-medium text-slate-500 mb-1 block">Restrict viewing to (blank = everyone)</label>' +
             '<input data-folder-viewers="' + escapeHtml(cat.name) + '" type="text" value="' + escapeHtml(cat.viewers || '') + '" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">' +
           '</div>' +
           '<div>' +
-            '<label class="text-xs font-medium text-slate-500 mb-1 block">Editors (comma-separated emails)</label>' +
+            '<label class="text-xs font-medium text-slate-500 mb-1 block">Can edit / rename / delete</label>' +
             '<input data-folder-editors="' + escapeHtml(cat.name) + '" type="text" value="' + escapeHtml(cat.editors || '') + '" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">' +
+          '</div>' +
+          '<div>' +
+            '<label class="text-xs font-medium text-slate-500 mb-1 block">Can download</label>' +
+            '<input data-folder-downloaders="' + escapeHtml(cat.name) + '" type="text" value="' + escapeHtml(cat.downloaders || '') + '" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-brand-500 bg-white">' +
           '</div>' +
           '<label class="flex items-center gap-2 text-xs text-slate-500">' +
             '<input data-folder-cascade="' + escapeHtml(cat.name) + '" type="checkbox" checked class="rounded border-slate-300">' +
-            'Also stamp these emails on the ' + count + ' existing file(s) in this folder' +
+            'Also stamp these on the ' + count + ' existing file(s) in this folder' +
           '</label>' +
           '<div class="flex justify-end">' +
             '<button data-save-folder="' + escapeHtml(cat.name) + '" class="px-3 py-1.5 text-sm rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Save Folder Access</button>' +
@@ -1960,12 +2109,13 @@
   function saveFolderAccess(categoryName) {
     var viewers = splitEmails(document.querySelector('[data-folder-viewers="' + cssEscape(categoryName) + '"]').value);
     var editors = splitEmails(document.querySelector('[data-folder-editors="' + cssEscape(categoryName) + '"]').value);
+    var downloaders = splitEmails(document.querySelector('[data-folder-downloaders="' + cssEscape(categoryName) + '"]').value);
     var cascade = document.querySelector('[data-folder-cascade="' + cssEscape(categoryName) + '"]').checked;
     var btn = document.querySelector('[data-save-folder="' + cssEscape(categoryName) + '"]');
     btn.disabled = true;
     btn.textContent = 'Saving…';
 
-    callServer('updateCategoryAccess', categoryName, viewers, editors, cascade, state.authToken).then(function (res) {
+    callServer('updateCategoryAccess', categoryName, viewers, editors, downloaders, cascade, state.authToken).then(function (res) {
       btn.disabled = false;
       btn.textContent = 'Save Folder Access';
       if (!res.success) return showToast(res.error || 'Failed to update folder access', 'error');
@@ -1975,13 +2125,13 @@
           if (f.category === categoryName) {
             f.viewers = splitEmails(f.viewers).concat(viewers).filter(function (v, i, arr) { return arr.indexOf(v) === i; }).join(', ');
             f.editors = splitEmails(f.editors).concat(editors).filter(function (v, i, arr) { return arr.indexOf(v) === i; }).join(', ');
+            f.downloaders = splitEmails(f.downloaders).concat(downloaders).filter(function (v, i, arr) { return arr.indexOf(v) === i; }).join(', ');
           }
         });
         renderCurrentView();
       }
 
       showToast('Access updated for "' + categoryName + '"', 'success');
-      (res.warnings || []).forEach(function (w) { showToast(w, 'error'); });
     }).catch(function (err) {
       btn.disabled = false;
       btn.textContent = 'Save Folder Access';
@@ -2005,8 +2155,9 @@
         '<div class="min-w-0 flex-1">' +
           '<p class="text-sm font-medium text-slate-800 truncate">' + escapeHtml(f.fileName) + '</p>' +
           '<p class="text-xs text-slate-400 truncate">' + escapeHtml(f.category) + ' · ' +
-            (f.viewers ? escapeHtml(f.viewers) + ' (view)' : 'No viewers') +
+            (f.viewers ? escapeHtml(f.viewers) + ' (restricted view)' : 'Everyone can view') +
             (f.editors ? ' · ' + escapeHtml(f.editors) + ' (edit)' : '') +
+            (f.downloaders ? ' · ' + escapeHtml(f.downloaders) + ' (download)' : '') +
           '</p>' +
         '</div>' +
         '<button data-edit-file-access="' + f.fileId + '" class="text-xs font-medium text-brand-600 hover:underline shrink-0">Edit</button>' +
@@ -2214,7 +2365,7 @@
 
     document.getElementById('previewFileName').textContent = f.fileName;
     var downloadBtn = document.getElementById('previewDownloadBtn');
-    downloadBtn.classList.toggle('hidden', state.userRole !== 'admin');
+    downloadBtn.classList.toggle('hidden', !f.canDownload);
     downloadBtn.onclick = function () { downloadFileById(f.fileId, f.fileName); };
     var body = document.getElementById('previewBody');
     body.innerHTML = '<div class="spinner"></div>';
@@ -2327,7 +2478,7 @@
       return;
     }
 
-    var canDownload = state.userRole === 'admin';
+    var canDownload = !!f.canDownload;
     if (CAD_UNSUPPORTED_EXT.indexOf(ext) !== -1) {
       body.innerHTML = '<div class="text-center text-slate-500 max-w-sm px-6">' +
         fileIcon(ext, 'w-12 h-12 mx-auto mb-3') +

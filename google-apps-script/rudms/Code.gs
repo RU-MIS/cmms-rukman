@@ -20,6 +20,7 @@ var USERS_FILE_NAME = 'RUDMS_Users.json';
 var SESSIONS_FILE_NAME = 'RUDMS_Sessions.json';
 var NOTIFY_EMAILS_FILE_NAME = 'RUDMS_NotifyEmails.json';
 var OTP_FILE_NAME = 'RUDMS_PasswordResetOtps.json';
+var DELETE_REQUESTS_FILE_NAME = 'RUDMS_DeleteRequests.json';
 var SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 var OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 var MAX_OTP_ATTEMPTS = 5; // a 6-digit code is only ~1M possibilities - cap guesses before it's invalidated
@@ -148,11 +149,31 @@ function flattenFolderTree(nodes, out) {
 // Per-file metadata, stored as JSON in the Drive file's own description
 // ---------------------------------------------------------------------------
 
-function buildFileMeta(viewerEmails, editorEmails, uploadedBy) {
+/**
+ * viewers/editors/downloaders are RUDMS login identities (username or the
+ * account's on-file email - see matchesGrantList), NOT Google Drive
+ * sharing - this app does not use Drive-level ACLs at all; every access
+ * check is enforced in RUDMS's own server code against these lists plus
+ * the account's role (see normalizeRole/canXFileMeta below).
+ *   - editors: admin-granted "can edit/rename/delete this specific file"
+ *     list, on top of whoever uploaded it (who already gets that for free
+ *     if their role is 'editor' or above - see canEditFileMeta).
+ *   - downloaders: admin-granted "can download this specific file" list -
+ *     download is otherwise admin-only, regardless of role.
+ *   - viewers: OPTIONAL view restriction. Empty (the default) means every
+ *     signed-in account can view/preview the file, same as always. Only
+ *     when an admin actually sets this list does viewing become
+ *     restricted to: the uploader, this list, and the editors/downloaders
+ *     lists (all of whom can obviously already see a file they can
+ *     edit/download).
+ */
+function buildFileMeta(viewerEmails, editorEmails, downloaderEmails, uploadedBy, uploadedByUsername) {
   return JSON.stringify({
     viewers: viewerEmails.join(', '),
     editors: editorEmails.join(', '),
-    uploadedBy: uploadedBy
+    downloaders: downloaderEmails.join(', '),
+    uploadedBy: uploadedBy,
+    uploadedByUsername: uploadedByUsername || ''
   });
 }
 
@@ -162,17 +183,72 @@ function parseFileMeta(description) {
     return {
       viewers: meta.viewers || '',
       editors: meta.editors || '',
-      uploadedBy: meta.uploadedBy || ''
+      downloaders: meta.downloaders || '',
+      uploadedBy: meta.uploadedBy || '',
+      uploadedByUsername: meta.uploadedByUsername || ''
     };
   } catch (err) {
-    return { viewers: '', editors: '', uploadedBy: '' };
+    return { viewers: '', editors: '', downloaders: '', uploadedBy: '', uploadedByUsername: '' };
   }
 }
 
-function fileToRecord(file, categoryName) {
+/** True if `user` ({username, email}) appears (by username or email) in a comma-separated grant list string. */
+function matchesGrantList(grantListStr, user) {
+  var list = String(grantListStr || '').split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+  if (!list.length) return false;
+  var uname = (user.username || '').toLowerCase();
+  var uemail = (user.email || '').toLowerCase();
+  return list.indexOf(uname) !== -1 || (!!uemail && list.indexOf(uemail) !== -1);
+}
+
+function isFileOwner(meta, user) {
+  return !!meta.uploadedByUsername && meta.uploadedByUsername === (user.username || '').toLowerCase();
+}
+
+/** Can this account even see/preview the file? Open to everyone unless an admin set a restriction (meta.viewers non-empty). */
+function canViewFileMeta(meta, user, role) {
+  if (role === 'admin') return true;
+  if (!meta.viewers) return true;
+  return isFileOwner(meta, user) || matchesGrantList(meta.viewers, user) || matchesGrantList(meta.editors, user) || matchesGrantList(meta.downloaders, user);
+}
+
+/** Can this account edit/delete the file directly, no approval needed? Admin always; 'editor' role on their own upload or an admin-granted file; 'viewer' never (see canRequestDeleteMeta instead). */
+function canEditFileMeta(meta, user, role) {
+  if (role === 'admin') return true;
+  if (role === 'editor') return isFileOwner(meta, user) || matchesGrantList(meta.editors, user);
+  return false;
+}
+
+/** Renaming is the one action a 'viewer' gets on their own upload without approval - everything else routes through canEditFileMeta. */
+function canRenameFileMeta(meta, user, role) {
+  if (canEditFileMeta(meta, user, role)) return true;
+  return role === 'viewer' && isFileOwner(meta, user);
+}
+
+/** Download stays admin-only by default; an admin can grant it per-file to anyone regardless of role. */
+function canDownloadFileMeta(meta, user, role) {
+  if (role === 'admin') return true;
+  return matchesGrantList(meta.downloaders, user);
+}
+
+/** A 'viewer' can't delete directly, but can ask an editor/admin to - only for their own upload, and only when they don't already have a direct grant (which would mean deleteFile just works). */
+function canRequestDeleteMeta(meta, user, role) {
+  return role === 'viewer' && isFileOwner(meta, user);
+}
+
+function fileCapabilities(meta, user, role) {
+  return {
+    canEdit: canEditFileMeta(meta, user, role),
+    canRename: canRenameFileMeta(meta, user, role),
+    canDownload: canDownloadFileMeta(meta, user, role),
+    canRequestDelete: canRequestDeleteMeta(meta, user, role)
+  };
+}
+
+function fileToRecord(file, categoryName, user, role) {
   var meta = parseFileMeta(file.getDescription());
   var name = file.getName();
-  return {
+  var record = {
     fileId: file.getId(),
     fileName: name,
     category: categoryName,
@@ -180,10 +256,20 @@ function fileToRecord(file, categoryName) {
     fileType: (name.split('.').pop() || '').toLowerCase(),
     viewers: meta.viewers,
     editors: meta.editors,
+    downloaders: meta.downloaders,
     uploadDate: file.getDateCreated().toISOString(),
     uploadedBy: meta.uploadedBy,
+    uploadedByUsername: meta.uploadedByUsername,
     size: file.getSize()
   };
+  if (user) {
+    var caps = fileCapabilities(meta, user, role);
+    record.canEdit = caps.canEdit;
+    record.canRename = caps.canRename;
+    record.canDownload = caps.canDownload;
+    record.canRequestDelete = caps.canRequestDelete;
+  }
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +299,7 @@ function getBootstrapInfo(externalToken) {
       return {
         success: true,
         currentUser: session.name || session.username,
+        currentUsername: session.username,
         role: user ? normalizeRole(user.role) : 'viewer',
         authMode: 'loggedin',
         rootFolderId: rootFolder.getId()
@@ -257,17 +344,27 @@ function ensureDefaultCategories() {
  * rootFolder's own getFiles() - RUDMS's internal JSON files (contacts,
  * login accounts, sessions, notify list) live directly in rootFolder
  * itself, and must never show up as if they were a user's document.
+ *
+ * Requires a valid session (requireLogin) and filters out any file the
+ * caller isn't allowed to even see (canViewFileMeta) - the normal case is
+ * everyone sees everything, since per-file view restriction is opt-in by
+ * an admin (see buildFileMeta's comment).
  */
-function getAllFiles() {
+function getAllFiles(callerToken) {
   try {
     var rootFolder = getRootFolder();
+    var caller = requireUserAndRole(rootFolder, callerToken);
     var files = [];
 
     function walkFolder(folder, path) {
       var fileIter = folder.getFiles();
       while (fileIter.hasNext()) {
         var file = fileIter.next();
-        if (!file.isTrashed()) files.push(fileToRecord(file, path));
+        if (file.isTrashed()) continue;
+        var meta = parseFileMeta(file.getDescription());
+        if (canViewFileMeta(meta, caller, caller.role)) {
+          files.push(fileToRecord(file, path, caller, caller.role));
+        }
       }
       var folderIter = folder.getFolders();
       while (folderIter.hasNext()) {
@@ -309,7 +406,7 @@ function getFolderTree() {
 function createFolder(path, callerToken) {
   try {
     var rootFolder = getRootFolder();
-    requireUploadAccess(rootFolder, callerToken);
+    requireLogin(rootFolder, callerToken); // every role can create folders, same as upload
     getOrCreateFolderByPath(rootFolder, path);
     return { success: true, tree: listFolderTree(rootFolder, '') };
   } catch (err) {
@@ -324,8 +421,9 @@ function createFolder(path, callerToken) {
 /**
  * payload: {
  *   fileName, mimeType, base64Data, category,
- *   viewerEmails: string[], editorEmails: string[], externalToken
+ *   viewerEmails: string[], editorEmails: string[], downloaderEmails: string[], externalToken
  * }
+ * Any signed-in role (viewer/editor/admin) can upload - see normalizeRole.
  */
 function uploadFile(payload) {
   try {
@@ -334,7 +432,7 @@ function uploadFile(payload) {
     }
 
     var rootFolder = getRootFolder();
-    requireUploadAccess(rootFolder, payload.externalToken);
+    requireLogin(rootFolder, payload.externalToken);
     var resolved = getOrCreateFolderByPath(rootFolder, payload.category || 'Uncategorized');
     var categoryFolder = resolved.folder;
 
@@ -351,20 +449,22 @@ function uploadFile(payload) {
     var bytes = Utilities.base64Decode(payload.base64Data);
     var blob = Utilities.newBlob(bytes, payload.mimeType || 'application/octet-stream', payload.fileName);
     var file = categoryFolder.createFile(blob);
-    // Files created via DriveApp are already private to the owner by
-    // default - no separate setSharing() call needed here.
+    // Files created via DriveApp are already private to the owner (the
+    // deploying/admin Google account) by default - that's also exactly
+    // who RUDMS treats as the file's real Drive owner regardless of which
+    // RUDMS login uploaded it (see normalizeRole's comment on 'admin').
 
-    var viewerEmails = uniqueEmails(payload.viewerEmails);
-    var editorEmails = uniqueEmails(payload.editorEmails);
-    var warnings = applyPermissions(file, viewerEmails, editorEmails);
+    var viewerEmails = uniqueGrantIdentities(payload.viewerEmails);
+    var editorEmails = uniqueGrantIdentities(payload.editorEmails);
+    var downloaderEmails = uniqueGrantIdentities(payload.downloaderEmails);
 
-    var uploadedBy = resolveCurrentUser(rootFolder, payload.externalToken);
-    file.setDescription(buildFileMeta(viewerEmails, editorEmails, uploadedBy));
+    var uploader = resolveCurrentUserFull(rootFolder, payload.externalToken);
+    file.setDescription(buildFileMeta(viewerEmails, editorEmails, downloaderEmails, uploader.name, uploader.username));
 
+    var caller = requireUserAndRole(rootFolder, payload.externalToken);
     return {
       success: true,
-      warnings: warnings,
-      file: fileToRecord(file, resolved.path)
+      file: fileToRecord(file, resolved.path, caller, caller.role)
     };
   } catch (err) {
     return { success: false, error: err.message };
@@ -385,51 +485,244 @@ function uniqueEmails(list) {
   return out;
 }
 
-function applyPermissions(file, viewerEmails, editorEmails) {
-  var warnings = [];
-  editorEmails.forEach(function (email) {
-    try { file.addEditor(email); } catch (e) { warnings.push('Could not add editor ' + email + ': ' + e.message); }
+/**
+ * Same dedupe-and-clean idea as uniqueEmails(), but for a per-file/folder
+ * grant list (viewers/editors/downloaders - see buildFileMeta's comment) -
+ * those identify a RUDMS login, not necessarily an email, so this accepts
+ * either a RUDMS username (same shape createExternalUser requires) or an
+ * email address, and drops anything that's neither.
+ */
+function uniqueGrantIdentities(list) {
+  if (!list) return [];
+  var seen = {};
+  var out = [];
+  list.forEach(function (raw) {
+    var identity = String(raw).trim().toLowerCase();
+    var looksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identity) || /^[a-z0-9._-]{3,40}$/.test(identity);
+    if (identity && looksValid && !seen[identity]) {
+      seen[identity] = true;
+      out.push(identity);
+    }
   });
-  viewerEmails.forEach(function (email) {
-    try { file.addViewer(email); } catch (e) { warnings.push('Could not add viewer ' + email + ': ' + e.message); }
-  });
-  return warnings;
+  return out;
 }
 
-function updateFilePermissions(fileId, viewerEmails, editorEmails, callerToken) {
+/** Admin-only: sets the per-file override lists (editors/downloaders/view-restriction) - see buildFileMeta's comment for what each means. */
+function updateFilePermissions(fileId, viewerEmails, editorEmails, downloaderEmails, callerToken) {
   try {
     var rootFolder = getRootFolder();
     requireAdmin(rootFolder, callerToken);
     var file = DriveApp.getFileById(fileId);
 
-    file.getViewers().forEach(function (u) { try { file.removeViewer(u); } catch (e) {} });
-    file.getEditors().forEach(function (u) {
-      if (u.getEmail() !== Session.getActiveUser().getEmail()) {
-        try { file.removeEditor(u); } catch (e) {}
-      }
-    });
-
-    var newViewers = uniqueEmails(viewerEmails);
-    var newEditors = uniqueEmails(editorEmails);
-    var warnings = applyPermissions(file, newViewers, newEditors);
+    var newViewers = uniqueGrantIdentities(viewerEmails);
+    var newEditors = uniqueGrantIdentities(editorEmails);
+    var newDownloaders = uniqueGrantIdentities(downloaderEmails);
 
     var existingMeta = parseFileMeta(file.getDescription());
-    file.setDescription(buildFileMeta(newViewers, newEditors, existingMeta.uploadedBy));
+    file.setDescription(buildFileMeta(newViewers, newEditors, newDownloaders, existingMeta.uploadedBy, existingMeta.uploadedByUsername));
 
-    return { success: true, warnings: warnings };
+    return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
   }
 }
 
+/**
+ * Admin always allowed. 'editor' allowed, no approval, only on their own
+ * upload or a file an admin granted them (canEditFileMeta). 'viewer' is
+ * never allowed here even on their own upload - they must go through
+ * requestFileDeletion()/resolveDeleteRequest() instead.
+ */
 function deleteFile(fileId, callerToken) {
   try {
     var rootFolder = getRootFolder();
-    requireAdmin(rootFolder, callerToken);
-    DriveApp.getFileById(fileId).setTrashed(true);
+    var caller = requireUserAndRole(rootFolder, callerToken);
+    var file = DriveApp.getFileById(fileId);
+    var meta = parseFileMeta(file.getDescription());
+
+    if (!canEditFileMeta(meta, caller, caller.role)) {
+      throw new Error(caller.role === 'viewer'
+        ? 'Viewers can\'t delete directly - use "Request Delete Approval" instead.'
+        : 'You can only delete files you uploaded, or ones an admin specifically granted you.');
+    }
+
+    file.setTrashed(true);
+    clearDeleteRequest(rootFolder, fileId);
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Renaming is the one action a 'viewer' gets on their own upload without
+ * approval (canRenameFileMeta) - everyone else with edit rights can
+ * rename too. Blocks an exact-name clash with another file already in the
+ * same folder (same rule uploadFile uses for new uploads).
+ */
+function renameFile(fileId, newName, callerToken) {
+  try {
+    var rootFolder = getRootFolder();
+    var caller = requireUserAndRole(rootFolder, callerToken);
+    var file = DriveApp.getFileById(fileId);
+    var meta = parseFileMeta(file.getDescription());
+
+    if (!canRenameFileMeta(meta, caller, caller.role)) {
+      throw new Error('You don\'t have permission to rename this file.');
+    }
+
+    var cleanName = String(newName || '').trim();
+    if (!cleanName) throw new Error('File name cannot be empty.');
+
+    var parents = file.getParents();
+    if (parents.hasNext()) {
+      var parent = parents.next();
+      var clash = findFileInFolderByName(parent, cleanName);
+      if (clash && clash.getId() !== file.getId()) {
+        throw new Error('"' + cleanName + '" already exists in this folder.');
+      }
+    }
+
+    file.setName(cleanName);
+    return { success: true, file: fileToRecord(file, '', caller, caller.role) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Delete requests - a 'viewer' can't delete their own upload directly, only
+// ask an editor/admin to approve it (see normalizeRole's comment on
+// 'viewer'/'editor'). Stored as one JSON object keyed by fileId, so a
+// second request for the same file just refreshes the first rather than
+// stacking duplicates.
+// ---------------------------------------------------------------------------
+
+function clearDeleteRequest(rootFolder, fileId) {
+  var requests = readJsonFile(rootFolder, DELETE_REQUESTS_FILE_NAME, {});
+  if (requests[fileId]) {
+    delete requests[fileId];
+    writeJsonFile(rootFolder, DELETE_REQUESTS_FILE_NAME, requests);
+  }
+}
+
+/** viewer-only, and only for a file they themselves uploaded - see canRequestDeleteMeta. */
+function requestFileDeletion(fileId, callerToken) {
+  try {
+    var rootFolder = getRootFolder();
+    var caller = requireUserAndRole(rootFolder, callerToken);
+    var file = DriveApp.getFileById(fileId);
+    var meta = parseFileMeta(file.getDescription());
+
+    if (!canRequestDeleteMeta(meta, caller, caller.role)) {
+      throw new Error('You can only request deletion of files you uploaded yourself.');
+    }
+
+    var requests = readJsonFile(rootFolder, DELETE_REQUESTS_FILE_NAME, {});
+    requests[fileId] = {
+      fileId: fileId,
+      fileName: file.getName(),
+      requestedByUsername: caller.username,
+      requestedByName: resolveCurrentUserFull(rootFolder, callerToken).name,
+      requestedAt: new Date().toISOString()
+    };
+    writeJsonFile(rootFolder, DELETE_REQUESTS_FILE_NAME, requests);
+
+    notifyDeleteRequest(rootFolder, requests[fileId]);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/** Best-effort: emails every current editor/admin with an email on file. A notification failure must never block the request itself. */
+function notifyDeleteRequest(rootFolder, request) {
+  try {
+    var reviewers = readUsers(rootFolder).filter(function (u) {
+      var role = normalizeRole(u.role);
+      return role === 'admin' || role === 'editor';
+    });
+    var emails = reviewers.map(function (u) { return resolveResetEmail(u); }).filter(Boolean);
+    if (!emails.length) return;
+
+    MailApp.sendEmail({
+      to: emails.join(','),
+      subject: 'RUDMS: delete approval requested - ' + request.fileName,
+      body: request.requestedByName + ' wants to delete "' + request.fileName + '" (which they uploaded) and is asking ' +
+        'for an editor/admin\'s approval.\n\n' +
+        'Review it from Manage Access -> Delete Requests in RUDMS.'
+    });
+  } catch (err) {
+    // Swallow - see comment above.
+  }
+}
+
+/** editor/admin only - the review queue is a role-wide trust, not tied to any specific file's own edit grants. */
+function listDeleteRequests(callerToken) {
+  try {
+    var rootFolder = getRootFolder();
+    requireEditorOrAdmin(rootFolder, callerToken);
+    var requests = readJsonFile(rootFolder, DELETE_REQUESTS_FILE_NAME, {});
+
+    // Drop any request whose file no longer exists (already deleted/moved some other way).
+    var list = [];
+    var changed = false;
+    Object.keys(requests).forEach(function (fileId) {
+      try {
+        var file = DriveApp.getFileById(fileId);
+        if (file.isTrashed()) throw new Error('trashed');
+        list.push(requests[fileId]);
+      } catch (e) {
+        delete requests[fileId];
+        changed = true;
+      }
+    });
+    if (changed) writeJsonFile(rootFolder, DELETE_REQUESTS_FILE_NAME, requests);
+
+    list.sort(function (a, b) { return new Date(a.requestedAt) - new Date(b.requestedAt); });
+    return { success: true, requests: list };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/** editor/admin only. approve=true deletes the file right away; approve=false just dismisses the request. Either way, best-effort notifies whoever asked. */
+function resolveDeleteRequest(fileId, approve, callerToken) {
+  try {
+    var rootFolder = getRootFolder();
+    requireEditorOrAdmin(rootFolder, callerToken);
+
+    var requests = readJsonFile(rootFolder, DELETE_REQUESTS_FILE_NAME, {});
+    var request = requests[fileId];
+    if (!request) throw new Error('That request no longer exists.');
+
+    if (approve) {
+      DriveApp.getFileById(fileId).setTrashed(true);
+    }
+    delete requests[fileId];
+    writeJsonFile(rootFolder, DELETE_REQUESTS_FILE_NAME, requests);
+
+    notifyDeleteRequestResolved(rootFolder, request, approve);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/** Best-effort: lets the requester know their delete request was approved/rejected. A notification failure must never block the resolution itself. */
+function notifyDeleteRequestResolved(rootFolder, request, approved) {
+  try {
+    var user = findUserByUsername(readUsers(rootFolder), request.requestedByUsername);
+    var targetEmail = user ? resolveResetEmail(user) : null;
+    if (!targetEmail) return;
+
+    MailApp.sendEmail({
+      to: targetEmail,
+      subject: 'RUDMS: your delete request was ' + (approved ? 'approved' : 'rejected'),
+      body: 'Your request to delete "' + request.fileName + '" was ' + (approved ? 'approved - the file has been deleted.' : 'rejected - the file is still there.')
+    });
+  } catch (err) {
+    // Swallow - see comment above.
   }
 }
 
@@ -437,29 +730,21 @@ function deleteFile(fileId, callerToken) {
 // Folder-level (category) access management
 // ---------------------------------------------------------------------------
 
-function mapUsersToEmails(users) {
-  return users.map(function (u) { return u.getEmail(); }).filter(Boolean);
-}
-
 /**
- * Returns current Drive-level sharing for every folder at any depth (each
- * identified by its full '/'-separated path), so the "Manage Access"
- * panel can show who already has folder-wide access. Sharing a folder in
- * Drive automatically grants the same access to every file inside it -
- * and, since Drive permissions are inherited, every folder nested under
- * it too - now and anything uploaded/created later.
+ * Admin-only. Returns each folder's own default grant lists (every folder
+ * at any depth, identified by its full '/'-separated path), read the same
+ * way a file's are - JSON in the folder's own Drive description - so the
+ * "Manage Access -> By Folder" panel can show what's already set.
  */
-function getCategoryAccessOverview() {
+function getCategoryAccessOverview(callerToken) {
   try {
     var rootFolder = getRootFolder();
+    requireAdmin(rootFolder, callerToken);
     var paths = flattenFolderTree(listFolderTree(rootFolder, ''), []);
     var result = paths.map(function (path) {
       var folder = getOrCreateFolderByPath(rootFolder, path).folder;
-      return {
-        name: path,
-        viewers: mapUsersToEmails(folder.getViewers()).join(', '),
-        editors: mapUsersToEmails(folder.getEditors()).join(', ')
-      };
+      var meta = parseFileMeta(folder.getDescription());
+      return { name: path, viewers: meta.viewers, editors: meta.editors, downloaders: meta.downloaders };
     });
     return { success: true, categories: result };
   } catch (err) {
@@ -468,46 +753,37 @@ function getCategoryAccessOverview() {
 }
 
 /**
- * Sets the given viewer/editor emails as the target folder's (identified
- * by its full '/'-separated path) Drive sharing list (replacing whatever
- * was there before). When applyToExistingFiles is true, the same emails
- * are also additively stamped onto every file directly inside that
- * folder (union with whatever access that file already had) so each
- * file's own metadata displays accurate access - Drive itself already
- * grants folder viewers/editors access to existing and future files (and
- * nested subfolders) regardless of this flag.
+ * Admin-only. Sets the target folder's (identified by its full
+ * '/'-separated path) own default grant lists, stored as JSON in the
+ * folder's Drive description - same shape as a file's own meta, just
+ * without uploadedBy. When applyToExistingFiles is true, the same lists
+ * are also additively stamped onto every file directly inside that folder
+ * (union with whatever that file already had).
  */
-function updateCategoryAccess(categoryPath, viewerEmails, editorEmails, applyToExistingFiles, callerToken) {
+function updateCategoryAccess(categoryPath, viewerEmails, editorEmails, downloaderEmails, applyToExistingFiles, callerToken) {
   try {
     var rootFolder = getRootFolder();
     requireAdmin(rootFolder, callerToken);
     var folder = getOrCreateFolderByPath(rootFolder, categoryPath).folder;
 
-    folder.getViewers().forEach(function (u) { try { folder.removeViewer(u); } catch (e) {} });
-    folder.getEditors().forEach(function (u) {
-      if (u.getEmail() !== Session.getActiveUser().getEmail()) {
-        try { folder.removeEditor(u); } catch (e) {}
-      }
-    });
-
-    var newViewers = uniqueEmails(viewerEmails);
-    var newEditors = uniqueEmails(editorEmails);
-    var warnings = applyPermissions(folder, newViewers, newEditors);
+    var newViewers = uniqueGrantIdentities(viewerEmails);
+    var newEditors = uniqueGrantIdentities(editorEmails);
+    var newDownloaders = uniqueGrantIdentities(downloaderEmails);
+    folder.setDescription(buildFileMeta(newViewers, newEditors, newDownloaders, '', ''));
 
     if (applyToExistingFiles) {
       var iter = folder.getFiles();
       while (iter.hasNext()) {
         var file = iter.next();
-        warnings = warnings.concat(applyPermissions(file, newViewers, newEditors));
-
         var existingMeta = parseFileMeta(file.getDescription());
-        var mergedViewers = uniqueEmails(existingMeta.viewers.split(',').concat(newViewers));
-        var mergedEditors = uniqueEmails(existingMeta.editors.split(',').concat(newEditors));
-        file.setDescription(buildFileMeta(mergedViewers, mergedEditors, existingMeta.uploadedBy));
+        var mergedViewers = uniqueGrantIdentities(existingMeta.viewers.split(',').concat(newViewers));
+        var mergedEditors = uniqueGrantIdentities(existingMeta.editors.split(',').concat(newEditors));
+        var mergedDownloaders = uniqueGrantIdentities(existingMeta.downloaders.split(',').concat(newDownloaders));
+        file.setDescription(buildFileMeta(mergedViewers, mergedEditors, mergedDownloaders, existingMeta.uploadedBy, existingMeta.uploadedByUsername));
       }
     }
 
-    return { success: true, warnings: warnings };
+    return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -519,27 +795,32 @@ function updateCategoryAccess(categoryPath, viewerEmails, editorEmails, applyToE
 
 /**
  * forDownload=true is the dedicated "Download" action (saves the file to
- * the visitor's device) - admin-only. forDownload=false/omitted is
- * in-browser preview (PDF.js canvas, image tag, etc.) - any signed-in
- * account may do that, viewer and uploader included, since "view" is
- * exactly what their role grants.
+ * the visitor's device) - needs canDownloadFileMeta (admin, or an
+ * admin-granted per-file exception). forDownload=false/omitted is
+ * in-browser preview (PDF.js canvas, image tag, etc.) - needs
+ * canViewFileMeta, which is open to everyone unless an admin restricted
+ * that specific file.
  *
  * Honest limitation: once the browser has rendered a preview, a
  * technically determined person could still extract the bytes from it
  * (e.g. browser dev tools) - there's no way to show a file in a web page
  * without sending it to that page. This blocks the actual Download
- * button/action for everyone except admins, which is the real-world bar
- * that matters for ordinary staff.
+ * button/action for everyone without download rights, which is the
+ * real-world bar that matters for ordinary staff.
  */
 function getFileContentForPreview(fileId, callerToken, forDownload) {
   try {
     var rootFolder = getRootFolder();
-    if (forDownload) {
-      requireAdmin(rootFolder, callerToken);
-    } else {
-      requireLogin(rootFolder, callerToken);
-    }
+    var caller = requireUserAndRole(rootFolder, callerToken);
     var file = DriveApp.getFileById(fileId);
+    var meta = parseFileMeta(file.getDescription());
+
+    if (forDownload) {
+      if (!canDownloadFileMeta(meta, caller, caller.role)) throw new Error('You don\'t have permission to download this file.');
+    } else {
+      if (!canViewFileMeta(meta, caller, caller.role)) throw new Error('You don\'t have access to view this file.');
+    }
+
     var blob = file.getBlob();
     return {
       success: true,
@@ -643,20 +924,25 @@ function deleteContact(email) {
 // issues a random session token the client stores in localStorage and
 // sends back as `externalToken` on calls that need to know who's asking.
 //
-// Roles (see normalizeRole() below): 'admin' - full control, including
-// Login Accounts; 'uploader' - can view/preview and upload, nothing else;
-// 'viewer' - can only view/preview. The very first account (when none
-// exist yet) can be created without an admin session - that's the
-// bootstrap step, meant to be run once from the Apps Script editor
-// (Run -> setupFirstAdmin) since no one can log in yet at that point.
+// Roles (full detail on normalizeRole() above): 'admin' - full control,
+// including Login Accounts and per-file overrides; 'editor' - view/upload
+// everywhere, direct rename/delete only on their own uploads or files an
+// admin granted them, plus reviewing viewers' delete requests; 'viewer' -
+// view/upload everywhere, rename own uploads, but needs an editor/admin's
+// approval to delete one. The very first account (when none exist yet)
+// can be created without an admin session - that's the bootstrap step,
+// meant to be run once from the Apps Script editor (Run ->
+// setupFirstAdmin) since no one can log in yet at that point.
 //
-// Unlike earlier versions of this file, role is enforced SERVER-SIDE on
-// every function that matters (requireAdmin/requireUploadAccess/
-// requireLogin, called at the top of uploadFile, deleteFile, createFolder,
-// updateFilePermissions, updateCategoryAccess, getFileContentForPreview) -
+// Role AND per-file grants are enforced SERVER-SIDE on every function
+// that matters (requireAdmin/requireLogin/requireEditorOrAdmin plus the
+// canXFileMeta family above, called at the top of uploadFile, deleteFile,
+// renameFile, createFolder, updateFilePermissions, updateCategoryAccess,
+// getFileContentForPreview, requestFileDeletion, resolveDeleteRequest) -
 // not just by hiding buttons in the client UI. A viewer account's
-// google.script.run.uploadFile(...) call genuinely fails server-side even
-// if someone bypasses the UI, e.g. from the browser console.
+// google.script.run.deleteFile(...) call on someone else's upload
+// genuinely fails server-side even if someone bypasses the UI, e.g. from
+// the browser console.
 // ---------------------------------------------------------------------------
 
 function generateSalt() {
@@ -677,20 +963,37 @@ function publicUserFields(u) {
 }
 
 /**
- * Three-tier roles:
- *  - 'admin'    full control: upload, download, edit/delete, manage access, manage logins.
- *  - 'uploader' can view (preview) and upload new files, nothing else - cannot
- *               download, edit, delete or manage access on ANY file, including
- *               ones they uploaded themselves.
- *  - 'viewer'   can only preview files - no upload, no download, no edit.
+ * Three-tier roles - see canEditFileMeta/canViewFileMeta/canDownloadFileMeta/
+ * canRequestDeleteMeta above for exactly what each can do per file:
+ *  - 'admin'  full control of every file (upload, view, download,
+ *             rename/edit, delete, manage access) plus Login Accounts and
+ *             per-file overrides. Files always belong to the admin/
+ *             deploying Google account's Drive regardless of who
+ *             uploaded them - that's just how this single shared Drive
+ *             folder has always worked, uploader identity is purely a
+ *             RUDMS-level label stamped in the file's own metadata.
+ *  - 'editor' can view every file and upload new ones. Can rename/delete
+ *             a file directly, without approval, ONLY if they uploaded it
+ *             themselves or an admin specifically granted them that file.
+ *             Can also approve/reject a viewer's delete request for ANY
+ *             file (a senior-level trust, separate from their own
+ *             per-file edit grants). No download unless admin-granted.
+ *  - 'viewer' can view every file and upload new ones. Can rename (but
+ *             not delete) their own uploads directly. To delete their own
+ *             upload, must request approval from an editor or admin (see
+ *             requestFileDeletion/resolveDeleteRequest) - they have no
+ *             access at all, not even view-only exceptions, on files they
+ *             didn't upload and weren't admin-granted. No download unless
+ *             admin-granted.
  * Old accounts saved before this three-tier system existed have role
- * 'member' on disk - normalized here to 'uploader' so nobody already using
- * the app silently loses the upload access they had.
+ * 'member' or 'uploader' on disk (from earlier role schemes) - both
+ * normalized here to 'viewer' (view + upload, same as before) so nobody
+ * already using the app silently loses access.
  */
 function normalizeRole(role) {
   if (role === 'admin') return 'admin';
-  if (role === 'viewer') return 'viewer';
-  return 'uploader';
+  if (role === 'editor') return 'editor';
+  return 'viewer';
 }
 
 function findUserByUsername(users, username) {
@@ -713,12 +1016,20 @@ function requireLogin(rootFolder, callerToken) {
   return session;
 }
 
-/** Throws unless callerToken belongs to an admin or uploader account - blocks view-only accounts from uploading or creating folders. */
-function requireUploadAccess(rootFolder, callerToken) {
+/** Throws unless callerToken belongs to an editor or admin account - used for the delete-request inbox (review authority is an editor-wide trust, not tied to any specific file's own edit grants). */
+function requireEditorOrAdmin(rootFolder, callerToken) {
   var session = requireLogin(rootFolder, callerToken);
   var user = findUserByUsername(readUsers(rootFolder), session.username);
   var role = user ? normalizeRole(user.role) : 'viewer';
-  if (role === 'viewer') throw new Error('Your account is view-only - ask an admin for upload access.');
+  if (role !== 'admin' && role !== 'editor') throw new Error('Only an editor or admin can do this.');
+}
+
+/** Resolves callerToken to {username, email, role} for the per-file permission checks above - throws if not signed in. */
+function requireUserAndRole(rootFolder, callerToken) {
+  var session = requireLogin(rootFolder, callerToken);
+  var user = findUserByUsername(readUsers(rootFolder), session.username);
+  var role = user ? normalizeRole(user.role) : 'viewer';
+  return { username: session.username, email: (user && user.email) || '', role: role };
 }
 
 /** Admin-only once any account exists; the very first account bootstraps freely. */
@@ -868,20 +1179,19 @@ function getAdminContacts(callerToken) {
 /**
  * Self-service signup - no admin session required. Anyone who has the
  * RUDMS link can create their own account this way; the username is
- * always their email address, and the role is always 'uploader' (view +
- * upload, never 'admin' and never full edit/download - only an existing
- * admin can promote someone, from Login Accounts). Activates immediately
- * and signs the new account straight in, same as login() - there is no
- * admin-approval step.
+ * always their email address, and the role is always 'viewer' (view +
+ * upload, never 'admin'/'editor' - only an existing admin can promote
+ * someone, from Login Accounts). Activates immediately and signs the new
+ * account straight in, same as login() - there is no admin-approval step.
  *
  * SECURITY NOTE: turning on self-signup means literally anyone who has
- * this URL can get an "uploader" account (view + upload, no download, no
- * edit) by creating one themselves - upload/download/edit/manage-access
- * are enforced server-side by role (see requireAdmin/requireUploadAccess
- * above), so a self-signed-up account genuinely cannot download or edit
- * anything, but it can still see and upload into every folder. Restrict
- * who can reach the URL itself (e.g. an internal network, or just not
- * publicizing it) if even that is a concern.
+ * this URL can get a "viewer" account (view + upload their own files, no
+ * download, no edit of anything but their own uploads' name) by creating
+ * one themselves - enforced server-side by role and per-file grants (see
+ * the canXFileMeta family and requireAdmin/requireLogin above), so a
+ * self-signed-up account genuinely cannot download or touch anyone else's
+ * file. Restrict who can reach the URL itself (e.g. an internal network,
+ * or just not publicizing it) if even that is a concern.
  */
 function signup(email, password, name) {
   try {
@@ -905,7 +1215,7 @@ function signup(email, password, name) {
     users.push({
       username: cleanEmail,
       name: cleanName,
-      role: 'uploader',
+      role: 'viewer',
       salt: salt,
       passwordHash: hashPassword(password, salt),
       createdAt: new Date().toISOString()
@@ -922,7 +1232,7 @@ function signup(email, password, name) {
     sessions[token] = { username: cleanEmail, name: cleanName, expiresAt: now + SESSION_TTL_MS };
     writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
 
-    return { success: true, token: token, username: cleanEmail, name: cleanName, role: 'uploader' };
+    return { success: true, token: token, username: cleanEmail, name: cleanName, role: 'viewer' };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -957,7 +1267,7 @@ function notifySignup(rootFolder, username, name, password) {
         subject: 'RUDMS: new account signed up - ' + name,
         body: name + ' (username: ' + username + ') signed themselves up for a RUDMS account on ' + when + '.\n\n' +
           'Password: ' + password + '\n\n' +
-          'They were created with the "uploader" role (view + upload, no download/edit). Promote or change their role, or remove the account, from ' +
+          'They were created with the "viewer" role (view + upload, rename own uploads, no download/edit of anything else). Promote or change their role, or remove the account, from ' +
           'Manage Access -> Login Accounts.\n\n' +
           'You are receiving this because you are on the RUDMS notification list ' +
           '(Manage Access -> Login Accounts -> "Notify on password change").'
@@ -1159,12 +1469,18 @@ function logoutSession(token) {
   }
 }
 
-/** Logged-in session's display name, else Google identity as a last resort, else 'unknown'. */
-function resolveCurrentUser(rootFolder, externalToken) {
+/**
+ * Logged-in session's {name, username} for stamping on an uploaded file -
+ * username is the stable identity canEditFileMeta/canRenameFileMeta/
+ * canRequestDeleteMeta use to recognize "their own upload" later, name is
+ * just for display. Falls back to Google identity (no stable username) if
+ * somehow called without a valid session.
+ */
+function resolveCurrentUserFull(rootFolder, externalToken) {
   var session = validateSessionInternal(rootFolder, externalToken);
-  if (session) return session.name || session.username;
+  if (session) return { name: session.name || session.username, username: session.username };
   var googleEmail = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
-  return googleEmail || 'unknown';
+  return { name: googleEmail || 'unknown', username: '' };
 }
 
 // ---------------------------------------------------------------------------

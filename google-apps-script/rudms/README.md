@@ -38,12 +38,12 @@ Google Sites page via `<iframe>`.
   dropdown and the Manage Access → By Folder tab both show/target -
   there's no separate "nested folder" concept anywhere in the code, it's
   the same category string everywhere, just allowed to contain `/`.
-- **Metadata**: each file's viewers/editors/uploaded-by is stored as JSON
-  directly on that Drive file's own `description` field - there is no
-  separate index file. `getAllFiles()` builds the list by walking every
-  category folder's files via `DriveApp` and reading each one's
-  description. (An earlier version used a Google Sheet as an index, but
-  in this deployment's environment every function that touched
+- **Metadata**: each file's viewers/editors/downloaders/uploaded-by is
+  stored as JSON directly on that Drive file's own `description` field -
+  there is no separate index file. `getAllFiles()` builds the list by
+  walking every category folder's files via `DriveApp` and reading each
+  one's description. (An earlier version used a Google Sheet as an index,
+  but in this deployment's environment every function that touched
   `SpreadsheetApp` - even ones whose return value contained no Sheets
   objects at all - reliably failed to have its response delivered back
   through `google.script.run`, while pure-`DriveApp` functions reliably
@@ -51,10 +51,18 @@ Google Sites page via `<iframe>`.
   entirely.) The web app reads the full file list once on load; all
   search/filtering after that happens instantly in the browser (no
   server round-trip per keystroke).
-- **Permissions**: On upload, the file is set to private, then
-  `DriveApp.addViewer()` / `addEditor()` is called for each email you list.
-  You can change access later from a file's "Share / Access" menu, which
-  fully re-syncs viewers/editors.
+- **Permissions model**: RUDMS does **not** use real Google Drive sharing
+  (`DriveApp.addViewer()`/`addEditor()`) for access control - every file
+  stays owned by (and only directly Drive-accessible to) the deploying/
+  admin Google account, regardless of who uploaded it through RUDMS or
+  what role they have (see Roles below). "Viewers"/"Editors"/"Downloaders"
+  on a file are RUDMS login identities (a username or the email on that
+  login account), checked entirely in RUDMS's own server code
+  (`canViewFileMeta`/`canEditFileMeta`/`canDownloadFileMeta` in `Code.gs`)
+  against whoever's signed-in session is asking - not a Drive-level
+  permission at all. You set them from a file's "Share / Access" menu (or
+  in bulk for a whole folder from Manage Access → By Folder), and an
+  admin can always override any of them for any specific file.
 - **Duplicate prevention**: uploading a file whose name already exists in
   that same category (case-insensitive - `logo.PNG` and `logo.png` count
   as the same file, but `logo.png` and `logo.jpeg` don't) is blocked
@@ -65,23 +73,30 @@ Google Sites page via `<iframe>`.
   separate trip to delete it first.
 - **Manage Access center**: the header's **Manage Access** button (also
   reachable via the lock icon that appears on hover over any category in
-  the sidebar) opens a two-tab panel:
-  - **By Folder** — set Drive-level viewer/editor emails on an entire
-    category folder (or any nested subfolder, listed by its full path
-    like `RFQ/2024/ClientA`) in one go. Google Drive automatically
-    extends that same access to every file inside the folder - and every
-    subfolder nested under it - including anything uploaded or created
-    later. An optional "also stamp existing files" checkbox additionally
-    writes those emails directly onto each current file's own metadata
-    (additively, on top of whatever access it already had, but only for
-    files directly in that folder, not nested ones) so the file list
-    displays accurate access.
-  - **By File** — a searchable table of every file with its current
-    viewers/editors and an Edit shortcut into the same per-file Share
-    modal described above.
+  the sidebar) opens a multi-tab panel, with tabs shown based on role:
+  - **By Folder** (admin-only) — set a default viewer-restriction/editor/
+    downloader list (RUDMS usernames/emails) for an entire category folder
+    (or any nested subfolder, listed by its full path like
+    `RFQ/2024/ClientA`) in one go, stored as the same kind of JSON on the
+    folder's own Drive description. An optional "also stamp existing
+    files" checkbox additionally writes those lists directly onto each
+    current file's own metadata (additively, on top of whatever access it
+    already had, but only for files directly in that folder, not nested
+    ones) so the file list displays accurate access.
+  - **By File** (admin-only) — a searchable table of every file with its
+    current viewers/editors/downloaders and an Edit shortcut into the same
+    per-file Share modal described above.
+  - **Doer List** (everyone) — the Viewer/Editor/Downloader-field
+    autocomplete contacts list; unrelated to login accounts or roles (see
+    the FAQ-style note in Roles below if this is confusing coming from an
+    older version of this README).
+  - **Delete Requests** (editor/admin) — see "Delete requests" under Roles
+    below.
+  - **Login Accounts** (admin-only) — create/promote/remove login
+    accounts.
 
-  Use "By Folder" for broad, category-wide access (e.g. "everyone in
-  Purchasing can view Purchase Orders"); use "By File" for one-off
+  Use "By Folder" for broad, category-wide overrides (e.g. "Aayush can
+  download everything in Purchase Orders"); use "By File" for one-off
   exceptions on a specific document.
 - **Sign in / Sign out**: everyone - regardless of whether they have a
   Google account - signs in with a **username and password**. Google
@@ -89,27 +104,26 @@ Google Sites page via `<iframe>`.
   - **Creating accounts** happens two ways:
     - **Admin-created**: from **Manage Access → Login Accounts**
       (admin-only tab; username + password, min 6 characters, and a
-      **Viewer / Uploader / Admin** role - see Roles below).
+      **Viewer / Editor / Admin** role - see Roles below).
     - **Self-signup**: anyone with the RUDMS link can create their own
       account from the login screen's **Sign Up** tab - email, full
       name, and a password they choose. The username is always their
-      email address, the role is always `uploader` (view + upload, never
-      `admin` and never full edit/download - self-signup can never
-      create an admin), and the account is active immediately - no
-      approval step. On success they're signed straight in, and an
-      email with the new username/password goes to both the person
-      themselves and everyone on the "notify on password change" list
-      (Manage Access → Login Accounts) - reusing that same list rather
-      than a second one, since it already means "people who want to
-      know about credential events."
-    - **Security tradeoff of self-signup**: anyone with the URL can get
-      an `uploader` account (view + upload) by creating one themselves -
-      this is enforced server-side (see Roles below), so a self-signed-up
-      account genuinely cannot download or edit anything, but it can
-      still see and upload into every folder. If even that's a concern,
-      don't publicize the URL beyond people who should have it, or put
-      it behind a network you control (e.g. only embedded on an internal
-      Google Site).
+      email address, the role is always `viewer` (view + upload, rename
+      own uploads, never `admin`/`editor` - self-signup can never create
+      one of those), and the account is active immediately - no approval
+      step. On success they're signed straight in, and an email with the
+      new username/password goes to both the person themselves and
+      everyone on the "notify on password change" list (Manage Access →
+      Login Accounts) - reusing that same list rather than a second one,
+      since it already means "people who want to know about credential
+      events."
+    - **Security tradeoff of self-signup**: anyone with the URL can get a
+      `viewer` account (view + upload their own files) by creating one
+      themselves - this is enforced server-side (see Roles below), so a
+      self-signed-up account genuinely cannot download or touch anyone
+      else's file. If even that's a concern, don't publicize the URL
+      beyond people who should have it, or put it behind a network you
+      control (e.g. only embedded on an internal Google Site).
     Passwords are salted and SHA-256 hashed either way, never stored in
     plain text.
   - **Forgot password**: works for every account, admin included - no
@@ -152,26 +166,53 @@ Google Sites page via `<iframe>`.
       specific promotion never depends on already knowing an admin's
       password.
   - **Roles** - three tiers, enforced **server-side** on every function
-    that matters (not just by hiding buttons in the UI - see "Honest
-    limitation" below):
-    - `admin` - full control: upload, download, edit/delete, manage
-      access (By Folder/By File), manage login accounts.
-    - `uploader` - can view/preview files and upload new ones. Cannot
-      download, edit, delete, or manage access on **any** file - including
-      ones they uploaded themselves. Default role for self-signup and for
-      an admin-created account unless a different role is picked.
-    - `viewer` - can only preview files. No upload, no download, no edit,
-      no folder creation.
+    that matters (not just by hiding buttons in the UI - see "What's
+    actually enforced" below), with per-file overrides an admin can set
+    on top of them:
+    - `admin` - full control of every file: upload, view, download,
+      rename/edit, delete, manage access (By Folder/By File per-file
+      overrides), manage login accounts, approve/reject delete requests.
+      Files always belong to the admin/deploying Google account's Drive
+      regardless of who uploaded them through RUDMS - that's just how
+      this single shared Drive folder has always worked; "uploaded by" is
+      purely a RUDMS-level label, not a Drive ownership change.
+    - `editor` - can view every file and upload new ones. Can rename or
+      delete a file directly, without anyone's approval, **only** if they
+      uploaded it themselves or an admin specifically granted them that
+      file (the "Can edit / rename / delete" field in Share / Access).
+      Can't touch any other file at all. Can also review and
+      approve/reject any viewer's delete request (see "Delete requests"
+      below) - that reviewing power applies company-wide, it isn't scoped
+      to only the files they personally have edit rights on.
+    - `viewer` - can view every file and upload new ones. Can rename (but
+      not delete) their own uploads directly. To delete their own upload,
+      they send a **delete request** instead (see below) - they have no
+      access at all, not even an exception, on a file they didn't upload
+      and weren't admin-granted. Default role for self-signup; also the
+      default when an admin creates a login without picking a different
+      role.
+    - No role gets to **download** a file by default - that's admin-only
+      unless an admin explicitly adds someone to that specific file's (or
+      folder's) "Can download" list, regardless of their role.
     - Honest limitation on "view-only": once a file is shown in the
       browser for preview, there's no way to make the bytes
       un-extractable by a technically determined person (e.g. browser
       dev tools) - showing something in a web page always means sending
       it to that page. What RUDMS actually enforces is the dedicated
       **Download** action itself (the button, and the server call behind
-      it) being admin-only, which is the real-world bar that matters for
-      ordinary staff.
+      it) requiring real download rights, which is the real-world bar
+      that matters for ordinary staff.
+    - **Delete requests** (Manage Access → Delete Requests, visible to
+      editors/admins only): a viewer's only path to deleting their own
+      upload. They click **Request Delete Approval** on the file's menu;
+      every current editor/admin gets a best-effort email, and the
+      request sits in this tab until an editor or admin clicks **Approve**
+      (deletes the file immediately) or **Reject** (dismisses it) - either
+      way the requester gets a best-effort email of the outcome. There's
+      no in-between "temporarily allowed to delete it themselves" state -
+      approving performs the deletion there and then.
     - **Who's admin, and how anyone finds out**: the Login Accounts list
-      shows a role badge (VIEWER/UPLOADER/ADMIN) next to each account's
+      shows a role badge (VIEWER/EDITOR/ADMIN) next to each account's
       name - but that whole tab is admin-only, so a non-admin has no way
       to see it from inside the app. For them, the user menu (top-right
       avatar) shows their own role badge plus an **"Admin / contact for
@@ -179,13 +220,24 @@ Google Sites page via `<iframe>`.
       file) - visible to every signed-in account, specifically so anyone
       knows who to ask.
     - **Changing an existing account's role**: from Manage Access →
-      Login Accounts, each row has a **Viewer/Uploader/Admin** dropdown -
+      Login Accounts, each row has a **Viewer/Editor/Admin** dropdown -
       no need to delete and recreate the account (which would also mean
       picking a new password). The last remaining admin can't be demoted
       away from admin this way (or removed via **Remove**) - RUDMS blocks
       it, since that would lock everyone out of Login Accounts with no
       way back in short of re-running `setupFirstAdmin`/`setupDefaultAdmins`
       from the Apps Script editor.
+    - **Doer List vs. Login Accounts (a common mix-up)**: the **Doer
+      List** tab is just a reusable contacts list (name + email) that
+      autofills the Viewer/Editor/Downloader fields when you're setting
+      access - it has no role or login concept at all, and being on it
+      doesn't mean that person has (or needs) a RUDMS login. **Login
+      Accounts** is the separate, admin-only tab where actual
+      username/password accounts and their roles live
+      (`RUDMS_Users.json`, distinct from the Doer List's
+      `RUDMS_Contacts.json`). If someone's name is in the Doer List but
+      you don't see a role for them, that's why - check Login Accounts
+      instead.
   - **Sessions / staying signed in**: signing in issues a random token
     (30-day expiry) sent back as `externalToken` on calls that need to
     know who's asking. The login screen's **"Stay signed in on this
@@ -199,14 +251,16 @@ Google Sites page via `<iframe>`.
     click handler), which is what lets Chrome/Safari/Firefox reliably
     offer their own native "Save password?" prompt on top of this.
     **What's actually enforced**: unlike earlier versions of this app,
-    role (viewer/uploader/admin - see above) is checked **server-side**
-    on upload, delete, folder creation, manage-access, and the Download
-    action - not just by hiding buttons in the client UI. A viewer
-    account's `uploadFile(...)` call genuinely fails on the server even
-    if someone bypasses the UI (e.g. the browser console). That said,
-    this is still a document-management access model aimed at ordinary
-    staff, not a defense engineered against a determined technical
-    attacker with access to this exact source code.
+    role AND per-file grants (viewer/editor/admin, plus the per-file
+    editors/downloaders/view-restriction lists - see Roles above) are
+    checked **server-side** on upload, rename, delete, folder creation,
+    manage-access, preview, the Download action, and delete requests -
+    not just by hiding buttons in the client UI. A viewer account's
+    `deleteFile(...)` call on someone else's upload genuinely fails on
+    the server even if someone bypasses the UI (e.g. the browser
+    console). That said, this is still a document-management access
+    model aimed at ordinary staff, not a defense engineered against a
+    determined technical attacker with access to this exact source code.
   - Same Google Drive throughout: the deploying account's Drive is where
     every category folder and file lives, same as before - login accounts
     are purely an access layer in front of it, not separate Drive
@@ -228,12 +282,15 @@ Google Sites page via `<iframe>`.
     else here.
 - **Downloads**: proxied through `getFileContentForPreview(fileId,
   callerToken, forDownload=true)` on the server rather than a direct
-  `drive.google.com` link, so an admin can download a file regardless of
-  their own Drive access - `forDownload` is what makes the server require
-  an admin session for this specific call; the same function with
-  `forDownload` left out/false is the in-browser preview path, open to
-  every signed-in role. The Download button itself is hidden entirely for
-  viewer/uploader accounts.
+  `drive.google.com` link, so this works the same regardless of the
+  visitor's own Drive access (there isn't any - see "Permissions model"
+  above). `forDownload=true` is what makes the server check
+  `canDownloadFileMeta` (admin, or that specific file's/folder's
+  admin-granted "Can download" list); the same function with
+  `forDownload` left out/false is the in-browser preview path, which only
+  needs `canViewFileMeta` (open to everyone unless an admin restricted
+  that file). The Download button itself is hidden entirely for anyone
+  `canDownload` comes back false for.
 - **Previews**:
   - Images (`.png`, `.jpg`/`.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`,
     `.bmp`) → fetched through the server and rendered from a data URI
