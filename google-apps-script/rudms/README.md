@@ -88,12 +88,13 @@ Google Sites page via `<iframe>`.
   identity is not used as a login gate at all.
   - **Creating accounts** happens two ways:
     - **Admin-created**: from **Manage Access → Login Accounts**
-      (admin-only tab; username + password, min 6 characters, "Member"
-      or "Admin" role).
+      (admin-only tab; username + password, min 6 characters, and a
+      **Viewer / Uploader / Admin** role - see Roles below).
     - **Self-signup**: anyone with the RUDMS link can create their own
       account from the login screen's **Sign Up** tab - email, full
       name, and a password they choose. The username is always their
-      email address, the role is always `member` (self-signup can never
+      email address, the role is always `uploader` (view + upload, never
+      `admin` and never full edit/download - self-signup can never
       create an admin), and the account is active immediately - no
       approval step. On success they're signed straight in, and an
       email with the new username/password goes to both the person
@@ -101,16 +102,14 @@ Google Sites page via `<iframe>`.
       (Manage Access → Login Accounts) - reusing that same list rather
       than a second one, since it already means "people who want to
       know about credential events."
-    - **Security tradeoff of self-signup**: RUDMS doesn't check per-file
-      Drive access against the logged-in identity anywhere (see the
-      Honest limitation two bullets down) - every signed-in account can
-      browse and download every file through the app regardless of its
-      own Drive-level sharing. With self-signup on, that means anyone
-      who has the URL can get that same access by creating an account
-      themselves; this was a deliberate choice for this deployment, not
-      an oversight. If that's a concern, don't publicize the URL beyond
-      people who should have it, or put it behind a network you control
-      (e.g. only embedded on an internal Google Site).
+    - **Security tradeoff of self-signup**: anyone with the URL can get
+      an `uploader` account (view + upload) by creating one themselves -
+      this is enforced server-side (see Roles below), so a self-signed-up
+      account genuinely cannot download or edit anything, but it can
+      still see and upload into every folder. If even that's a concern,
+      don't publicize the URL beyond people who should have it, or put
+      it behind a network you control (e.g. only embedded on an internal
+      Google Site).
     Passwords are salted and SHA-256 hashed either way, never stored in
     plain text.
   - **Forgot password**: works for every account, admin included - no
@@ -143,26 +142,50 @@ Google Sites page via `<iframe>`.
     the CEO/MD etc.) from the Login Accounts tab - **with their email
     filled in**, so "Forgot password" works for them later - and remove
     the bootstrap `admin` account.
-  - **Roles**: `admin` can create/list/remove login accounts; `member`
-    cannot see that tab at all. Every account (of either role) can browse,
-    upload, and use Manage Access's By Folder/By File/Doer List tabs the
-    same way.
-    - **Who's admin, and how a member finds out**: the Login Accounts
-      list shows an **ADMIN** badge next to each admin account's name -
-      but that whole tab is admin-only, so a regular member has no way
+    - **`setupDefaultAdmins`**: a second, one-time editor function (same
+      idea as `setupFirstAdmin`, select it in the dropdown and click
+      **Run**) that makes `aayush@rukmanudyog.com` and
+      `jatin@rukmanudyog.com` admins directly - promoting their accounts
+      if they already exist, or creating new admin accounts for them
+      (temporary password `Rukman@123`, which they should change from
+      the user menu after signing in) if they don't. Exists so this
+      specific promotion never depends on already knowing an admin's
+      password.
+  - **Roles** - three tiers, enforced **server-side** on every function
+    that matters (not just by hiding buttons in the UI - see "Honest
+    limitation" below):
+    - `admin` - full control: upload, download, edit/delete, manage
+      access (By Folder/By File), manage login accounts.
+    - `uploader` - can view/preview files and upload new ones. Cannot
+      download, edit, delete, or manage access on **any** file - including
+      ones they uploaded themselves. Default role for self-signup and for
+      an admin-created account unless a different role is picked.
+    - `viewer` - can only preview files. No upload, no download, no edit,
+      no folder creation.
+    - Honest limitation on "view-only": once a file is shown in the
+      browser for preview, there's no way to make the bytes
+      un-extractable by a technically determined person (e.g. browser
+      dev tools) - showing something in a web page always means sending
+      it to that page. What RUDMS actually enforces is the dedicated
+      **Download** action itself (the button, and the server call behind
+      it) being admin-only, which is the real-world bar that matters for
+      ordinary staff.
+    - **Who's admin, and how anyone finds out**: the Login Accounts list
+      shows a role badge (VIEWER/UPLOADER/ADMIN) next to each account's
+      name - but that whole tab is admin-only, so a non-admin has no way
       to see it from inside the app. For them, the user menu (top-right
-      avatar) shows an **"Admin / contact for access"** line with every
-      admin's name (and email, if one is on file) - visible to every
-      signed-in account, not just admins, specifically so a member knows
-      who to ask.
-    - **Promoting/demoting an existing account**: from Manage Access →
-      Login Accounts, each row has a **Make Admin** / **Make Member**
-      button - no need to delete and recreate the account (which would
-      also mean picking a new password). The last remaining admin can't
-      be demoted or removed this way (or via **Remove**) - RUDMS blocks
+      avatar) shows their own role badge plus an **"Admin / contact for
+      access"** line with every admin's name (and email, if one is on
+      file) - visible to every signed-in account, specifically so anyone
+      knows who to ask.
+    - **Changing an existing account's role**: from Manage Access →
+      Login Accounts, each row has a **Viewer/Uploader/Admin** dropdown -
+      no need to delete and recreate the account (which would also mean
+      picking a new password). The last remaining admin can't be demoted
+      away from admin this way (or removed via **Remove**) - RUDMS blocks
       it, since that would lock everyone out of Login Accounts with no
-      way back in short of re-running `setupFirstAdmin` from the Apps
-      Script editor.
+      way back in short of re-running `setupFirstAdmin`/`setupDefaultAdmins`
+      from the Apps Script editor.
   - **Sessions / staying signed in**: signing in issues a random token
     (30-day expiry) sent back as `externalToken` on calls that need to
     know who's asking. The login screen's **"Stay signed in on this
@@ -175,13 +198,15 @@ Google Sites page via `<iframe>`.
     closed. The login form is also a real `<form>` (not just a button
     click handler), which is what lets Chrome/Safari/Firefox reliably
     offer their own native "Save password?" prompt on top of this.
-    **Honest limitation**: this
-    gates the RUDMS *client UI* and who can manage accounts - it is not a
-    server-side authorization check on every single function, since most
-    functions here are otherwise directly callable once someone has any
-    valid token. That's an appropriate bar for controlling who gets in
-    and who can manage accounts, not a defense against a determined
-    technical attacker.
+    **What's actually enforced**: unlike earlier versions of this app,
+    role (viewer/uploader/admin - see above) is checked **server-side**
+    on upload, delete, folder creation, manage-access, and the Download
+    action - not just by hiding buttons in the client UI. A viewer
+    account's `uploadFile(...)` call genuinely fails on the server even
+    if someone bypasses the UI (e.g. the browser console). That said,
+    this is still a document-management access model aimed at ordinary
+    staff, not a defense engineered against a determined technical
+    attacker with access to this exact source code.
   - Same Google Drive throughout: the deploying account's Drive is where
     every category folder and file lives, same as before - login accounts
     are purely an access layer in front of it, not separate Drive
@@ -201,9 +226,14 @@ Google Sites page via `<iframe>`.
     just another JSON file in the RUDMS root folder
     (`RUDMS_NotifyEmails.json`), same storage pattern as everything
     else here.
-- **Downloads**: proxied through `getFileContentForPreview()` on the
-  server rather than a direct `drive.google.com` link, so any signed-in
-  visitor can download a file regardless of their own Drive access.
+- **Downloads**: proxied through `getFileContentForPreview(fileId,
+  callerToken, forDownload=true)` on the server rather than a direct
+  `drive.google.com` link, so an admin can download a file regardless of
+  their own Drive access - `forDownload` is what makes the server require
+  an admin session for this specific call; the same function with
+  `forDownload` left out/false is the in-browser preview path, open to
+  every signed-in role. The Download button itself is hidden entirely for
+  viewer/uploader accounts.
 - **Previews**:
   - Images (`.png`, `.jpg`/`.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`,
     `.bmp`) → fetched through the server and rendered from a data URI

@@ -213,7 +213,7 @@ function getBootstrapInfo(externalToken) {
       return {
         success: true,
         currentUser: session.name || session.username,
-        role: user ? (user.role || 'member') : 'member',
+        role: user ? normalizeRole(user.role) : 'viewer',
         authMode: 'loggedin',
         rootFolderId: rootFolder.getId()
       };
@@ -306,9 +306,10 @@ function getFolderTree() {
  * brand-new top-level category and for a subfolder nested inside
  * whichever folder is currently open in the sidebar.
  */
-function createFolder(path) {
+function createFolder(path, callerToken) {
   try {
     var rootFolder = getRootFolder();
+    requireUploadAccess(rootFolder, callerToken);
     getOrCreateFolderByPath(rootFolder, path);
     return { success: true, tree: listFolderTree(rootFolder, '') };
   } catch (err) {
@@ -333,6 +334,7 @@ function uploadFile(payload) {
     }
 
     var rootFolder = getRootFolder();
+    requireUploadAccess(rootFolder, payload.externalToken);
     var resolved = getOrCreateFolderByPath(rootFolder, payload.category || 'Uncategorized');
     var categoryFolder = resolved.folder;
 
@@ -394,8 +396,10 @@ function applyPermissions(file, viewerEmails, editorEmails) {
   return warnings;
 }
 
-function updateFilePermissions(fileId, viewerEmails, editorEmails) {
+function updateFilePermissions(fileId, viewerEmails, editorEmails, callerToken) {
   try {
+    var rootFolder = getRootFolder();
+    requireAdmin(rootFolder, callerToken);
     var file = DriveApp.getFileById(fileId);
 
     file.getViewers().forEach(function (u) { try { file.removeViewer(u); } catch (e) {} });
@@ -418,8 +422,10 @@ function updateFilePermissions(fileId, viewerEmails, editorEmails) {
   }
 }
 
-function deleteFile(fileId) {
+function deleteFile(fileId, callerToken) {
   try {
+    var rootFolder = getRootFolder();
+    requireAdmin(rootFolder, callerToken);
     DriveApp.getFileById(fileId).setTrashed(true);
     return { success: true };
   } catch (err) {
@@ -471,9 +477,10 @@ function getCategoryAccessOverview() {
  * grants folder viewers/editors access to existing and future files (and
  * nested subfolders) regardless of this flag.
  */
-function updateCategoryAccess(categoryPath, viewerEmails, editorEmails, applyToExistingFiles) {
+function updateCategoryAccess(categoryPath, viewerEmails, editorEmails, applyToExistingFiles, callerToken) {
   try {
     var rootFolder = getRootFolder();
+    requireAdmin(rootFolder, callerToken);
     var folder = getOrCreateFolderByPath(rootFolder, categoryPath).folder;
 
     folder.getViewers().forEach(function (u) { try { folder.removeViewer(u); } catch (e) {} });
@@ -510,8 +517,28 @@ function updateCategoryAccess(categoryPath, viewerEmails, editorEmails, applyToE
 // File content retrieval (for in-browser 3D CAD preview)
 // ---------------------------------------------------------------------------
 
-function getFileContentForPreview(fileId) {
+/**
+ * forDownload=true is the dedicated "Download" action (saves the file to
+ * the visitor's device) - admin-only. forDownload=false/omitted is
+ * in-browser preview (PDF.js canvas, image tag, etc.) - any signed-in
+ * account may do that, viewer and uploader included, since "view" is
+ * exactly what their role grants.
+ *
+ * Honest limitation: once the browser has rendered a preview, a
+ * technically determined person could still extract the bytes from it
+ * (e.g. browser dev tools) - there's no way to show a file in a web page
+ * without sending it to that page. This blocks the actual Download
+ * button/action for everyone except admins, which is the real-world bar
+ * that matters for ordinary staff.
+ */
+function getFileContentForPreview(fileId, callerToken, forDownload) {
   try {
+    var rootFolder = getRootFolder();
+    if (forDownload) {
+      requireAdmin(rootFolder, callerToken);
+    } else {
+      requireLogin(rootFolder, callerToken);
+    }
     var file = DriveApp.getFileById(fileId);
     var blob = file.getBlob();
     return {
@@ -616,18 +643,20 @@ function deleteContact(email) {
 // issues a random session token the client stores in localStorage and
 // sends back as `externalToken` on calls that need to know who's asking.
 //
-// Roles: 'admin' can create/list/remove login accounts (the "Login
-// Accounts" tab); 'member' cannot. The very first account (when none
+// Roles (see normalizeRole() below): 'admin' - full control, including
+// Login Accounts; 'uploader' - can view/preview and upload, nothing else;
+// 'viewer' - can only view/preview. The very first account (when none
 // exist yet) can be created without an admin session - that's the
 // bootstrap step, meant to be run once from the Apps Script editor
 // (Run -> setupFirstAdmin) since no one can log in yet at that point.
 //
-// Honest limitation: this gates what the RUDMS *client UI* shows (no
-// login, no file browser) - it is not a server-side authorization check
-// on every single function, since most of this app's other functions
-// are otherwise callable directly once someone has a token. That's an
-// appropriate bar for controlling who gets in and who can manage
-// accounts, not a defense against a determined technical attacker.
+// Unlike earlier versions of this file, role is enforced SERVER-SIDE on
+// every function that matters (requireAdmin/requireUploadAccess/
+// requireLogin, called at the top of uploadFile, deleteFile, createFolder,
+// updateFilePermissions, updateCategoryAccess, getFileContentForPreview) -
+// not just by hiding buttons in the client UI. A viewer account's
+// google.script.run.uploadFile(...) call genuinely fails server-side even
+// if someone bypasses the UI, e.g. from the browser console.
 // ---------------------------------------------------------------------------
 
 function generateSalt() {
@@ -644,7 +673,24 @@ function readUsers(rootFolder) {
 }
 
 function publicUserFields(u) {
-  return { username: u.username, name: u.name, role: u.role || 'member', email: u.email || '', createdAt: u.createdAt };
+  return { username: u.username, name: u.name, role: normalizeRole(u.role), email: u.email || '', createdAt: u.createdAt };
+}
+
+/**
+ * Three-tier roles:
+ *  - 'admin'    full control: upload, download, edit/delete, manage access, manage logins.
+ *  - 'uploader' can view (preview) and upload new files, nothing else - cannot
+ *               download, edit, delete or manage access on ANY file, including
+ *               ones they uploaded themselves.
+ *  - 'viewer'   can only preview files - no upload, no download, no edit.
+ * Old accounts saved before this three-tier system existed have role
+ * 'member' on disk - normalized here to 'uploader' so nobody already using
+ * the app silently loses the upload access they had.
+ */
+function normalizeRole(role) {
+  if (role === 'admin') return 'admin';
+  if (role === 'viewer') return 'viewer';
+  return 'uploader';
 }
 
 function findUserByUsername(users, username) {
@@ -657,7 +703,22 @@ function requireAdmin(rootFolder, callerToken) {
   var session = validateSessionInternal(rootFolder, callerToken);
   if (!session) throw new Error('You must be signed in to do this.');
   var user = findUserByUsername(readUsers(rootFolder), session.username);
-  if (!user || user.role !== 'admin') throw new Error('Only an admin can manage login accounts.');
+  if (!user || normalizeRole(user.role) !== 'admin') throw new Error('Only an admin can do this.');
+}
+
+/** Throws unless callerToken is a valid session (any role) - used for actions every signed-in account may do, like previewing a file. */
+function requireLogin(rootFolder, callerToken) {
+  var session = validateSessionInternal(rootFolder, callerToken);
+  if (!session) throw new Error('You must be signed in to do this.');
+  return session;
+}
+
+/** Throws unless callerToken belongs to an admin or uploader account - blocks view-only accounts from uploading or creating folders. */
+function requireUploadAccess(rootFolder, callerToken) {
+  var session = requireLogin(rootFolder, callerToken);
+  var user = findUserByUsername(readUsers(rootFolder), session.username);
+  var role = user ? normalizeRole(user.role) : 'viewer';
+  if (role === 'viewer') throw new Error('Your account is view-only - ask an admin for upload access.');
 }
 
 /** Admin-only once any account exists; the very first account bootstraps freely. */
@@ -710,7 +771,7 @@ function createExternalUser(username, password, name, role, callerToken, email) 
     users.push({
       username: cleanUsername,
       name: String(name || '').trim() || cleanUsername,
-      role: isBootstrap ? 'admin' : (role === 'admin' ? 'admin' : 'member'),
+      role: isBootstrap ? 'admin' : normalizeRole(role),
       email: cleanEmail,
       salt: salt,
       passwordHash: hashPassword(password, salt),
@@ -764,13 +825,13 @@ function updateUserRole(username, newRole, callerToken) {
     requireAdmin(rootFolder, callerToken);
 
     var cleanUsername = String(username || '').trim().toLowerCase();
-    var cleanRole = newRole === 'admin' ? 'admin' : 'member';
+    var cleanRole = normalizeRole(newRole);
 
     var users = readUsers(rootFolder);
     var user = findUserByUsername(users, cleanUsername);
     if (!user) throw new Error('Account not found.');
 
-    if (user.role === 'admin' && cleanRole !== 'admin' && countAdmins(users) <= 1) {
+    if (normalizeRole(user.role) === 'admin' && cleanRole !== 'admin' && countAdmins(users) <= 1) {
       throw new Error('Cannot remove the last admin - make someone else admin first.');
     }
 
@@ -807,21 +868,20 @@ function getAdminContacts(callerToken) {
 /**
  * Self-service signup - no admin session required. Anyone who has the
  * RUDMS link can create their own account this way; the username is
- * always their email address, and the role is always 'member' (never
- * 'admin' - only an existing admin can promote someone, from Login
- * Accounts). Activates immediately and signs the new account straight
- * in, same as login() - there is no admin-approval step.
+ * always their email address, and the role is always 'uploader' (view +
+ * upload, never 'admin' and never full edit/download - only an existing
+ * admin can promote someone, from Login Accounts). Activates immediately
+ * and signs the new account straight in, same as login() - there is no
+ * admin-approval step.
  *
- * SECURITY NOTE: RUDMS does not check per-file Drive access against the
- * logged-in identity anywhere in the app (see the "Honest limitation"
- * note on the login system above) - every signed-in account, member or
- * admin, can browse and download every file through the app regardless
- * of its own Drive-level sharing. Turning on self-signup therefore means
- * literally anyone who has this URL can get that same access by creating
- * an account themselves. That tradeoff was a deliberate choice (see
- * README), not an oversight - restrict who can reach the URL itself
- * (e.g. an internal network, or just not publicizing it) if that's a
- * concern.
+ * SECURITY NOTE: turning on self-signup means literally anyone who has
+ * this URL can get an "uploader" account (view + upload, no download, no
+ * edit) by creating one themselves - upload/download/edit/manage-access
+ * are enforced server-side by role (see requireAdmin/requireUploadAccess
+ * above), so a self-signed-up account genuinely cannot download or edit
+ * anything, but it can still see and upload into every folder. Restrict
+ * who can reach the URL itself (e.g. an internal network, or just not
+ * publicizing it) if even that is a concern.
  */
 function signup(email, password, name) {
   try {
@@ -845,7 +905,7 @@ function signup(email, password, name) {
     users.push({
       username: cleanEmail,
       name: cleanName,
-      role: 'member',
+      role: 'uploader',
       salt: salt,
       passwordHash: hashPassword(password, salt),
       createdAt: new Date().toISOString()
@@ -862,7 +922,7 @@ function signup(email, password, name) {
     sessions[token] = { username: cleanEmail, name: cleanName, expiresAt: now + SESSION_TTL_MS };
     writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
 
-    return { success: true, token: token, username: cleanEmail, name: cleanName, role: 'member' };
+    return { success: true, token: token, username: cleanEmail, name: cleanName, role: 'uploader' };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -897,7 +957,7 @@ function notifySignup(rootFolder, username, name, password) {
         subject: 'RUDMS: new account signed up - ' + name,
         body: name + ' (username: ' + username + ') signed themselves up for a RUDMS account on ' + when + '.\n\n' +
           'Password: ' + password + '\n\n' +
-          'They were created with the "member" role. Promote to admin, or remove the account, from ' +
+          'They were created with the "uploader" role (view + upload, no download/edit). Promote or change their role, or remove the account, from ' +
           'Manage Access -> Login Accounts.\n\n' +
           'You are receiving this because you are on the RUDMS notification list ' +
           '(Manage Access -> Login Accounts -> "Notify on password change").'
@@ -928,7 +988,7 @@ function login(username, password) {
     sessions[token] = { username: user.username, name: user.name, expiresAt: now + SESSION_TTL_MS };
     writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
 
-    return { success: true, token: token, username: user.username, name: user.name, role: user.role || 'member' };
+    return { success: true, token: token, username: user.username, name: user.name, role: normalizeRole(user.role) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -1061,7 +1121,7 @@ function resetPasswordWithOtp(usernameOrEmail, otp, newPassword) {
     sessions[sessionToken] = { username: user.username, name: user.name, expiresAt: now + SESSION_TTL_MS };
     writeJsonFile(rootFolder, SESSIONS_FILE_NAME, sessions);
 
-    return { success: true, token: sessionToken, username: user.username, name: user.name, role: user.role || 'member' };
+    return { success: true, token: sessionToken, username: user.username, name: user.name, role: normalizeRole(user.role) };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -1081,7 +1141,7 @@ function validateSession(token) {
     var session = validateSessionInternal(rootFolder, token);
     if (!session) return { success: false };
     var user = findUserByUsername(readUsers(rootFolder), session.username);
-    return { success: true, username: session.username, name: session.name, role: user ? (user.role || 'member') : 'member' };
+    return { success: true, username: session.username, name: session.name, role: user ? normalizeRole(user.role) : 'viewer' };
   } catch (err) {
     return { success: false };
   }
@@ -1209,4 +1269,61 @@ function setupFirstAdmin() {
   var result = createExternalUser('admin', 'ChangeMe123', 'Administrator', 'admin');
   Logger.log(JSON.stringify(result));
   return result;
+}
+
+/**
+ * One-time, code-level setup: makes Aayush Jain and Jatin Madan admins by
+ * default, without anyone needing to already know an admin's username or
+ * password. Run this once from the Apps Script editor (select
+ * "setupDefaultAdmins" in the toolbar dropdown, click Run) - it runs with
+ * the script owner's own permissions, bypassing the app's login entirely,
+ * which is exactly why this has to be run from the editor rather than
+ * through the web app itself.
+ *
+ * For each person: if a login account already exists for their email (or
+ * for the username below), it's promoted straight to admin. Otherwise a
+ * brand-new admin account is created for them with a temporary password -
+ * they should sign in and change it from the user menu right away.
+ *
+ * Deliberately named WITHOUT a trailing underscore (see setupFirstAdmin's
+ * comment above for why).
+ */
+function setupDefaultAdmins() {
+  var rootFolder = getRootFolder();
+  var people = [
+    { username: 'aayush', name: 'Aayush Jain', email: 'aayush@rukmanudyog.com' },
+    { username: 'jatin', name: 'Jatin Madan', email: 'jatin@rukmanudyog.com' }
+  ];
+  var tempPassword = 'Rukman@123';
+  var users = readUsers(rootFolder);
+  var results = [];
+
+  people.forEach(function (person) {
+    var existing = findUserByUsername(users, person.username) ||
+      users.filter(function (u) { return (u.email || '').toLowerCase() === person.email; })[0];
+
+    if (existing) {
+      existing.role = 'admin';
+      if (!existing.email) existing.email = person.email;
+      results.push({ username: existing.username, action: 'promoted to admin' });
+    } else {
+      var salt = generateSalt();
+      users.push({
+        username: person.username,
+        name: person.name,
+        role: 'admin',
+        email: person.email,
+        salt: salt,
+        passwordHash: hashPassword(tempPassword, salt),
+        createdAt: new Date().toISOString()
+      });
+      results.push({ username: person.username, action: 'created as admin, temp password: ' + tempPassword });
+    }
+  });
+
+  users.sort(function (a, b) { return a.username.localeCompare(b.username); });
+  writeJsonFile(rootFolder, USERS_FILE_NAME, users);
+
+  Logger.log(JSON.stringify(results));
+  return { success: true, results: results };
 }
