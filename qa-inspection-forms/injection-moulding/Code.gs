@@ -35,7 +35,7 @@ var CHECKPOINTS = [
   { key: 'flowMark', label: 'Flow Mark', spec: 'Not Required', mode: 'Visual', type: 'select' },
   { key: 'airBubble', label: 'Air Bubble', spec: 'Not Required', mode: 'Visual', type: 'select' },
   { key: 'wavness', label: 'Wavness', spec: 'Not Required', mode: 'Visual', type: 'select' },
-  { key: 'warpage', label: 'Warpage', spec: 'As per sample', mode: 'Manually', type: 'select' },
+  { key: 'warpage', label: 'Warpage', spec: 'As per sample', mode: 'Manually', type: 'select', options: ['OK', 'Not OK', 'N/A'] },
   { key: 'twisting', label: 'Twisting', spec: 'Part should not crack', mode: 'Visual', type: 'select' },
   { key: 'crack', label: 'Crack', spec: 'Not Required', mode: 'Visual', type: 'select' },
   { key: 'colourVariation', label: 'Colour Variation', spec: 'Not Required', mode: 'Visual', type: 'select' },
@@ -190,24 +190,30 @@ function createSessionRows_(sheet, dateStr, machineNo, partName, timestamp) {
 }
 
 /**
- * Returns the next unfilled {shift, slot} for the given Date + Machine No + Part Name,
- * or null if every slot for that day has already been filled, or if this
- * session's Status is already "Report Generated" (finalized - no further
- * entries allowed even if slots remain).
+ * Returns the next unfilled {shift, slot} within the given shift (the
+ * person filling the form picks Day/A-Shift or Night/B-Shift themselves -
+ * there's no default), for the given Date + Machine No + Part Name. Null
+ * if every slot in that shift is already filled, or if this session's
+ * Status is already "Report Generated" (finalized - no further entries
+ * allowed even if slots remain, in either shift).
  */
-function getNextSlot(dateStr, machineNo, partName) {
+function getNextSlot(dateStr, machineNo, partName, shift) {
   var sheet = getSheet_();
   var map = findSessionRows_(sheet, dateStr, machineNo, partName);
   var all = allSlotsInOrder_();
+  var shiftIndices = [];
+  all.forEach(function (s, i) { if (s.shift === shift) { shiftIndices.push(i); } });
+
   if (Object.keys(map).length === 0) {
-    return all[0];
+    return all[shiftIndices[0]] || null;
   }
   var anyRow = map[CHECKPOINTS[0].label];
   var rowValues = sheet.getRange(anyRow, 1, 1, totalCols_()).getValues()[0];
   if (rowValues[statusCol_() - 1] === 'Report Generated') {
     return null;
   }
-  for (var i = 0; i < all.length; i++) {
+  for (var k = 0; k < shiftIndices.length; k++) {
+    var i = shiftIndices[k];
     if (!rowValues[slotValueCol_(i) - 1]) {
       return all[i];
     }
@@ -567,11 +573,11 @@ function submitInspection(payload, finalize) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    if (!payload.date || !payload.machineNo || !payload.partName) {
-      throw new Error('Date, Machine No and Part Name are required.');
+    if (!payload.date || !payload.machineNo || !payload.partName || !payload.shift) {
+      throw new Error('Date, Machine No, Part Name and Shift are required.');
     }
     var sheet = getSheet_();
-    var next = getNextSlot(payload.date, payload.machineNo, payload.partName);
+    var next = getNextSlot(payload.date, payload.machineNo, payload.partName, payload.shift);
     if (!next || next.shift !== payload.shift || next.slot !== payload.slot) {
       throw new Error('This time slot is not the next one due, or this report has already been finalized (Report Generated). Please refresh and try again.');
     }
@@ -619,7 +625,7 @@ function submitInspection(payload, finalize) {
 
     return {
       ok: true,
-      nextSlot: getNextSlot(payload.date, payload.machineNo, payload.partName),
+      nextSlot: getNextSlot(payload.date, payload.machineNo, payload.partName, payload.shift),
       emailSent: emailSent,
       emailError: emailError
     };

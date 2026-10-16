@@ -81,6 +81,13 @@
       <label for="partName">Part Name</label>
       <input type="text" id="partName" placeholder="Part name">
 
+      <label for="shift">Shift</label>
+      <select id="shift">
+        <option value="">Select Shift</option>
+        <option value="Day/A-Shift">Day / A-Shift</option>
+        <option value="Night/B-Shift">Night / B-Shift</option>
+      </select>
+
       <button class="btn btn-outline" id="checkSlotBtn" type="button">Check Next Time Slot</button>
       <div id="slotArea"></div>
     </div>
@@ -106,6 +113,7 @@
   <script>
     var CONFIG = null;
     var currentSlot = null; // {shift, slot}
+    var currentShift = null;
 
     function showOverlay(show) {
       document.getElementById('overlay').classList.toggle('show', show);
@@ -138,11 +146,11 @@
         } else if (cp.type === 'text') {
           inputHtml = '<input type="text" data-key="' + cp.key + '" id="cp_' + cp.key + '" placeholder="e.g. 100 GSM or 1.2 KGS">';
         } else {
-          inputHtml = '<select data-key="' + cp.key + '" id="cp_' + cp.key + '">' +
-            '<option value="">Select</option>' +
-            '<option value="OK">OK</option>' +
-            '<option value="Not OK">Not OK</option>' +
-            '</select>';
+          var opts = cp.options || ['OK', 'Not OK'];
+          var optionsHtml = '<option value="">Select</option>' + opts.map(function (o) {
+            return '<option value="' + o + '">' + o + '</option>';
+          }).join('');
+          inputHtml = '<select data-key="' + cp.key + '" id="cp_' + cp.key + '">' + optionsHtml + '</select>';
         }
         div.innerHTML = '<label>' + cp.label + '</label><p class="spec">' + specText + '</p>' + inputHtml;
         list.appendChild(div);
@@ -153,12 +161,13 @@
       var date = document.getElementById('date').value;
       var machineNo = document.getElementById('machineNo').value.trim();
       var partName = document.getElementById('partName').value.trim();
+      var shift = document.getElementById('shift').value;
       var slotArea = document.getElementById('slotArea');
       slotArea.innerHTML = '';
       document.getElementById('checkpointsCard').classList.add('hidden');
 
-      if (!date || !machineNo || !partName) {
-        slotArea.innerHTML = '<div class="error-banner">Please fill Date, M/C No. and Part Name first.</div>';
+      if (!date || !machineNo || !partName || !shift) {
+        slotArea.innerHTML = '<div class="error-banner">Please fill Date, M/C No., Part Name and select a Shift first.</div>';
         return;
       }
 
@@ -166,20 +175,21 @@
       google.script.run
         .withSuccessHandler(function (next) {
           showOverlay(false);
-          onSlotResult(next);
+          onSlotResult(next, shift);
         })
         .withFailureHandler(function (err) {
           showOverlay(false);
           slotArea.innerHTML = '<div class="error-banner">' + err.message + '</div>';
         })
-        .getNextSlot(date, machineNo, partName);
+        .getNextSlot(date, machineNo, partName, shift);
     }
 
-    function onSlotResult(next) {
+    function onSlotResult(next, shift) {
       var slotArea = document.getElementById('slotArea');
+      if (shift) { currentShift = shift; }
       if (!next) {
         currentSlot = null;
-        slotArea.innerHTML = '<div class="done-banner">All time slots are filled, or this report has already been finalized (Report Generated). No further entries allowed for this Date / M.C. No. / Part Name.</div>';
+        slotArea.innerHTML = '<div class="done-banner">All time slots for ' + currentShift + ' are filled, or this report has already been finalized (Report Generated).</div>';
         document.getElementById('checkpointsCard').classList.add('hidden');
         return;
       }
