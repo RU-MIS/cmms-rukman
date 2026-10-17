@@ -36,7 +36,6 @@
     }
     .btn-primary { background: #2563eb; color: #fff; }
     .btn-secondary { background: #059669; color: #fff; }
-    .btn-outline { background: #fff; color: #2563eb; border: 1px solid #2563eb; }
     .btn:disabled { opacity: 0.5; }
     .checkpoint { border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px; }
     .checkpoint:first-child { border-top: none; margin-top: 0; padding-top: 0; }
@@ -44,7 +43,7 @@
     .slot-banner {
       background: #eef4ff; border: 1px solid #bcd4ff; color: #1d4ed8;
       padding: 10px 12px; border-radius: 8px; font-size: 14px; font-weight: 600;
-      text-align: center;
+      text-align: center; margin-top: 8px;
     }
     .done-banner {
       background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857;
@@ -54,7 +53,6 @@
       background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
       padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 8px;
     }
-    .hidden { display: none; }
     .muted { color: #666; font-size: 12px; }
     #overlay {
       position: fixed; inset: 0; background: rgba(255,255,255,0.7);
@@ -92,12 +90,10 @@
       <select id="slot">
         <option value="">Select Time Slot</option>
       </select>
-
-      <button class="btn btn-outline" id="checkSlotBtn" type="button">Check Time Slot</button>
       <div id="slotArea"></div>
     </div>
 
-    <div class="card hidden" id="checkpointsCard">
+    <div class="card" id="checkpointsCard">
       <div id="checkpointsList"></div>
 
       <label for="remarks">Remarks</label>
@@ -108,7 +104,7 @@
 
       <button class="btn btn-primary" id="submitBtn" type="button">Submit</button>
       <button class="btn btn-secondary" id="submitReportBtn" type="button">Submit &amp; Generate Report</button>
-      <p class="muted">Submit just saves this reading. "Submit &amp; Generate Report" saves it and marks it as Report Generated.</p>
+      <p class="muted">Submit just saves this reading. "Submit &amp; Generate Report" saves it and marks it as Report Generated. The correct time slot is found and checked automatically - no separate check step needed.</p>
       <div id="submitError"></div>
     </div>
   </div>
@@ -117,8 +113,6 @@
 
   <script>
     var CONFIG = null;
-    var currentSlot = null; // {shift, slot}
-    var currentShift = null;
 
     function showOverlay(show) {
       document.getElementById('overlay').classList.toggle('show', show);
@@ -143,6 +137,7 @@
         opt.textContent = s;
         slotSel.appendChild(opt);
       });
+      renderCheckpoints();
     }
 
     function renderCheckpoints() {
@@ -169,70 +164,43 @@
       });
     }
 
-    function checkSlot() {
+    // Automatically looks up what's actually next due, as soon as Date/M-C
+    // No./Part Name/Shift are filled in - no button click needed. If a
+    // specific slot is due, it's auto-selected in the Time Slot dropdown
+    // (the person can still change it); if this shift's first entry is
+    // free, the dropdown is left for them to pick any slot.
+    function refreshSlotHint() {
       var date = document.getElementById('date').value;
       var machineNo = document.getElementById('machineNo').value.trim();
       var partName = document.getElementById('partName').value.trim();
       var shift = document.getElementById('shift').value;
-      var slot = document.getElementById('slot').value;
       var slotArea = document.getElementById('slotArea');
-      slotArea.innerHTML = '';
-      document.getElementById('checkpointsCard').classList.add('hidden');
 
-      if (!date || !machineNo || !partName || !shift || !slot) {
-        slotArea.innerHTML = '<div class="error-banner">Please fill Date, M/C No., Part Name and select a Shift and Time Slot first.</div>';
+      if (!date || !machineNo || !partName || !shift) {
+        slotArea.innerHTML = '';
         return;
       }
 
-      showOverlay(true);
       google.script.run
         .withSuccessHandler(function (next) {
-          showOverlay(false);
-          onSlotResult(next, shift, slot);
+          if (!next) {
+            slotArea.innerHTML = '<div class="done-banner">All time slots for ' + shift + ' are filled, or this report has already been finalized (Report Generated).</div>';
+            return;
+          }
+          if (next.free) {
+            slotArea.innerHTML = '<div class="slot-banner">No time slot filled yet for ' + next.shift + '. Pick any Time Slot above to start.</div>';
+          } else {
+            document.getElementById('slot').value = next.slot;
+            slotArea.innerHTML = '<div class="slot-banner">Next slot due: ' + next.shift + ' &mdash; ' + next.slot + ' (auto-selected above).</div>';
+          }
         })
         .withFailureHandler(function (err) {
-          showOverlay(false);
           slotArea.innerHTML = '<div class="error-banner">' + err.message + '</div>';
         })
         .getNextSlot(date, machineNo, partName, shift);
     }
 
-    // next = the slot the server says is actually next due (ground truth).
-    // shift/slot = what the user manually picked (omitted right after a
-    // submit, when this is just an informational "what's due next" banner).
-    function onSlotResult(next, shift, slot) {
-      var slotArea = document.getElementById('slotArea');
-      if (shift) { currentShift = shift; }
-      if (!next) {
-        currentSlot = null;
-        document.getElementById('checkpointsCard').classList.add('hidden');
-        slotArea.innerHTML = '<div class="done-banner">All time slots for ' + currentShift + ' are filled, or this report has already been finalized (Report Generated).</div>';
-        return;
-      }
-      if (!slot) {
-        // Informational only - don't auto-confirm. User must pick the
-        // Shift & Time Slot manually and tap "Check Time Slot" again.
-        currentSlot = null;
-        document.getElementById('checkpointsCard').classList.add('hidden');
-        slotArea.innerHTML = next.free
-          ? '<div class="slot-banner">No time slot filled yet for ' + next.shift + '. Select any Time Slot above to start, then tap "Check Time Slot".</div>'
-          : '<div class="slot-banner">Next slot due: ' + next.shift + ' &mdash; ' + next.slot + '. Select it above and tap "Check Time Slot" to continue.</div>';
-        return;
-      }
-      if (!next.free && (next.shift !== shift || next.slot !== slot)) {
-        currentSlot = null;
-        document.getElementById('checkpointsCard').classList.add('hidden');
-        slotArea.innerHTML = '<div class="error-banner">This is not the next due time slot. The slot that must be filled next is: ' + next.shift + ' &mdash; ' + next.slot + '. Please select that Shift &amp; Time Slot and try again.</div>';
-        return;
-      }
-      currentSlot = { shift: shift, slot: slot };
-      slotArea.innerHTML = '<div class="slot-banner">Time slot confirmed: ' + shift + ' &mdash; ' + slot + '</div>';
-      renderCheckpoints();
-      document.getElementById('checkpointsCard').classList.remove('hidden');
-      document.getElementById('submitError').innerHTML = '';
-    }
-
-    function collectPayload() {
+    function collectPayload(shift, slot) {
       var values = {};
       var missing = [];
       CONFIG.checkpoints.forEach(function (cp) {
@@ -246,8 +214,8 @@
           date: document.getElementById('date').value,
           machineNo: document.getElementById('machineNo').value.trim(),
           partName: document.getElementById('partName').value.trim(),
-          shift: currentSlot.shift,
-          slot: currentSlot.slot,
+          shift: shift,
+          slot: slot,
           values: values,
           remarks: document.getElementById('remarks').value,
           inspectorSign: document.getElementById('inspectorSign').value.trim()
@@ -256,12 +224,29 @@
       };
     }
 
+    function clearCheckpointInputs() {
+      CONFIG.checkpoints.forEach(function (cp) {
+        var el = document.getElementById('cp_' + cp.key);
+        if (el) { el.value = ''; }
+      });
+    }
+
     function doSubmit(finalize) {
       var errorDiv = document.getElementById('submitError');
       errorDiv.innerHTML = '';
-      if (!currentSlot) { return; }
 
-      var result = collectPayload();
+      var date = document.getElementById('date').value;
+      var machineNo = document.getElementById('machineNo').value.trim();
+      var partName = document.getElementById('partName').value.trim();
+      var shift = document.getElementById('shift').value;
+      var slot = document.getElementById('slot').value;
+
+      if (!date || !machineNo || !partName || !shift || !slot) {
+        errorDiv.innerHTML = '<div class="error-banner">Please fill Date, M/C No., Part Name and select a Shift and Time Slot.</div>';
+        return;
+      }
+
+      var result = collectPayload(shift, slot);
       if (result.missing.length) {
         errorDiv.innerHTML = '<div class="error-banner">Please fill: ' + result.missing.join(', ') + '</div>';
         return;
@@ -278,14 +263,15 @@
           document.getElementById('remarks').value = '';
           document.getElementById('inspectorSign').value = '';
           document.getElementById('slot').value = '';
-          onSlotResult(res.nextSlot, null, null);
-          var slotArea = document.getElementById('slotArea');
+          clearCheckpointInputs();
+          refreshSlotHint();
           var msg = finalize ? 'Saved. Marked as Report Generated.' : 'Saved. Marked as Submitted.';
           if (finalize) {
             msg += res.emailSent
               ? ' Report emailed to qms1@rukmanudyog.com.'
               : ' (Could not email report: ' + (res.emailError || 'unknown error') + ')';
           }
+          var slotArea = document.getElementById('slotArea');
           slotArea.innerHTML = '<div class="done-banner">' + msg + '</div>' + slotArea.innerHTML;
         })
         .withFailureHandler(function (err) {
@@ -295,7 +281,10 @@
         .submitInspection(result.payload, finalize);
     }
 
-    document.getElementById('checkSlotBtn').addEventListener('click', checkSlot);
+    document.getElementById('date').addEventListener('change', refreshSlotHint);
+    document.getElementById('machineNo').addEventListener('change', refreshSlotHint);
+    document.getElementById('partName').addEventListener('change', refreshSlotHint);
+    document.getElementById('shift').addEventListener('change', refreshSlotHint);
     document.getElementById('submitBtn').addEventListener('click', function () { doSubmit(false); });
     document.getElementById('submitReportBtn').addEventListener('click', function () { doSubmit(true); });
 
