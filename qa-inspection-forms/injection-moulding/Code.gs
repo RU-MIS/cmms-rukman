@@ -145,6 +145,29 @@ function fixExistingHeaderMerges() {
 }
 
 /**
+ * ONE-TIME FIX - run this once from the Apps Script editor (function
+ * dropdown > select fixMissingTitleRows > Run) if this sheet was created
+ * by an older version of the script that only had 2 header rows (DAY/
+ * NIGHT band + column headers), from before the "RUKMAN UDYOG" / form-
+ * title rows were added on top. Without those 2 extra rows, every row
+ * number the current code expects is off by 2 - the first 2 Check Point
+ * rows get read as if they don't exist, which surfaces as "parameters
+ * (null,number,number,number) don't match ... getRange" when checking
+ * the next time slot. Inserts the 2 missing rows at the very top
+ * (shifting the existing header AND all data rows down by 2 - nothing is
+ * deleted or overwritten) and rebuilds the header. Safe to run more than
+ * once; no-ops if this sheet is already migrated.
+ */
+function fixMissingTitleRows() {
+  var sheet = getSheet_();
+  if (sheet.getRange(1, 1).getValue() === 'RUKMAN UDYOG') {
+    return; // Already has the title rows - nothing to do.
+  }
+  sheet.insertRowsBefore(1, 2);
+  buildHeaders_(sheet);
+}
+
+/**
  * Sheets silently converts a date-looking string (e.g. "2026-09-18") into a
  * real Date value when it's written to a cell, so reading it back gives a
  * Date object, not the original string. Normalize both sides to the same
@@ -228,6 +251,9 @@ function getNextSlot(dateStr, machineNo, partName, shift) {
     return { shift: shift, slot: null, free: true };
   }
   var anyRow = map[CHECKPOINTS[0].label];
+  if (!anyRow) {
+    throw new Error('This session\'s rows look incomplete on the sheet (missing the "' + CHECKPOINTS[0].label + '" row). Run fixMissingTitleRows from the Apps Script editor if this sheet predates the title rows, then try again.');
+  }
   var rowValues = sheet.getRange(anyRow, 1, 1, totalCols_()).getValues()[0];
   if (rowValues[statusCol_() - 1] === 'Report Generated') {
     return null;
