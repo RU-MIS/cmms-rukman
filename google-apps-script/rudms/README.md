@@ -367,6 +367,41 @@ Google Sites page via `<iframe>`.
     or (b) Autodesk Forge Viewer (separate paid service) — both are outside
     the scope of a single Apps Script file.
 
+## Load speed
+
+Three changes keep first load fast as the file count and feature set grow:
+
+- **Preview libraries load on demand, not up front.** Three.js (+ its 3
+  CAD addons), SheetJS, mammoth.js, JSZip and PDF.js together are close to
+  2MB - previously all five loaded as `<script src>` tags on *every* page
+  load, CAD viewer included, whether or not that visit ever opened a PDF/
+  Excel/Word/zip/3D file. They're now fetched lazily (`ensureLib()` in
+  `Index.html`), the first time a preview actually needs that specific
+  library, in parallel with that file's own content fetch - so opening a
+  PDF for the first time costs a one-time ~300KB fetch, but the app itself
+  loads without any of that weight.
+- **Boot calls run in parallel, not one after another.** `getFolderTree()`
+  and `getAllFiles()` don't depend on each other, so the client fires both
+  at once (`loadCategoriesAndFiles()`) instead of waiting for the first to
+  finish before starting the second - each `google.script.run` round trip
+  has its own real latency, so this removes one full wait from every load.
+- **The expensive Drive walk is cached server-side.** `getAllFiles()`'s
+  cost scales with how many files exist, not with who's asking, so the
+  raw per-file metadata (not the per-caller capability flags, which are
+  cheap to compute) is cached via `CacheService` for 5 minutes
+  (`getRawFileList()` in `Code.gs`). Every write that can change a file -
+  upload, delete, rename, a permission change - calls
+  `invalidateFilesCache()` so the next load always sees it; the TTL is
+  just a safety net, not the real freshness mechanism.
+
+**What's still out of this app's control**: Apps Script's own cold-start
+(Google spinning up your script's execution environment) and
+`HtmlService`'s own response time for serving `Index.html` both have
+real, unavoidable latency on `script.google.com` - typically a couple of
+seconds on a first visit, faster on a warm one. Nothing in this codebase
+can remove that; the changes above remove everything that *was* avoidable
+on top of it.
+
 ## Deployment (step by step)
 
 1. **Create the Apps Script project**

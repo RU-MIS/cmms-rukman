@@ -24,20 +24,18 @@
   <meta name="apple-mobile-web-app-title" content="RUDMS">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#0a3652">
+  <!--
+    Three.js (+ its 3 addons), SheetJS, mammoth.js, JSZip and PDF.js are
+    NOT loaded here - each one is only ever needed to preview one specific
+    file type, so loading all ~2MB of them on every single page load (CAD
+    viewer included) would make first paint slow for everyone, every time,
+    regardless of whether they ever open that file type this session. They
+    load lazily, on demand, the first time a preview actually needs them -
+    see ensureLib()/LIB_URLS further down.
+  -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-  </script>
   <script>
     tailwind.config = {
       theme: {
@@ -702,6 +700,53 @@
   var ZIP_EXT = ['zip']; // shows the file listing inside, not a preview of each entry.
 
   // ---------------------------------------------------------------------
+  // Lazy script loading - see the <head> comment for why these aren't
+  // just <script src> tags. Each loadScriptOnce() call appends a real
+  // <script> tag and caches its promise by URL, so asking for the same
+  // library twice (e.g. opening two PDFs in a row) only ever fetches it
+  // once per page load.
+  // ---------------------------------------------------------------------
+  var loadedScripts = {};
+  function loadScriptOnce(src) {
+    if (!loadedScripts[src]) {
+      loadedScripts[src] = new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = function () { reject(new Error('Could not load ' + src)); };
+        document.head.appendChild(s);
+      });
+    }
+    return loadedScripts[src];
+  }
+  /** Loads a list of script URLs strictly in order (needed for Three.js's addons, which attach themselves onto the THREE global the core script defines). */
+  function loadScriptsInOrder(urls) {
+    return urls.reduce(function (p, url) { return p.then(function () { return loadScriptOnce(url); }); }, Promise.resolve());
+  }
+  var LIB_URLS = {
+    pdf: ['https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'],
+    xlsx: ['https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'],
+    mammoth: ['https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js'],
+    jszip: ['https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'],
+    three: [
+      'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
+      'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js',
+      'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js',
+      'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js'
+    ]
+  };
+  var pdfWorkerConfigured = false;
+  /** Resolves once the named library (and, for 'three', its addons in order) is ready to use on window. */
+  function ensureLib(name) {
+    return loadScriptsInOrder(LIB_URLS[name]).then(function () {
+      if (name === 'pdf' && !pdfWorkerConfigured) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+        pdfWorkerConfigured = true;
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------
   document.addEventListener('DOMContentLoaded', init);
@@ -741,21 +786,24 @@
   }
 
   function loadCategoriesAndFiles() {
-    setBootMessage('Loading categories…');
-    return callServer('getFolderTree').then(function (catRes) {
+    setBootMessage('Loading categories and files…');
+    // Fired together rather than one-after-another - these two calls
+    // don't depend on each other, so there's no reason to pay for two
+    // sequential round-trips to Apps Script (each with its own real
+    // latency) when they can run concurrently.
+    var categoriesPromise = callServer('getFolderTree').then(function (catRes) {
       if (!catRes.success) throw new Error(catRes.error || 'Failed to load categories');
       state.folderTree = catRes.tree || [];
-
-      setBootMessage('Loading files…');
-      // Don't let a getAllFiles hiccup block the whole app - the rest
-      // (browsing categories, uploading) works fine without it. Land
-      // on an empty list with a visible "Couldn't load files" notice
-      // and a manual retry instead of a full boot failure.
-      return loadFiles().catch(function (err) {
-        state.files = [];
-        state.filesLoadError = String(err);
-      });
-    }).then(finishBoot);
+    });
+    // Don't let a getAllFiles hiccup block the whole app - the rest
+    // (browsing categories, uploading) works fine without it. Land on an
+    // empty list with a visible "Couldn't load files" notice and a
+    // manual retry instead of a full boot failure.
+    var filesPromise = loadFiles().catch(function (err) {
+      state.files = [];
+      state.filesLoadError = String(err);
+    });
+    return Promise.all([categoriesPromise, filesPromise]).then(finishBoot);
   }
 
   function showLoginScreen() {
@@ -2389,7 +2437,8 @@
     }
 
     if (PDF_EXT.indexOf(ext) !== -1) {
-      callServer('getFileContentForPreview', f.fileId, state.authToken).then(function (res) {
+      Promise.all([callServer('getFileContentForPreview', f.fileId, state.authToken), ensureLib('pdf')]).then(function (results) {
+        var res = results[0];
         if (!res.success) { body.innerHTML = previewError(res.error); return; }
         renderPdfPreview(res.base64);
       }).catch(function (err) { body.innerHTML = previewError(String(err)); });
@@ -2397,7 +2446,8 @@
     }
 
     if (EXCEL_EXT.indexOf(ext) !== -1) {
-      callServer('getFileContentForPreview', f.fileId, state.authToken).then(function (res) {
+      Promise.all([callServer('getFileContentForPreview', f.fileId, state.authToken), ensureLib('xlsx')]).then(function (results) {
+        var res = results[0];
         if (!res.success) { body.innerHTML = previewError(res.error); return; }
         renderSpreadsheetPreview(res.base64, false);
       }).catch(function (err) { body.innerHTML = previewError(String(err)); });
@@ -2405,7 +2455,8 @@
     }
 
     if (CSV_EXT.indexOf(ext) !== -1) {
-      callServer('getFileContentForPreview', f.fileId, state.authToken).then(function (res) {
+      Promise.all([callServer('getFileContentForPreview', f.fileId, state.authToken), ensureLib('xlsx')]).then(function (results) {
+        var res = results[0];
         if (!res.success) { body.innerHTML = previewError(res.error); return; }
         renderSpreadsheetPreview(res.base64, true);
       }).catch(function (err) { body.innerHTML = previewError(String(err)); });
@@ -2413,7 +2464,8 @@
     }
 
     if (WORD_EXT.indexOf(ext) !== -1) {
-      callServer('getFileContentForPreview', f.fileId, state.authToken).then(function (res) {
+      Promise.all([callServer('getFileContentForPreview', f.fileId, state.authToken), ensureLib('mammoth')]).then(function (results) {
+        var res = results[0];
         if (!res.success) { body.innerHTML = previewError(res.error); return; }
         renderWordPreview(res.base64);
       }).catch(function (err) { body.innerHTML = previewError(String(err)); });
@@ -2437,7 +2489,8 @@
     }
 
     if (ZIP_EXT.indexOf(ext) !== -1) {
-      callServer('getFileContentForPreview', f.fileId, state.authToken).then(function (res) {
+      Promise.all([callServer('getFileContentForPreview', f.fileId, state.authToken), ensureLib('jszip')]).then(function (results) {
+        var res = results[0];
         if (!res.success) { body.innerHTML = previewError(res.error); return; }
         renderZipPreview(res.base64);
       }).catch(function (err) { body.innerHTML = previewError(String(err)); });
@@ -2471,7 +2524,8 @@
 
     if (CAD_3D_EXT.indexOf(ext) !== -1) {
       body.innerHTML = '<div id="cadCanvasWrap" class="w-full h-full"></div><p class="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-slate-400 bg-white/80 px-2 py-1 rounded">Drag to rotate · Scroll to zoom</p>';
-      callServer('getFileContentForPreview', f.fileId, state.authToken).then(function (res) {
+      Promise.all([callServer('getFileContentForPreview', f.fileId, state.authToken), ensureLib('three')]).then(function (results) {
+        var res = results[0];
         if (!res.success) { body.innerHTML = previewError(res.error); return; }
         render3DModel(ext, res.base64);
       }).catch(function (err) { body.innerHTML = previewError(String(err)); });

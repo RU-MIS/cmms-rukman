@@ -350,36 +350,81 @@ function ensureDefaultCategories() {
  * everyone sees everything, since per-file view restriction is opt-in by
  * an admin (see buildFileMeta's comment).
  */
+var FILES_CACHE_KEY = 'RUDMS_RAW_FILES_V1';
+var FILES_CACHE_TTL_SEC = 300; // 5 min safety net - every write below calls invalidateFilesCache() explicitly anyway, so this TTL rarely matters
+
+/**
+ * The expensive part of getAllFiles() - walking every category folder via
+ * DriveApp and reading each file's own description - cached as plain
+ * (capability-free) records for FILES_CACHE_TTL_SEC, since that walk's
+ * cost scales with how many files exist, not with who's asking. Every
+ * write that can change a file's existence or metadata
+ * (upload/delete/rename/permission changes) calls invalidateFilesCache()
+ * so the next load always sees it - the TTL is just a safety net, not the
+ * real freshness mechanism. A cache write failure (e.g. the file list is
+ * too big for a single 100KB CacheService entry) is harmless: it just
+ * means this call, and the next one, re-walks Drive instead of hitting
+ * the cache.
+ */
+function getRawFileList(rootFolder) {
+  var cache = CacheService.getScriptCache();
+  try {
+    var cached = cache.get(FILES_CACHE_KEY);
+    if (cached) return JSON.parse(cached);
+  } catch (err) {
+    // Corrupt/unreadable cache entry - fall through and rebuild.
+  }
+
+  var files = [];
+  function walkFolder(folder, path) {
+    var fileIter = folder.getFiles();
+    while (fileIter.hasNext()) {
+      var file = fileIter.next();
+      if (!file.isTrashed()) files.push(fileToRecord(file, path));
+    }
+    var folderIter = folder.getFolders();
+    while (folderIter.hasNext()) {
+      var sub = folderIter.next();
+      if (sub.isTrashed()) continue;
+      walkFolder(sub, path + '/' + sub.getName());
+    }
+  }
+  var topIter = rootFolder.getFolders();
+  while (topIter.hasNext()) {
+    var topFolder = topIter.next();
+    if (!topFolder.isTrashed()) walkFolder(topFolder, topFolder.getName());
+  }
+
+  try {
+    cache.put(FILES_CACHE_KEY, JSON.stringify(files), FILES_CACHE_TTL_SEC);
+  } catch (err) {
+    // Too large for one cache entry, or some other cache hiccup - fine, see comment above.
+  }
+  return files;
+}
+
+function invalidateFilesCache() {
+  try { CacheService.getScriptCache().remove(FILES_CACHE_KEY); } catch (err) {}
+}
+
 function getAllFiles(callerToken) {
   try {
     var rootFolder = getRootFolder();
     var caller = requireUserAndRole(rootFolder, callerToken);
+    var raw = getRawFileList(rootFolder);
     var files = [];
 
-    function walkFolder(folder, path) {
-      var fileIter = folder.getFiles();
-      while (fileIter.hasNext()) {
-        var file = fileIter.next();
-        if (file.isTrashed()) continue;
-        var meta = parseFileMeta(file.getDescription());
-        if (canViewFileMeta(meta, caller, caller.role)) {
-          files.push(fileToRecord(file, path, caller, caller.role));
-        }
-      }
-      var folderIter = folder.getFolders();
-      while (folderIter.hasNext()) {
-        var sub = folderIter.next();
-        if (sub.isTrashed()) continue;
-        walkFolder(sub, path + '/' + sub.getName());
-      }
-    }
-
-    var topIter = rootFolder.getFolders();
-    while (topIter.hasNext()) {
-      var topFolder = topIter.next();
-      if (topFolder.isTrashed()) continue;
-      walkFolder(topFolder, topFolder.getName());
-    }
+    raw.forEach(function (r) {
+      if (!canViewFileMeta(r, caller, caller.role)) return;
+      var caps = fileCapabilities(r, caller, caller.role);
+      files.push({
+        fileId: r.fileId, fileName: r.fileName, category: r.category, driveLink: r.driveLink,
+        fileType: r.fileType, viewers: r.viewers, editors: r.editors, downloaders: r.downloaders,
+        uploadDate: r.uploadDate, uploadedBy: r.uploadedBy, uploadedByUsername: r.uploadedByUsername,
+        size: r.size, canEdit: caps.canEdit, canRename: caps.canRename,
+        canDownload: caps.canDownload, canRequestDelete: caps.canRequestDelete
+      });
+    });
 
     return { success: true, files: files };
   } catch (err) {
@@ -461,6 +506,7 @@ function uploadFile(payload) {
     var uploader = resolveCurrentUserFull(rootFolder, payload.externalToken);
     file.setDescription(buildFileMeta(viewerEmails, editorEmails, downloaderEmails, uploader.name, uploader.username));
 
+    invalidateFilesCache();
     var caller = requireUserAndRole(rootFolder, payload.externalToken);
     return {
       success: true,
@@ -521,6 +567,7 @@ function updateFilePermissions(fileId, viewerEmails, editorEmails, downloaderEma
     var existingMeta = parseFileMeta(file.getDescription());
     file.setDescription(buildFileMeta(newViewers, newEditors, newDownloaders, existingMeta.uploadedBy, existingMeta.uploadedByUsername));
 
+    invalidateFilesCache();
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -548,6 +595,7 @@ function deleteFile(fileId, callerToken) {
 
     file.setTrashed(true);
     clearDeleteRequest(rootFolder, fileId);
+    invalidateFilesCache();
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -584,6 +632,7 @@ function renameFile(fileId, newName, callerToken) {
     }
 
     file.setName(cleanName);
+    invalidateFilesCache();
     return { success: true, file: fileToRecord(file, '', caller, caller.role) };
   } catch (err) {
     return { success: false, error: err.message };
@@ -698,6 +747,7 @@ function resolveDeleteRequest(fileId, approve, callerToken) {
 
     if (approve) {
       DriveApp.getFileById(fileId).setTrashed(true);
+      invalidateFilesCache();
     }
     delete requests[fileId];
     writeJsonFile(rootFolder, DELETE_REQUESTS_FILE_NAME, requests);
@@ -781,6 +831,7 @@ function updateCategoryAccess(categoryPath, viewerEmails, editorEmails, download
         var mergedDownloaders = uniqueGrantIdentities(existingMeta.downloaders.split(',').concat(newDownloaders));
         file.setDescription(buildFileMeta(mergedViewers, mergedEditors, mergedDownloaders, existingMeta.uploadedBy, existingMeta.uploadedByUsername));
       }
+      invalidateFilesCache();
     }
 
     return { success: true };
