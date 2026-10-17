@@ -214,17 +214,19 @@
         // Shift & Time Slot manually and tap "Check Time Slot" again.
         currentSlot = null;
         document.getElementById('checkpointsCard').classList.add('hidden');
-        slotArea.innerHTML = '<div class="slot-banner">Next slot due: ' + next.shift + ' &mdash; ' + next.slot + '. Select it above and tap "Check Time Slot" to continue.</div>';
+        slotArea.innerHTML = next.free
+          ? '<div class="slot-banner">No time slot filled yet for ' + next.shift + '. Select any Time Slot above to start, then tap "Check Time Slot".</div>'
+          : '<div class="slot-banner">Next slot due: ' + next.shift + ' &mdash; ' + next.slot + '. Select it above and tap "Check Time Slot" to continue.</div>';
         return;
       }
-      if (next.shift !== shift || next.slot !== slot) {
+      if (!next.free && (next.shift !== shift || next.slot !== slot)) {
         currentSlot = null;
         document.getElementById('checkpointsCard').classList.add('hidden');
         slotArea.innerHTML = '<div class="error-banner">This is not the next due time slot. The slot that must be filled next is: ' + next.shift + ' &mdash; ' + next.slot + '. Please select that Shift &amp; Time Slot and try again.</div>';
         return;
       }
       currentSlot = { shift: shift, slot: slot };
-      slotArea.innerHTML = '<div class="slot-banner">Time slot confirmed: ' + next.shift + ' &mdash; ' + next.slot + '</div>';
+      slotArea.innerHTML = '<div class="slot-banner">Time slot confirmed: ' + shift + ' &mdash; ' + slot + '</div>';
       renderCheckpoints();
       document.getElementById('checkpointsCard').classList.remove('hidden');
       document.getElementById('submitError').innerHTML = '';

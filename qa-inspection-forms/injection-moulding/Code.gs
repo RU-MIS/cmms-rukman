@@ -201,12 +201,21 @@ function createSessionRows_(sheet, dateStr, machineNo, partName, timestamp) {
 }
 
 /**
- * Returns the next unfilled {shift, slot} within the given shift (the
- * person filling the form picks Day/A-Shift or Night/B-Shift themselves -
- * there's no default), for the given Date + Machine No + Part Name. Null
- * if every slot in that shift is already filled, or if this session's
- * Status is already "Report Generated" (finalized - no further entries
- * allowed even if slots remain, in either shift).
+ * Returns what's allowed next within the given shift (the person filling
+ * the form picks Day/A-Shift or Night/B-Shift themselves - there's no
+ * default), for the given Date + Machine No + Part Name.
+ *
+ * The FIRST entry of a shift (nothing filled in it yet) is free - the
+ * machine doesn't always start at 9-11, sometimes the first reading of
+ * the shift is only taken at 11-1 or 1-3, so whichever slot the person
+ * picks for that first entry is accepted as-is: { shift, slot: null,
+ * free: true }. Every entry AFTER that first one must be exactly the
+ * slot immediately following the last one actually filled, in SLOTS
+ * order - no further skipping: { shift, slot, free: false }.
+ *
+ * Returns null if every slot in that shift is already filled, or if this
+ * session's Status is already "Report Generated" (finalized - no further
+ * entries allowed even if slots remain, in either shift).
  */
 function getNextSlot(dateStr, machineNo, partName, shift) {
   var sheet = getSheet_();
@@ -216,20 +225,27 @@ function getNextSlot(dateStr, machineNo, partName, shift) {
   all.forEach(function (s, i) { if (s.shift === shift) { shiftIndices.push(i); } });
 
   if (Object.keys(map).length === 0) {
-    return all[shiftIndices[0]] || null;
+    return { shift: shift, slot: null, free: true };
   }
   var anyRow = map[CHECKPOINTS[0].label];
   var rowValues = sheet.getRange(anyRow, 1, 1, totalCols_()).getValues()[0];
   if (rowValues[statusCol_() - 1] === 'Report Generated') {
     return null;
   }
+
+  var lastFilledPos = -1;
   for (var k = 0; k < shiftIndices.length; k++) {
     var i = shiftIndices[k];
-    if (!rowValues[slotValueCol_(i) - 1]) {
-      return all[i];
-    }
+    if (rowValues[slotValueCol_(i) - 1]) { lastFilledPos = k; }
   }
-  return null;
+  if (lastFilledPos === -1) {
+    return { shift: shift, slot: null, free: true };
+  }
+  if (lastFilledPos + 1 >= shiftIndices.length) {
+    return null;
+  }
+  var next = all[shiftIndices[lastFilledPos + 1]];
+  return { shift: next.shift, slot: next.slot, free: false };
 }
 
 /**
@@ -589,7 +605,10 @@ function submitInspection(payload, finalize) {
     }
     var sheet = getSheet_();
     var next = getNextSlot(payload.date, payload.machineNo, payload.partName, payload.shift);
-    if (!next || next.shift !== payload.shift || next.slot !== payload.slot) {
+    if (!next) {
+      throw new Error('All time slots for this shift are already filled, or this report has already been finalized (Report Generated). Please refresh and try again.');
+    }
+    if (!next.free && (next.shift !== payload.shift || next.slot !== payload.slot)) {
       throw new Error('This time slot is not the next one due, or this report has already been finalized (Report Generated). Please refresh and try again.');
     }
 
