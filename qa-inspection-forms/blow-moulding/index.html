@@ -88,7 +88,12 @@
         <option value="Night/B-Shift">Night / B-Shift</option>
       </select>
 
-      <button class="btn btn-outline" id="checkSlotBtn" type="button">Check Next Time Slot</button>
+      <label for="slot">Time Slot</label>
+      <select id="slot">
+        <option value="">Select Time Slot</option>
+      </select>
+
+      <button class="btn btn-outline" id="checkSlotBtn" type="button">Check Time Slot</button>
       <div id="slotArea"></div>
     </div>
 
@@ -131,6 +136,13 @@
       document.getElementById('formTitle').textContent = 'RUKMAN UDYOG';
       document.getElementById('formSubtitle').textContent = config.title;
       document.getElementById('date').value = todayStr();
+      var slotSel = document.getElementById('slot');
+      config.slots.forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        slotSel.appendChild(opt);
+      });
     }
 
     function renderCheckpoints() {
@@ -162,12 +174,13 @@
       var machineNo = document.getElementById('machineNo').value.trim();
       var partName = document.getElementById('partName').value.trim();
       var shift = document.getElementById('shift').value;
+      var slot = document.getElementById('slot').value;
       var slotArea = document.getElementById('slotArea');
       slotArea.innerHTML = '';
       document.getElementById('checkpointsCard').classList.add('hidden');
 
-      if (!date || !machineNo || !partName || !shift) {
-        slotArea.innerHTML = '<div class="error-banner">Please fill Date, M/C No., Part Name and select a Shift first.</div>';
+      if (!date || !machineNo || !partName || !shift || !slot) {
+        slotArea.innerHTML = '<div class="error-banner">Please fill Date, M/C No., Part Name and select a Shift and Time Slot first.</div>';
         return;
       }
 
@@ -175,7 +188,7 @@
       google.script.run
         .withSuccessHandler(function (next) {
           showOverlay(false);
-          onSlotResult(next, shift);
+          onSlotResult(next, shift, slot);
         })
         .withFailureHandler(function (err) {
           showOverlay(false);
@@ -184,17 +197,34 @@
         .getNextSlot(date, machineNo, partName, shift);
     }
 
-    function onSlotResult(next, shift) {
+    // next = the slot the server says is actually next due (ground truth).
+    // shift/slot = what the user manually picked (omitted right after a
+    // submit, when this is just an informational "what's due next" banner).
+    function onSlotResult(next, shift, slot) {
       var slotArea = document.getElementById('slotArea');
       if (shift) { currentShift = shift; }
       if (!next) {
         currentSlot = null;
-        slotArea.innerHTML = '<div class="done-banner">All time slots for ' + currentShift + ' are filled, or this report has already been finalized (Report Generated).</div>';
         document.getElementById('checkpointsCard').classList.add('hidden');
+        slotArea.innerHTML = '<div class="done-banner">All time slots for ' + currentShift + ' are filled, or this report has already been finalized (Report Generated).</div>';
         return;
       }
-      currentSlot = next;
-      slotArea.innerHTML = '<div class="slot-banner">Next slot to fill: ' + next.shift + ' &mdash; ' + next.slot + '</div>';
+      if (!slot) {
+        // Informational only - don't auto-confirm. User must pick the
+        // Shift & Time Slot manually and tap "Check Time Slot" again.
+        currentSlot = null;
+        document.getElementById('checkpointsCard').classList.add('hidden');
+        slotArea.innerHTML = '<div class="slot-banner">Next slot due: ' + next.shift + ' &mdash; ' + next.slot + '. Select it above and tap "Check Time Slot" to continue.</div>';
+        return;
+      }
+      if (next.shift !== shift || next.slot !== slot) {
+        currentSlot = null;
+        document.getElementById('checkpointsCard').classList.add('hidden');
+        slotArea.innerHTML = '<div class="error-banner">This is not the next due time slot. The slot that must be filled next is: ' + next.shift + ' &mdash; ' + next.slot + '. Please select that Shift &amp; Time Slot and try again.</div>';
+        return;
+      }
+      currentSlot = { shift: shift, slot: slot };
+      slotArea.innerHTML = '<div class="slot-banner">Time slot confirmed: ' + next.shift + ' &mdash; ' + next.slot + '</div>';
       renderCheckpoints();
       document.getElementById('checkpointsCard').classList.remove('hidden');
       document.getElementById('submitError').innerHTML = '';
@@ -245,7 +275,8 @@
           showOverlay(false);
           document.getElementById('remarks').value = '';
           document.getElementById('inspectorSign').value = '';
-          onSlotResult(res.nextSlot);
+          document.getElementById('slot').value = '';
+          onSlotResult(res.nextSlot, null, null);
           var slotArea = document.getElementById('slotArea');
           var msg = finalize ? 'Saved. Marked as Report Generated.' : 'Saved. Marked as Submitted.';
           if (finalize) {
