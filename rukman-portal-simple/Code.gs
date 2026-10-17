@@ -22,6 +22,8 @@ const OTP_MAX_TRIES         = 5;          // wrong OTP guesses before it is canc
 const LOGIN_MAX_FAILS       = 5;          // wrong passwords before a temporary lock
 const LOCK_MINUTES          = 15;
 const HASH_ROUNDS           = 600;
+const CACHE_SECONDS_USERS   = 120;        // Users tab is cached this long (speed). Edits in the sheet show up within this time.
+const CACHE_SECONDS_ITEMS   = 60;         // Portal_Access is cached this long
 const MIN_PASSWORD_LENGTH   = 8;
 // ======================
 
@@ -61,6 +63,7 @@ function setup() {
   users.getRange('C:E').setNumberFormat('@');      // keep as plain text
   sessionsSheet_().getRange('E1').setValue('REMEMBER');
   pepper_();
+  clearDataCache_();
   const quota = MailApp.getRemainingDailyQuota();  // also triggers the "send email" permission prompt
   Logger.log('Setup complete. Emails you can still send today: ' + quota);
 }
@@ -162,6 +165,7 @@ function reset_(req) {
   withLock_(function () {
     ss_().getSheetByName(USERS_SHEET).getRange(user.row, 4, 1, 2).setValues([[salt, hash]]);
   });
+  clearDataCache_();
   cache.remove(key);
   cache.remove('fail:' + user.email);
   revokeSessions_(user.email);                               // sign out every device
@@ -170,14 +174,26 @@ function reset_(req) {
 
 /* ------------------------------- data access ------------------------------ */
 
-function ss_() { return SpreadsheetApp.openById(SHEET_ID); }
+var SS_ = null;   // opened once per request (opening a spreadsheet is the slowest step)
+function ss_() { return SS_ || (SS_ = SpreadsheetApp.openById(SHEET_ID)); }
+
+/** Rows of a sheet, served from the script cache when possible (no spreadsheet is opened on a cache hit). */
+function cachedRows_(key, seconds, sheetName) {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get(key);
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  const sh = ss_().getSheetByName(sheetName);
+  const rows = sh ? sh.getDataRange().getValues() : [];
+  try { const txt = JSON.stringify(rows); if (txt.length < 90000) cache.put(key, txt, seconds); } catch (e) {}
+  return rows;
+}
+
+function clearDataCache_() { CacheService.getScriptCache().removeAll(['users', 'items']); }
 
 function findUser_(id) {
   id = String(id || '').toLowerCase().trim();
   if (!id) return null;
-  const sh = ss_().getSheetByName(USERS_SHEET);
-  if (!sh) return null;
-  const rows = sh.getDataRange().getValues();
+  const rows = cachedRows_('users', CACHE_SECONDS_USERS, USERS_SHEET);
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     const email = String(r[0]).toLowerCase().trim();
@@ -201,7 +217,7 @@ function payload_(user) {
 }
 
 function itemsFor_(email) {
-  const rows = ss_().getSheetByName(ACCESS_SHEET).getDataRange().getValues().slice(1);
+  const rows = cachedRows_('items', CACHE_SECONDS_ITEMS, ACCESS_SHEET).slice(1);
   return rows
     .filter(function (r) { return String(r[0]).toLowerCase().trim() === email && r[3]; })
     .map(function (r) {
@@ -233,8 +249,12 @@ function createSession_(email, remember) {
   const expiry = Date.now() + ms;
   withLock_(function () {
     const sh = sessionsSheet_();
-    const rows = sh.getDataRange().getValues();
-    for (let i = rows.length - 1; i >= 1; i--) if (Number(rows[i][2]) < Date.now()) sh.deleteRow(i + 1);   // tidy up
+    const cache = CacheService.getScriptCache();
+    if (!cache.get('purged')) {                                               // tidy up expired sessions, at most hourly
+      cache.put('purged', '1', 3600);
+      const rows = sh.getDataRange().getValues();
+      for (let i = rows.length - 1; i >= 1; i--) if (Number(rows[i][2]) < Date.now()) sh.deleteRow(i + 1);
+    }
     sh.appendRow([sha256_(token), email, expiry, new Date(), remember ? 'yes' : 'no']);
   });
   return { token: token, expiry: expiry };
@@ -249,6 +269,10 @@ function renewSession_(token) {
     const target = Math.min(now + SESSION_DAYS_REMEMBER * DAY, cap);
     return target - Number(row[2]) > DAY ? target : 0;                        // only when it gains a full day
   };
+
+  const cache0 = CacheService.getScriptCache();
+  if (cache0.get('r:' + h)) return;                                           // checked within the last hour
+  cache0.put('r:' + h, '1', 3600);
 
   const rows = sessionsSheet_().getDataRange().getValues();                   // cheap check first, no lock
   let need = false;

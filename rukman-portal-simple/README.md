@@ -16,6 +16,11 @@ Two files, one Apps Script project. No Netlify, no separate hosting.
 
 After every change: Deploy > Manage deployments > Edit > New version > Deploy.
 
+## Speed
+- The Users and Portal_Access tabs are cached (2 min and 1 min). A change you type into those tabs can take up to that long to show;
+  a password change is instant. Change `CACHE_SECONDS_USERS` / `CACHE_SECONDS_ITEMS` in `Code.gs` if you want different values.
+- "Send code" moves to the code screen immediately; the email is sent in the background.
+
 ## Notes
 - "Remember me" keeps the session in the browser's storage (30 days, renewed on use, 90 days maximum).
 - This version cannot be installed as a PWA (Google's page does not allow a manifest). Users can still use the

@@ -460,20 +460,36 @@
       if (b.dataset.back === 'login') showAuth(); else showView(b.dataset.back);
     }));
 
-    $('fForgot').addEventListener('submit', async e => {
+    // The server always answers "ok" here (it never reveals whether an ID exists), so we move on to the code screen
+    // straight away and let the email go out in the background. Sending the email takes a few seconds.
+    const SENDING = 'Sending the code… it usually arrives within a few seconds.';
+
+    function requestCode(id, resend) {
+      setMsg('mReset', resend ? 'Sending a new code…' : SENDING, 'info');
+      api('forgot', { id }).then(res => {
+        if (res.ok) {
+          const cur = $('mReset').textContent;
+          if (cur === SENDING || cur === 'Sending a new code…')
+            setMsg('mReset', 'If that ID is registered, the code is on its way. Please check your inbox and spam folder.', 'info');
+        } else {
+          setMsg('mReset', res.error || 'Could not send the code.');
+          clearInterval(cdTimer);
+          $('resend').disabled = false; $('resend').textContent = 'Resend code';
+        }
+      });
+    }
+
+    $('fForgot').addEventListener('submit', e => {
       e.preventDefault();
       const id = $('fid').value.trim();
       setMsg('mForgot', '');
       if (!id) return setMsg('mForgot', 'Please enter your login ID or email.');
-      busy($('bForgot'), true);
-      const res = await api('forgot', { id });
-      busy($('bForgot'), false);
-      if (!res.ok) return setMsg('mForgot', res.error || 'Could not send the code.');
       RESET_ID = id;
       $('otp').value = ''; $('npw').value = ''; $('cpw').value = '';
       showView('reset');
       startCooldown();
       $('otp').focus();
+      requestCode(id, false);
     });
 
     function startCooldown() {
@@ -488,12 +504,9 @@
       tick(); cdTimer = setInterval(tick, 1000);
     }
 
-    $('resend').addEventListener('click', async () => {
-      setMsg('mReset', '');
-      const res = await api('forgot', { id: RESET_ID });
-      if (!res.ok) return setMsg('mReset', res.error || 'Could not send the code.');
-      setMsg('mReset', 'A new code has been sent if that ID is registered.', 'info');
+    $('resend').addEventListener('click', () => {
       startCooldown();
+      requestCode(RESET_ID, true);
     });
 
     $('otp').addEventListener('input', () => { $('otp').value = $('otp').value.replace(/\D/g, '').slice(0, 6); });
