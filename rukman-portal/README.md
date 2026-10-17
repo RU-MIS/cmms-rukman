@@ -39,6 +39,13 @@ opened (hard limit 90 days). The login ID is remembered, so after expiry only th
 is never stored by the portal; the browser may also offer to save it, and then signs in again automatically.
 Not ticked: a 12-hour session that is never renewed.
 
+## If the portal says "Cannot reach the server"
+Open the Web app URL directly in a browser tab. It must show `{"ok":true,"service":"Rukman Portal"}`.
+- A Google sign-in page or "unable to open the file": the deployment is not set to **Who has access: Anyone**, or you have not made a **New version** after editing.
+- The URL must look like `https://script.google.com/macros/s/AKfy.../exec`. A link containing `/a/macros/<your-domain>/` is domain-only:
+  remove `/a` and `/<your-domain>` so it becomes the form above.
+- Workspace admins can block "Anyone" for web apps (Admin console > Apps > Google Workspace > Drive and Docs > Sharing settings).
+
 ## Limits to know
 - OTP emails use `MailApp`: about 100/day on a normal Gmail account, 1,500/day on Workspace.
 - The portal login only controls the list of links. Opening a Sheet or Form is still decided by

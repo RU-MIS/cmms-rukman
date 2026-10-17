@@ -366,16 +366,25 @@
 
     /* ---------------- API ---------------- */
     async function api(action, data) {
+      let res;
       try {
-        const res = await fetch(API_URL, {
+        res = await fetch(API_URL, {
           method: 'POST',
           redirect: 'follow',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // plain text avoids a CORS pre-flight with Apps Script
           body: JSON.stringify(Object.assign({ action }, data || {}))
         });
+      } catch (e) {
+        // Offline, or the browser blocked the call (typically: Apps Script is not deployed with access set to "Anyone",
+        // or API_URL is a /a/macros/<domain>/ link that redirects to a Google sign-in page).
+        console.error('[portal] request failed. API_URL =', API_URL, e);
+        return { ok: false, code: 'NETWORK', error: 'Cannot reach the server. Please check your internet connection and try again.' };
+      }
+      try {
         return await res.json();
       } catch (e) {
-        return { ok: false, code: 'NETWORK', error: 'Cannot reach the server. Please check your internet connection and try again.' };
+        console.error('[portal] the server did not return JSON (HTTP ' + res.status + ')', e);
+        return { ok: false, code: 'BAD_RESPONSE', error: 'The server sent an unexpected reply. Ask the portal administrator to check the Apps Script deployment (Who has access: Anyone, latest version).' };
       }
     }
 
@@ -454,7 +463,7 @@
         if (!cred || !cred.password) return false;
         const res = await api('login', { id: cred.id, password: cred.password, remember: true });
         if (res.ok) { store.set(res.token, true); enterApp(res); return true; }
-        if (res.code === 'NETWORK') return false;
+        if (res.code === 'NETWORK' || res.code === 'BAD_RESPONSE') return false;
         blockAutoLogin();                         // saved password is outdated: stop trying silently
         $('lid').value = cred.id;
       } catch (e) {}
@@ -756,7 +765,7 @@
 
       const res = await api('session', { token });
       if (res.ok) return enterApp(res);
-      if (res.code === 'NETWORK') return splash(res.error, { noSpinner: true, retry: true });
+      if (res.code === 'NETWORK' || res.code === 'BAD_RESPONSE') return splash(res.error, { noSpinner: true, retry: true });
       store.clear();
       if (await tryAutoLogin()) return;
       showAuth('Your session has expired. Please sign in again.', 'info');
